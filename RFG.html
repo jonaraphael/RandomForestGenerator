@@ -357,11 +357,12 @@
       <div>
         <h1>Train a Random Forest on a CSV — locally</h1>
         <div class="sub">
-          Drop a CSV, pick the column you want to predict, and train a strong baseline model. Nothing is uploaded — everything runs on your device.
+          Drop a CSV, pick the column you want to predict, and train a strong baseline model. Your CSV data stays in this browser tab — the page fetches JS libraries from CDNs unless you self-host.
         </div>
       </div>
       <div class="badges">
-        <div class="badge" title="Data stays in this browser tab. No server involved.">🔒 Local-only</div>
+        <div class="badge" title="Your CSV data stays in this browser tab. This page loads JS libraries from CDNs unless you self-host.">🔒 Data stays local</div>
+        <div class="badge" title="Dependencies are fetched from CDNs (PapaParse, Chart.js, JSZip, ml-random-forest via esm.sh). Self-host for offline/airgapped use.">🌐 CDN deps</div>
         <div class="badge" id="hwBadge">🧠 CPU threads: ?</div>
         <button class="btn danger" id="resetAllBtn">Reset</button>
       </div>
@@ -438,7 +439,7 @@
 
               <div class="field">
                 <label for="testFrac">Test fraction</label>
-                <input id="testFrac" type="number" min="0.05" max="0.5" step="0.05" value="0.2" />
+                <input id="testFrac" type="number" value="0.1" />
               </div>
             </div>
 
@@ -471,7 +472,7 @@
               <div class="field">
                 <label for="maxRows">Max rows (0 = all)</label>
                 <input id="maxRows" type="number" min="0" step="1000" value="50000" />
-                <div class="muted2">Useful for quick iteration on huge CSVs.</div>
+                <div class="muted2">Useful for quick iteration on huge CSVs. For time splits, we take the last N rows (file order).</div>
               </div>
             </div>
 
@@ -760,7 +761,8 @@
         yPredLabel: [],
         testRowRefs: [],
         fiDerived: [],
-        fiBase: []
+        fiBase: [],
+        dropped: { unusableTargetRows: 0, unseenTestLabels: 0, sampledRows: 0, usableRows: 0 }
       },
       ui: {
         charts: {
@@ -985,6 +987,19 @@
       setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
 
+    // Prevent CSV injection when opened in spreadsheet tools
+    function sanitizeCsvValue(v) {
+      const s = (v === null || v === undefined) ? "" : String(v);
+      if (!s) return s;
+      if (/^[=+\-@]/.test(s) || /^\t/.test(s)) return "'" + s;
+      return s;
+    }
+
+    function csvCell(v) {
+      const s = sanitizeCsvValue(v);
+      return `"${String(s).replaceAll('"','""')}"`;
+    }
+
     // ----------------------------
     // Column sort helpers
     // ----------------------------
@@ -1061,10 +1076,10 @@
       const uniq = new Set();
       const examples = [];
 
-      for (let i = 0, seen = 0; i < rows.length && seen < maxN; i++) {
+      for (let i = 0; i < maxN; i++) {
         const s = normStr(rows[i][col]);
         if (!s) continue;
-        nonEmpty++; seen++;
+        nonEmpty++;
 
         if (examples.length < 4 && !examples.includes(s)) examples.push(s);
         uniq.add(s);
@@ -1079,7 +1094,7 @@
         }
       }
 
-      const missingFrac = rows.length ? (1 - (nonEmpty / Math.max(1, Math.min(rows.length, maxN)))) : 0;
+      const missingFrac = maxN ? (1 - (nonEmpty / maxN)) : 0;
       const uniqueSample = uniq.size;
 
       const fracNum = nonEmpty ? (numeric / nonEmpty) : 0;
@@ -1126,7 +1141,7 @@
     }
 
     // ----------------------------
-    // Sorting wire-up for Review Columns headers
+    // Column sort wire-up
     // ----------------------------
     function wireReviewSortHeaders() {
       const table = $("reviewColumnsTable");
@@ -1196,10 +1211,10 @@
 
       const maxN = Math.min(rows.length, 1500);
       let nonEmpty = 0, numeric = 0, uniq = new Set();
-      for (let i = 0, seen = 0; i < rows.length && seen < maxN; i++) {
+      for (let i = 0; i < maxN; i++) {
         const s = normStr(rows[i][targetCol]);
         if (!s) continue;
-        nonEmpty++; seen++;
+        nonEmpty++;
         uniq.add(s);
         const x = parseNum(s);
         if (Number.isFinite(x)) numeric++;
@@ -1272,7 +1287,6 @@
       const meta = APP.raw.colMeta;
       const target = APP.raw.targetCol;
 
-      // update header indicators
       document.querySelectorAll("#reviewColumnsTable th.sortable[data-sort]").forEach(th => {
         const k = th.getAttribute("data-sort");
         const ind = th.querySelector(".sort-indicator");
@@ -1290,7 +1304,6 @@
       const colsSorted = APP.raw.columns.slice().sort((a, b) => {
         const ma = meta[a], mb = meta[b];
 
-        // pin target at top
         if (APP.raw.targetCol) {
           if (a === APP.raw.targetCol && b !== APP.raw.targetCol) return -1;
           if (b === APP.raw.targetCol && a !== APP.raw.targetCol) return 1;
@@ -1422,7 +1435,7 @@
           APP.raw.colMeta[col].flags.lowConfidence = false;
           syncSetupUI();
           refreshSplitDateCol();
-          renderColumnTable(); // so sorting by type/confidence updates instantly
+          renderColumnTable();
         });
       });
     }
@@ -1450,11 +1463,15 @@
     }
 
     // ----------------------------
-    // Build dataset (preprocess)
+    // Build dataset + preprocessing (fit on TRAIN only)
     // ----------------------------
-    function sampleRowIndices(nRows, maxRows, seed) {
+    function sampleRowIndices(nRows, maxRows, seed, mode = "random") {
       if (!maxRows || maxRows <= 0 || nRows <= maxRows) {
         return Array.from({ length: nRows }, (_, i) => i);
+      }
+      if (mode === "time") {
+        const start = Math.max(0, nRows - maxRows);
+        return Array.from({ length: maxRows }, (_, k) => start + k);
       }
       const rng = mulberry32(seed);
       const idx = Array.from({ length: nRows }, (_, i) => i);
@@ -1480,17 +1497,85 @@
       return inv;
     }
 
-    function buildDataset() {
+    function getRowTargetValue(row, targetCol, task, targetTransform, meta) {
+      if (task === "regression") {
+        const tType = meta[targetCol]?.inferredType;
+        let yiRaw;
+        if (tType === "date") {
+          const d = parseDate(row[targetCol]);
+          if (!d) return null;
+          yiRaw = d.getTime();
+        } else {
+          const x = parseNum(row[targetCol]);
+          if (!Number.isFinite(x)) return null;
+          yiRaw = x;
+        }
+
+        if (targetTransform === "log1p") {
+          if (yiRaw < 0) return null;
+          return { yRaw: yiRaw, y: Math.log1p(yiRaw) };
+        }
+        return { yRaw: yiRaw, y: yiRaw };
+      } else {
+        const s = normStr(row[targetCol]) || "#na#";
+        return { yRaw: s, y: s };
+      }
+    }
+
+    function transformRowToFeatures(row, pipeline) {
+      const contCols = pipeline.preprocess.continuous.cols;
+      const catCols  = pipeline.preprocess.categorical.cols;
+      const dateCols = pipeline.preprocess.date.cols;
+
+      const feats = [];
+
+      for (const c of contCols) {
+        const x = parseNum(row[c]);
+        const miss = !Number.isFinite(x);
+        feats.push(miss ? pipeline.preprocess.continuous.median[c] : x);
+        feats.push(miss ? 1 : 0);
+      }
+
+      for (const c of catCols) {
+        const s = normStr(row[c]) || pipeline.preprocess.categorical.missingToken;
+        const m = pipeline.preprocess.categorical.mapping[c];
+        feats.push((m[s] === undefined) ? pipeline.preprocess.categorical.unknownId : m[s]);
+      }
+
+      for (const c of dateCols) {
+        const d = parseDate(row[c]);
+        const miss = !d;
+        const dt = miss ? new Date(pipeline.preprocess.date.medianElapsed[c]) : d;
+        const p = dateParts(dt);
+
+        feats.push(p.year);
+        feats.push(p.month);
+        feats.push(p.day);
+        feats.push(p.dayofweek);
+        feats.push(p.dayofyear);
+        feats.push(p.is_month_end);
+        feats.push(p.is_month_start);
+        feats.push(p.is_quarter_end);
+        feats.push(p.is_quarter_start);
+        feats.push(p.is_year_end);
+        feats.push(p.is_year_start);
+        feats.push(p.elapsed);
+        feats.push(miss ? 1 : 0);
+      }
+
+      return feats;
+    }
+
+    function buildDataset(seed, testFrac, splitMode, splitDateCol) {
       const rows = APP.raw.rows;
       const columns = APP.raw.columns;
       const targetCol = APP.raw.targetCol;
       const meta = APP.raw.colMeta;
 
-      const seed = Math.floor(parseNum($("seed").value) || 42);
       const maxRows = Math.floor(parseNum($("maxRows").value) || 0);
 
-      const usedIdx = sampleRowIndices(rows.length, maxRows, seed);
-      const usedRows = usedIdx.map(i => rows[i]);
+      const usedIdx = sampleRowIndices(rows.length, maxRows, seed, splitMode);
+      const sampledRows = usedIdx.map(i => rows[i]);
 
       const includeCols = columns.filter(c => (c === targetCol) || (meta[c]?.include));
       const featureCols = includeCols.filter(c => c !== targetCol);
@@ -1499,60 +1584,10 @@
       const catCols  = featureCols.filter(c => meta[c]?.inferredType === "categorical");
       const dateCols = featureCols.filter(c => meta[c]?.inferredType === "date");
 
-      const contValues = Object.fromEntries(contCols.map(c => [c, []]));
-      const dateValues = Object.fromEntries(dateCols.map(c => [c, []]));
-      const catSeen = Object.fromEntries(catCols.map(c => [c, new Map()]));
+      const task = decideTaskFromTarget(sampledRows, targetCol, APP.setup.taskMode, meta);
+      const targetTransform = APP.setup.targetTransform;
 
-      for (const r of usedRows) {
-        for (const c of contCols) {
-          const x = parseNum(r[c]);
-          if (Number.isFinite(x)) contValues[c].push(x);
-        }
-        for (const c of dateCols) {
-          const d = parseDate(r[c]);
-          if (d) dateValues[c].push(d.getTime());
-        }
-        for (const c of catCols) {
-          const s = normStr(r[c]) || "#na#";
-          if (!catSeen[c].has(s)) catSeen[c].set(s, true);
-        }
-      }
-
-      const contMedian = {};
-      for (const c of contCols) contMedian[c] = median(contValues[c]);
-
-      const dateMedian = {};
-      for (const c of dateCols) dateMedian[c] = median(dateValues[c]);
-
-      const catMapping = {};
-      for (const c of catCols) {
-        const m = new Map();
-        m.set("#na#", 0);
-        let id = 1;
-        for (const k of catSeen[c].keys()) {
-          if (k === "#na#") continue;
-          m.set(k, id++);
-        }
-        catMapping[c] = Object.fromEntries(m.entries());
-      }
-
-      const task = decideTaskFromTarget(usedRows, targetCol, APP.setup.taskMode, meta);
-
-      let targetMapping = null;
-      let numTargetClasses = null;
-
-      if (task === "classification") {
-        const seen = new Map();
-        seen.set("#na#", 0);
-        let id = 1;
-        for (const r of usedRows) {
-          const s = normStr(r[targetCol]) || "#na#";
-          if (!seen.has(s)) seen.set(s, id++);
-        }
-        targetMapping = Object.fromEntries(seen.entries());
-        numTargetClasses = seen.size;
-      }
-
+      // derived feature schema
       const DATE_PARTS = [
         "year","month","day","dayofweek","dayofyear",
         "is_month_end","is_month_start","is_quarter_end","is_quarter_start","is_year_end","is_year_start",
@@ -1566,88 +1601,95 @@
         featureNames.push(c); baseForDerived.push(c);
         featureNames.push(`${c}_na`); baseForDerived.push(c);
       }
-
       for (const c of catCols) {
         featureNames.push(c); baseForDerived.push(c);
       }
-
       for (const c of dateCols) {
         for (const p of DATE_PARTS) { featureNames.push(`${c}_${p}`); baseForDerived.push(c); }
         featureNames.push(`${c}_na`); baseForDerived.push(c);
       }
 
-      const targetTransform = APP.setup.targetTransform;
-
-      const X = [];
-      const y = [];
+      // Filter unusable rows by target parse (regression) / transform constraints
       const rowRefs = [];
+      const yAll = [];
+      const yAllRaw = [];
+      let droppedTargets = 0;
 
-      for (const r of usedRows) {
-        let yiRaw;
-        if (task === "regression") {
-          const tType = meta[targetCol]?.inferredType;
-          if (tType === "date") {
-            const d = parseDate(r[targetCol]);
-            if (!d) continue;
-            yiRaw = d.getTime();
-          } else {
-            const x = parseNum(r[targetCol]);
-            if (!Number.isFinite(x)) continue;
-            yiRaw = x;
-          }
-        } else {
-          const s = normStr(r[targetCol]) || "#na#";
-          yiRaw = targetMapping[s] ?? 0;
-        }
-
-        let yi = yiRaw;
-        if (task === "regression" && targetTransform === "log1p") {
-          if (yiRaw < 0) continue;
-          yi = Math.log1p(yiRaw);
-        }
-
-        const feats = [];
-
-        for (const c of contCols) {
-          const x = parseNum(r[c]);
-          const miss = !Number.isFinite(x);
-          feats.push(miss ? contMedian[c] : x);
-          feats.push(miss ? 1 : 0);
-        }
-
-        for (const c of catCols) {
-          const s = normStr(r[c]) || "#na#";
-          const mid = catMapping[c][s];
-          feats.push((mid === undefined) ? 0 : mid);
-        }
-
-        for (const c of dateCols) {
-          const d = parseDate(r[c]);
-          const miss = !d;
-          const dt = miss ? new Date(dateMedian[c]) : d;
-          const p = dateParts(dt);
-          feats.push(p.year);
-          feats.push(p.month);
-          feats.push(p.day);
-          feats.push(p.dayofweek);
-          feats.push(p.dayofyear);
-          feats.push(p.is_month_end);
-          feats.push(p.is_month_start);
-          feats.push(p.is_quarter_end);
-          feats.push(p.is_quarter_start);
-          feats.push(p.is_year_end);
-          feats.push(p.is_year_start);
-          feats.push(p.elapsed);
-          feats.push(miss ? 1 : 0);
-        }
-
-        X.push(feats);
-        y.push(yi);
+      for (const r of sampledRows) {
+        const tv = getRowTargetValue(r, targetCol, task, targetTransform, meta);
+        if (!tv) { droppedTargets++; continue; }
         rowRefs.push(r);
+        yAll.push(tv.y);
+        yAllRaw.push(tv.yRaw);
+      }
+
+      if (!rowRefs.length) {
+        return {
+          Xtrain: [], ytrain: [], Xtest: [], ytest: [],
+          testRowRefs: [],
+          featureNames, baseForDerived,
+          pipeline: null, task,
+          dropped: { unusableTargetRows: droppedTargets, unseenTestLabels: 0, sampledRows: sampledRows.length, usableRows: 0 }
+        };
+      }
+
+      // Split BEFORE fitting preprocessors to avoid leakage
+      let split;
+      if (splitMode === "time" && splitDateCol) split = splitTimeBased(rowRefs, splitDateCol, testFrac);
+      else split = splitRandom(rowRefs.length, testFrac, seed);
+
+      const trainRows = split.trainIdx.map(i => rowRefs[i]);
+      const testRows = split.testIdx.map(i => rowRefs[i]);
+
+      // Fit preprocessors on TRAIN only
+      const contMedian = {};
+      for (const c of contCols) {
+        const vals = [];
+        for (const r of trainRows) {
+          const x = parseNum(r[c]);
+          if (Number.isFinite(x)) vals.push(x);
+        }
+        contMedian[c] = median(vals);
+      }
+
+      const dateMedian = {};
+      for (const c of dateCols) {
+        const vals = [];
+        for (const r of trainRows) {
+          const d = parseDate(r[c]);
+          if (d) vals.push(d.getTime());
+        }
+        dateMedian[c] = median(vals);
+      }
+
+      const catMapping = {};
+      for (const c of catCols) {
+        const m = new Map();
+        m.set("#na#", 0);
+        let id = 1;
+        for (const r of trainRows) {
+          const s = normStr(r[c]) || "#na#";
+          if (!m.has(s)) m.set(s, id++);
+        }
+        catMapping[c] = Object.fromEntries(m.entries());
+      }
+
+      let targetMapping = null;
+      let numTargetClasses = null;
+      if (task === "classification") {
+        const seen = new Map();
+        seen.set("#na#", 0);
+        let id = 1;
+        for (const r of trainRows) {
+          const s = normStr(r[targetCol]) || "#na#";
+          if (!seen.has(s)) seen.set(s, id++);
+        }
+        targetMapping = Object.fromEntries(seen.entries());
+        numTargetClasses = seen.size;
       }
 
       const pipeline = {
-        schemaVersion: "1.1",
+        schemaVersion: "1.2",
         createdAt: new Date().toISOString(),
         fileName: APP.raw.fileName,
         originalColumns: [...columns],
@@ -1663,10 +1705,56 @@
         derivedFeatureNames: [...featureNames],
         derivedFeatureBase: [...baseForDerived],
         target: { col: targetCol, mapping: targetMapping, numClasses: numTargetClasses },
-        library: { name: "ml-random-forest", version: "2.1.0" }
+        library: { name: "ml-random-forest", version: "2.1.0" },
+        fittedOn: { splitMode, splitDateCol: splitDateCol || null, nTrain: trainRows.length, nTest: testRows.length }
       };
 
-      return { X, y, rowRefs, featureNames, baseForDerived, pipeline, task };
+      // Transform TRAIN
+      const Xtrain = trainRows.map(r => transformRowToFeatures(r, pipeline));
+      let ytrain;
+      if (task === "regression") {
+        ytrain = split.trainIdx.map(i => yAll[i]);
+      } else {
+        ytrain = split.trainIdx.map(i => {
+          const s = yAll[i];
+          return (targetMapping[s] === undefined) ? 0 : targetMapping[s];
+        });
+      }
+
+      // Transform TEST (drop unseen labels for classification)
+      const Xtest = [];
+      const ytest = [];
+      const testRowRefs = [];
+      let droppedUnseenTestLabels = 0;
+
+      if (task === "regression") {
+        for (const i of split.testIdx) {
+          Xtest.push(transformRowToFeatures(rowRefs[i], pipeline));
+          ytest.push(yAll[i]);
+          testRowRefs.push(rowRefs[i]);
+        }
+      } else {
+        for (const i of split.testIdx) {
+          const label = yAll[i];
+          const id = targetMapping[label];
+          if (id === undefined) { droppedUnseenTestLabels++; continue; }
+          Xtest.push(transformRowToFeatures(rowRefs[i], pipeline));
+          ytest.push(id);
+          testRowRefs.push(rowRefs[i]);
+        }
+      }
+
+      return {
+        Xtrain, ytrain, Xtest, ytest, testRowRefs,
+        featureNames, baseForDerived,
+        pipeline, task,
+        dropped: {
+          unusableTargetRows: droppedTargets,
+          unseenTestLabels: droppedUnseenTestLabels,
+          sampledRows: sampledRows.length,
+          usableRows: rowRefs.length
+        }
+      };
     }
 
     // ----------------------------
@@ -1898,7 +1986,7 @@
       const inv = APP.train.pipeline.targetInvMapping;
 
       const lines = [];
-      lines.push(cols.map(c => `"${String(c).replaceAll('"','""')}"`).join(","));
+      lines.push(cols.map(csvCell).join(","));
 
       for (let i = 0; i < APP.train.testRowRefs.length; i++) {
         const r = APP.train.testRowRefs[i];
@@ -1916,7 +2004,7 @@
         row.push(String(yp));
         for (const c of APP.raw.columns.filter(c => c !== targetCol)) row.push(normStr(r[c]) || "");
 
-        lines.push(row.map(x => `"${String(x).replaceAll('"','""')}"`).join(","));
+        lines.push(row.map(csvCell).join(","));
       }
 
       return lines.join("\n");
@@ -1980,40 +2068,28 @@
       const replacement = ($("replacement").value === "true");
       const nEstimators = Math.max(10, Math.floor(parseNum($("nEstimators").value) || 200));
 
+      const splitMode = effectiveSplitMode();
+      const splitDateCol = (splitMode === "time") ? APP.setup.splitDateCol : null;
+
       let built;
       try {
-        built = buildDataset();
+        built = buildDataset(seed, testFrac, splitMode, splitDateCol);
       } catch (e) {
         $("trainStatus").innerHTML = `<span class="pill bad">Failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
         $("trainBtn").disabled = false;
         return;
       }
 
-      const { X, y, rowRefs, featureNames, baseForDerived, pipeline, task } = built;
+      const { Xtrain, ytrain, Xtest, ytest, testRowRefs, featureNames, baseForDerived, pipeline, task, dropped } = built;
 
-      if (!X.length) {
-        $("trainStatus").innerHTML = `<span class="pill bad">No usable rows</span> <span class="muted2">Check target parsing or transform choice.</span>`;
+      if (!pipeline || !Xtrain.length || !Xtest.length) {
+        const hint = (!pipeline || !Xtrain.length)
+          ? "Check target parsing/transform choice, and ensure enough usable rows exist."
+          : "Test split ended up empty after filtering (e.g., unseen labels). Try a different split or larger sample.";
+        $("trainStatus").innerHTML = `<span class="pill bad">No usable rows</span> <span class="muted2">${escapeHtml(hint)}</span>`;
         $("trainBtn").disabled = false;
         return;
       }
-
-      const splitMode = effectiveSplitMode();
-      let split;
-      if (splitMode === "time") {
-        const dateCol = APP.setup.splitDateCol;
-        split = splitTimeBased(rowRefs, dateCol, testFrac);
-      } else {
-        split = splitRandom(X.length, testFrac, seed);
-      }
-
-      const trainIdx = split.trainIdx;
-      const testIdx = split.testIdx;
-
-      const Xtrain = trainIdx.map(i => X[i]);
-      const ytrain = trainIdx.map(i => y[i]);
-      const Xtest  = testIdx.map(i => X[i]);
-      const ytest  = testIdx.map(i => y[i]);
-      const testRowRefs = testIdx.map(i => rowRefs[i]);
 
       const maxFeaturesParsed = parseMaxFeatures($("maxFeatures").value, featureNames.length);
       const rfOptions = { seed, maxFeatures: maxFeaturesParsed, replacement, nEstimators };
@@ -2074,13 +2150,17 @@
       APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
       APP.train.featureNames = featureNames;
       APP.train.baseForDerived = baseForDerived;
-      APP.train.split = split;
+      APP.train.split = {
+        trainIdx: Array.from({ length: Xtrain.length }, (_, i) => i),
+        testIdx: Array.from({ length: Xtest.length }, (_, i) => i)
+      };
       APP.train.yTrain = ytrain;
       APP.train.yTest = ytestRaw;
       APP.train.yPred = ypredRaw;
       APP.train.testRowRefs = testRowRefs;
       APP.train.fiDerived = fiDerived;
       APP.train.fiBase = fiBase;
+      APP.train.dropped = dropped;
 
       if (pipeline.task === "classification") {
         const inv = invTarget || {};
@@ -2125,6 +2205,17 @@
                         <div class="muted2">${body}</div>`;
         $("resultsCallouts").appendChild(el);
       };
+
+      if (APP.train.dropped?.unusableTargetRows) {
+        addCallout("warn", "Some rows were dropped (target not usable)",
+          `Dropped <span class="mono">${APP.train.dropped.unusableTargetRows}</span> rows due to missing/invalid target values (or incompatible log1p).`
+        );
+      }
+      if (APP.train.dropped?.unseenTestLabels) {
+        addCallout("warn", "Some test rows were dropped (unseen labels)",
+          `Dropped <span class="mono">${APP.train.dropped.unseenTestLabels}</span> test rows because their label never appeared in the training split (train-only label encoding).`
+        );
+      }
 
       if (task === "regression") {
         const yTrue = APP.train.yTest;
@@ -2240,7 +2331,8 @@
         },
         rfOptions: APP.train.rfOptions,
         model: model.toJSON(),
-        library: pipeline.library
+        library: pipeline.library,
+        fittedOn: pipeline.fittedOn
       };
     }
 
@@ -2403,7 +2495,8 @@ function invertTargetIfNeeded(yPred, artifact){
         yPredLabel: [],
         testRowRefs: [],
         fiDerived: [],
-        fiBase: []
+        fiBase: [],
+        dropped: { unusableTargetRows: 0, unseenTestLabels: 0, sampledRows: 0, usableRows: 0 }
       };
       APP.ui.predPage = 0;
       APP.ui.predFilter = "";
@@ -2667,6 +2760,7 @@ This zip contains:
 - test_predictions.csv: your test split with predictions (for inspection)
 
 Notes
+- Preprocessing is fit on the training split only to avoid leakage.
 - Categorical features are label-encoded. Missing/unknown -> id 0 ("#na#").
 - Continuous features are median-imputed + "_na" missing-indicator columns.
 - Date features are expanded into date parts + "_na".
@@ -2695,7 +2789,6 @@ Compatibility
 
     hardReset();
 
-    // keep preset values synced on first load
     const p = PRESETS[APP.train.preset];
     $("nEstimators").value = String(p.nEstimators);
     $("maxRows").value = String(p.maxRows);

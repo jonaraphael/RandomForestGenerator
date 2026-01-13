@@ -625,6 +625,7 @@
           <button class="btn" id="backToSetupBtn">Back</button>
           <div class="row">
             <div id="trainStatus" class="muted2"></div>
+            <button class="btn danger" id="stopBtn" disabled>Stop</button>
             <button class="btn primary" id="trainBtn" disabled>Train model</button>
           </div>
         </div>
@@ -812,6 +813,9 @@
           startMs: 0,
           totalUnits: 0,
           completedUnits: 0,
+          isTraining: false,
+          stopRequested: false,
+          abortController: null,
         },
         parseSeq: 0,
         predPage: 0,
@@ -1032,6 +1036,53 @@
       const h = Math.floor(m / 60);
       const rm = m % 60;
       return `${h}h ${rm}m`;
+    }
+
+    function isAbortError(e) {
+      if (!e) return false;
+      if (e.name === "AbortError") return true;
+      const msg = String(e?.message || "");
+      return msg.toLowerCase().includes("abort");
+    }
+
+    function setTrainingUi(isTraining) {
+      APP.ui.training.isTraining = Boolean(isTraining);
+      const canTrain = Boolean(APP.raw.targetCol) && !APP.ui.training.isTraining;
+      $("trainBtn").disabled = !canTrain;
+      $("stopBtn").disabled = !APP.ui.training.isTraining;
+    }
+
+    function requestStopTraining() {
+      if (!APP.ui.training.isTraining) return;
+      if (APP.ui.training.stopRequested) return;
+      APP.ui.training.stopRequested = true;
+      try { APP.ui.training.abortController?.abort(); } catch {}
+      $("stopBtn").disabled = true;
+      $("trainStatus").innerHTML =
+        `<span class="spinner"></span> Stopping… <span class="muted2">Will stop after the current tree finishes.</span>`;
+    }
+
+    function releaseAllResources() {
+      try { APP.ui.training.abortController?.abort(); } catch {}
+      APP.ui.training.abortController = null;
+      APP.ui.training.isTraining = false;
+      APP.ui.training.stopRequested = false;
+
+      APP.raw.rows = [];
+      APP.train.model = null;
+      APP.train.pipeline = null;
+      APP.train.featureNames = [];
+      APP.train.baseForDerived = [];
+      APP.train.yTrain = [];
+      APP.train.yTest = [];
+      APP.train.yPred = [];
+      APP.train.yPredLabel = [];
+      APP.train.testRowRefs = [];
+      APP.train.fiDerived = [];
+      APP.train.fiBase = [];
+
+      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
     }
 
     function downloadBlob(blob, filename) {
@@ -2097,9 +2148,9 @@
     // Presets
     // ----------------------------
     const PRESETS = {
-      fast:     { name: "Fast", desc: "Quick baseline for iteration.", nEstimators: 80,  maxRows: 20000, maxFeatures: "1.0", replacement: true },
-      balanced: { name: "Balanced", desc: "Recommended default.",        nEstimators: 200, maxRows: 50000, maxFeatures: "1.0", replacement: true },
-      thorough: { name: "Thorough", desc: "More trees, more accuracy.",   nEstimators: 600, maxRows: 0,     maxFeatures: "1.0", replacement: true },
+      fast:     { name: "Fast", desc: "Quick baseline for iteration.", nEstimators: 20,  maxRows: 20000, maxFeatures: "0.999", replacement: false },
+      balanced: { name: "Balanced", desc: "Recommended default.",        nEstimators: 100, maxRows: 50000, maxFeatures: "0.999", replacement: false },
+      thorough: { name: "Thorough", desc: "More trees, more accuracy.",   nEstimators: 500, maxRows: 0,     maxFeatures: "0.999", replacement: false },
     };
 
     function renderPresets() {
@@ -2252,7 +2303,7 @@
       }));
     }
 
-    async function trainForestWithProgress(model, X, y, { onProgress }) {
+    async function trainForestWithProgress(model, X, y, { onProgress, signal }) {
       let seed = model.seed;
       let Xm = Matrix.checkMatrix(X);
       let ym = y;
@@ -2298,6 +2349,12 @@
       const yieldEvery = Math.max(1, Math.floor(nEstimators / 100));
 
       for (let t = 0; t < nEstimators; t++) {
+        if (signal?.aborted) {
+          const err = new Error("Training aborted");
+          err.name = "AbortError";
+          throw err;
+        }
+
         const bag = model.useSampleBagging
           ? sampleWithBagging(Xm, ym, seed, includeOob)
           : { X: Xm, y: ym, seed, Xoob: null, ioob: [] };
@@ -2328,9 +2385,13 @@
     }
 
     async function trainModel() {
+      const abortController = new AbortController();
+      APP.ui.training.abortController = abortController;
+      APP.ui.training.stopRequested = false;
+      setTrainingUi(true);
+
       APP.ui.training.startMs = performance.now();
       $("trainStatus").innerHTML = `<span class="spinner"></span> Preparing data…`;
-      $("trainBtn").disabled = true;
 
       await new Promise(r => setTimeout(r, 0));
 
@@ -2349,7 +2410,9 @@
         built = buildDataset(seed, testFrac, splitMode, splitDateCol);
       } catch (e) {
         $("trainStatus").innerHTML = `<span class="pill bad">Failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
-        $("trainBtn").disabled = false;
+        APP.ui.training.abortController = null;
+        APP.ui.training.stopRequested = false;
+        setTrainingUi(false);
         return;
       }
 
@@ -2360,7 +2423,9 @@
           ? "Check target parsing/transform choice, and ensure enough usable rows exist."
           : "Test split ended up empty after filtering (e.g., unseen labels). Try a different split or larger sample.";
         $("trainStatus").innerHTML = `<span class="pill bad">No usable rows</span> <span class="muted2">${escapeHtml(hint)}</span>`;
-        $("trainBtn").disabled = false;
+        APP.ui.training.abortController = null;
+        APP.ui.training.stopRequested = false;
+        setTrainingUi(false);
         return;
       }
 
@@ -2387,10 +2452,17 @@
             APP.ui.training.totalUnits = totalUnits;
             $("trainStatus").innerHTML = trainingStatusHtml(task, completedUnits, totalUnits, APP.ui.training.startMs);
           },
+          signal: abortController.signal,
         });
       } catch (e) {
-        $("trainStatus").innerHTML = `<span class="pill bad">Train failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
-        $("trainBtn").disabled = false;
+        if (isAbortError(e) || APP.ui.training.stopRequested) {
+          $("trainStatus").innerHTML = `<span class="pill warn">Stopped</span> <span class="muted2">Training aborted.</span>`;
+        } else {
+          $("trainStatus").innerHTML = `<span class="pill bad">Train failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
+        }
+        APP.ui.training.abortController = null;
+        APP.ui.training.stopRequested = false;
+        setTrainingUi(false);
         return;
       }
 
@@ -2399,10 +2471,29 @@
 
       let ypred;
       try {
+        if (abortController.signal.aborted) {
+          const err = new Error("Training aborted");
+          err.name = "AbortError";
+          throw err;
+        }
         ypred = model.predict(Xtest);
       } catch (e) {
-        $("trainStatus").innerHTML = `<span class="pill bad">Predict failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
-        $("trainBtn").disabled = false;
+        if (isAbortError(e) || APP.ui.training.stopRequested) {
+          $("trainStatus").innerHTML = `<span class="pill warn">Stopped</span> <span class="muted2">Training aborted.</span>`;
+        } else {
+          $("trainStatus").innerHTML = `<span class="pill bad">Predict failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
+        }
+        APP.ui.training.abortController = null;
+        APP.ui.training.stopRequested = false;
+        setTrainingUi(false);
+        return;
+      }
+
+      if (abortController.signal.aborted || APP.ui.training.stopRequested) {
+        $("trainStatus").innerHTML = `<span class="pill warn">Stopped</span> <span class="muted2">Training aborted.</span>`;
+        APP.ui.training.abortController = null;
+        APP.ui.training.stopRequested = false;
+        setTrainingUi(false);
         return;
       }
 
@@ -2461,7 +2552,9 @@
       renderResults({ oobPred, ytrain });
 
       $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
-      $("trainBtn").disabled = false;
+      APP.ui.training.abortController = null;
+      APP.ui.training.stopRequested = false;
+      setTrainingUi(false);
 
       gotoStep(3);
     }
@@ -2760,11 +2853,16 @@ function invertTargetIfNeeded(yPred, artifact){
     function syncButtons() {
       $("continueToSetupBtn").disabled = !(APP.raw.rows.length && APP.raw.columns.length);
       $("continueToTrainBtn").disabled = !APP.raw.targetCol;
-      $("trainBtn").disabled = !APP.raw.targetCol;
+      setTrainingUi(APP.ui.training.isTraining);
       updateExportUI();
     }
 
     function hardReset() {
+      try { APP.ui.training.abortController?.abort(); } catch {}
+      APP.ui.training.abortController = null;
+      APP.ui.training.isTraining = false;
+      APP.ui.training.stopRequested = false;
+
       APP.ui.parseSeq = (APP.ui.parseSeq || 0) + 1;
       APP.step = 0;
       APP.raw = { fileName: null, rows: [], columns: [], colMeta: {}, targetCol: null };
@@ -2792,6 +2890,9 @@ function invertTargetIfNeeded(yPred, artifact){
 
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+
+      $("trainStatus").innerHTML = "";
+      setTrainingUi(false);
 
       hide($("uploadSummary"));
       $("uploadStatus").innerHTML = "";
@@ -3104,6 +3205,15 @@ function invertTargetIfNeeded(yPred, artifact){
     $("showOnlyIssues").addEventListener("change", () => renderColumnTable());
 
     $("trainBtn").addEventListener("click", trainModel);
+    $("stopBtn").addEventListener("click", requestStopTraining);
+
+    window.addEventListener("pagehide", (e) => {
+      if (e.persisted) return;
+      releaseAllResources();
+    });
+    window.addEventListener("beforeunload", () => {
+      releaseAllResources();
+    });
 
     $("importanceMode").addEventListener("change", () => {
       if (!APP.train.model) return;

@@ -595,10 +595,10 @@
               <input id="seed" type="number" value="42" />
             </div>
             <div class="field">
-              <label for="replacement">Bootstrap sampling</label>
+              <label for="replacement">Feature sampling replacement</label>
               <select id="replacement">
-                <option value="true" selected>true</option>
-                <option value="false">false</option>
+                <option value="false" selected>false</option>
+                <option value="true">true</option>
               </select>
             </div>
           </div>
@@ -610,12 +610,12 @@
             </div>
             <div class="field">
               <label for="maxFeatures">maxFeatures</label>
-              <input id="maxFeatures" type="text" value="0.5" placeholder="e.g. 0.5 or 12" />
+              <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. 0.5 or 12" />
             </div>
           </div>
 
           <div class="muted2" style="margin-top:10px;">
-            Defaults follow common best practice for tabular baselines: enough trees, subsampled features, and bagging for stability.
+            Defaults follow common best practice for tabular baselines: enough trees, full features, and bagging for stability.
           </div>
         </details>
 
@@ -2097,9 +2097,9 @@
     // Presets
     // ----------------------------
     const PRESETS = {
-      fast:     { name: "Fast", desc: "Quick baseline for iteration.", nEstimators: 80,  maxRows: 20000, maxFeatures: "0.5", replacement: true },
-      balanced: { name: "Balanced", desc: "Recommended default.",        nEstimators: 200, maxRows: 50000, maxFeatures: "0.5", replacement: true },
-      thorough: { name: "Thorough", desc: "More trees, more accuracy.",   nEstimators: 600, maxRows: 0,     maxFeatures: "0.5", replacement: true },
+      fast:     { name: "Fast", desc: "Quick baseline for iteration.", nEstimators: 80,  maxRows: 20000, maxFeatures: "1.0", replacement: true },
+      balanced: { name: "Balanced", desc: "Recommended default.",        nEstimators: 200, maxRows: 50000, maxFeatures: "1.0", replacement: true },
+      thorough: { name: "Thorough", desc: "More trees, more accuracy.",   nEstimators: 600, maxRows: 0,     maxFeatures: "1.0", replacement: true },
     };
 
     function renderPresets() {
@@ -2365,7 +2365,13 @@
       }
 
       const maxFeaturesParsed = parseMaxFeatures($("maxFeatures").value, featureNames.length);
-      const rfOptions = { seed, maxFeatures: maxFeaturesParsed, replacement, nEstimators };
+      const rfOptions = {
+        seed,
+        maxFeatures: maxFeaturesParsed,
+        replacement,              // feature sampling replacement (usually false)
+        nEstimators,
+        useSampleBagging: true,   // bootstrap rows (actual “bagging”)
+      };
 
       APP.ui.training.totalUnits = nEstimators;
       APP.ui.training.completedUnits = 0;
@@ -2909,7 +2915,7 @@ function invertTargetIfNeeded(yPred, artifact){
       const wYear = 650 + Math.round(secret() * 450);
       const wHours = -(1.4 + secret() * 1.3);
       const wSaleYear = 250 + Math.round(secret() * 250);
-      const noiseScale = 0;
+      const noiseScale = 900 + Math.round(secret() * 900);
 
       const sizeOffsets = productSizes
         .map(() => (secret() * 2 - 1))

@@ -1,0 +1,2869 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Local Random Forest — Train on a CSV</title>
+
+  <!-- CSV parsing + charts + zip export -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <style>
+    :root{
+      --bg0:#070b16;
+      --bg1:#0b1226;
+      --text:#eaf0ff;
+      --muted:rgba(234,240,255,0.75);
+      --muted2:rgba(234,240,255,0.55);
+      --border:rgba(234,240,255,0.12);
+      --border2:rgba(234,240,255,0.08);
+      --primary2:#8b5cf6;
+      --good:#32d583;
+      --warn:#fdb022;
+      --bad:#f97066;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      --shadow: 0 10px 30px rgba(0,0,0,0.35);
+      --radius: 14px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      background:
+        radial-gradient(1000px 550px at 20% 0%, rgba(109,40,217,0.22), transparent 60%),
+        radial-gradient(900px 520px at 95% 10%, rgba(139,92,246,0.16), transparent 62%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+    }
+
+    .wrap{max-width:1200px;margin:0 auto;padding:18px 16px 60px}
+    .topbar{
+      position:sticky;top:0;z-index:50;
+      background:linear-gradient(180deg, rgba(7,11,22,0.92), rgba(7,11,22,0.72));
+      backdrop-filter: blur(14px);
+      border-bottom:1px solid var(--border2);
+      padding:14px 16px;
+      margin: -18px -16px 18px;
+    }
+
+    .topline{
+      display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;
+      max-width:1200px;margin:0 auto;
+    }
+
+    h1{margin:0;font-size:18px;letter-spacing:0.2px}
+    .sub{
+      margin-top:6px;color:var(--muted);font-size:13px;line-height:1.35;
+      max-width:760px;
+    }
+
+    .badges{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .badge{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:7px 10px;border-radius:999px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,0.03);
+      color:var(--muted);font-size:12px;white-space:nowrap;
+    }
+
+    .stepper{
+      max-width:1200px;margin:14px auto 0;
+      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+    }
+    .step{
+      display:flex;align-items:center;gap:10px;
+      padding:8px 10px;border-radius:999px;
+      border:1px solid var(--border2);
+      background:rgba(255,255,255,0.02);
+      color:var(--muted);
+      cursor:pointer;
+      user-select:none;
+      transition:120ms ease;
+    }
+    .step:hover{transform:translateY(-1px);border-color:rgba(234,240,255,0.16)}
+    .step .dot{
+      width:20px;height:20px;border-radius:50%;
+      border:1px solid var(--border);
+      display:grid;place-items:center;
+      font-size:11px;color:var(--muted);
+      background:rgba(255,255,255,0.02);
+    }
+    .step.active{
+      border-color:rgba(139,92,246,0.55);
+      background:rgba(139,92,246,0.12);
+      color:rgba(234,240,255,0.92);
+    }
+    .step.active .dot{
+      border-color:rgba(139,92,246,0.70);
+      color:rgba(234,240,255,0.95);
+      background:rgba(139,92,246,0.18);
+    }
+    .step.done{
+      border-color:rgba(50,213,131,0.40);
+      background:rgba(50,213,131,0.08);
+      color:rgba(50,213,131,0.95);
+    }
+    .step.done .dot{
+      border-color:rgba(50,213,131,0.55);
+      color:rgba(50,213,131,0.95);
+      background:rgba(50,213,131,0.10);
+    }
+
+    .grid{display:grid;grid-template-columns:1fr;gap:14px}
+    .card{
+      border:1px solid var(--border);
+      background:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      box-shadow: var(--shadow);
+      border-radius:var(--radius);
+      padding:14px;
+    }
+
+    .card h2{margin:0 0 10px;font-size:14px;color:rgba(234,240,255,0.92);letter-spacing:0.15px}
+    .muted{color:var(--muted);font-size:13px;line-height:1.35}
+    .muted2{color:var(--muted2);font-size:12px;line-height:1.35}
+    .mono{font-family:var(--mono);font-size:12px;color:rgba(234,240,255,0.86)}
+
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .row.space{justify-content:space-between}
+
+    .btn{
+      appearance:none;border:1px solid var(--border);
+      background:rgba(255,255,255,0.05);
+      color:var(--text);
+      padding:9px 12px;border-radius:12px;
+      cursor:pointer;font-size:13px;
+      transition:120ms ease;
+      user-select:none;
+    }
+    .btn:hover{transform:translateY(-1px);background:rgba(255,255,255,0.07)}
+    .btn:disabled{opacity:0.45;cursor:not-allowed;transform:none}
+    .btn.primary{
+      border-color:rgba(139,92,246,0.65);
+      background:rgba(139,92,246,0.18);
+    }
+    .btn.primary:hover{background:rgba(139,92,246,0.24)}
+    .btn.ghost{
+      background:transparent;
+      border-color:rgba(234,240,255,0.16);
+    }
+    .btn.danger{
+      border-color:rgba(249,112,102,0.60);
+      background:rgba(249,112,102,0.12);
+    }
+
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:5px 9px;border-radius:999px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,0.03);
+      color:var(--muted);
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .pill.good{border-color:rgba(50,213,131,0.35);background:rgba(50,213,131,0.08);color:rgba(50,213,131,0.95)}
+    .pill.warn{border-color:rgba(253,176,34,0.35);background:rgba(253,176,34,0.08);color:rgba(253,176,34,0.95)}
+    .pill.bad {border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
+
+    .hr{height:1px;background:var(--border2);margin:12px 0}
+
+    .drop{
+      border:1px dashed rgba(234,240,255,0.22);
+      background:rgba(255,255,255,0.03);
+      border-radius:14px;
+      padding:18px;
+      min-height:112px;
+      display:grid;place-items:center;
+      text-align:center;
+      transition:120ms ease;
+    }
+    .drop.dragover{
+      border-color:rgba(139,92,246,0.75);
+      background:rgba(139,92,246,0.10);
+      transform:translateY(-1px);
+    }
+    input[type="file"]{display:none}
+
+    /* Scroll containers: vertical + horizontal */
+    .scroll{
+      overflow: auto;
+      border:1px solid var(--border2);
+      background:rgba(0,0,0,0.10);
+      border-radius:12px;
+      max-height:420px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .scroll table {
+        width: 100%;
+        min-width: 100%;
+    }
+    .scroll th, .scroll td{
+      white-space: nowrap;
+    }
+
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th,td{border-bottom:1px solid rgba(234,240,255,0.09);padding:7px 8px;text-align:left;vertical-align:top}
+    th{
+      position:sticky;top:0;z-index:1;
+      background:rgba(15,24,51,0.94);
+      backdrop-filter: blur(10px);
+      color:rgba(234,240,255,0.92);
+      font-weight:600;
+    }
+    tbody tr:nth-child(2n){background:rgba(255,255,255,0.015)}
+
+    .two{display:grid;grid-template-columns: 1fr 1fr;gap:12px}
+    .three{display:grid;grid-template-columns: 1.2fr 0.8fr;gap:12px}
+    @media(max-width:980px){.two,.three{grid-template-columns:1fr}}
+
+    .field{display:grid;gap:6px}
+    label{color:var(--muted);font-size:12px}
+    select,input[type="number"],input[type="text"]{
+      width:100%;
+      border:1px solid var(--border2);
+      background:rgba(255,255,255,0.04);
+      color:var(--text);
+      padding:9px 10px;border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
+
+    .kpiGrid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px}
+    @media(max-width:980px){.kpiGrid{grid-template-columns:1fr}}
+    .kpi{
+      border:1px solid var(--border2);
+      background:rgba(255,255,255,0.03);
+      border-radius:14px;padding:12px;
+    }
+    .kpi .big{font-size:22px;font-weight:650;letter-spacing:0.2px;margin-top:6px}
+    .kpi .lbl{color:var(--muted);font-size:12px}
+    .kpi .small{color:var(--muted);font-size:12px;margin-top:8px}
+
+    .callout{
+      border:1px solid rgba(234,240,255,0.14);
+      background:rgba(255,255,255,0.03);
+      border-radius:14px;padding:10px 12px;
+      color:rgba(234,240,255,0.86);
+      font-size:12px;line-height:1.35;
+    }
+    .callout.good{border-color:rgba(50,213,131,0.35);background:rgba(50,213,131,0.08);color:rgba(50,213,131,0.95)}
+    .callout.warn{border-color:rgba(253,176,34,0.35);background:rgba(253,176,34,0.08);color:rgba(253,176,34,0.95)}
+    .callout.bad{border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
+
+    details{
+      border:1px solid var(--border2);
+      border-radius:14px;
+      background:rgba(255,255,255,0.02);
+      padding:10px 12px;
+    }
+    details > summary{
+      cursor:pointer;
+      color:rgba(234,240,255,0.92);
+      font-size:13px;
+      user-select:none;
+      list-style:none;
+    }
+    details > summary::-webkit-details-marker{display:none}
+    details .muted{margin-top:8px}
+
+    .presetRow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    @media(max-width:980px){.presetRow{grid-template-columns:1fr}}
+    .preset{
+      border:1px solid var(--border2);
+      border-radius:14px;
+      padding:12px;
+      background:rgba(255,255,255,0.02);
+      cursor:pointer;
+      transition:120ms ease;
+    }
+    .preset:hover{transform:translateY(-1px);border-color:rgba(234,240,255,0.16)}
+    .preset.active{
+      border-color:rgba(139,92,246,0.65);
+      background:rgba(139,92,246,0.10);
+    }
+    .preset .title{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .preset .name{font-weight:650}
+    .preset .desc{margin-top:8px;color:var(--muted);font-size:12px;line-height:1.35}
+    .preset .eta{margin-top:10px;color:var(--muted2);font-size:12px}
+
+    .spinner{
+      width:14px;height:14px;border-radius:50%;
+      border:2px solid rgba(234,240,255,0.18);
+      border-top-color: rgba(139,92,246,0.95);
+      display:inline-block;
+      animation:spin 0.75s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    pre.code{
+      margin:0;
+      padding:12px;
+      border-radius:14px;
+      border:1px solid var(--border2);
+      background:rgba(0,0,0,0.25);
+      overflow:auto;
+      max-height:420px;
+      line-height:1.35;
+      white-space:pre;
+      font-family:var(--mono);
+      font-size:12px;
+      color:rgba(234,240,255,0.86);
+    }
+
+    .hidden{display:none!important}
+
+    /* Chart sizing: prevent runaway growth */
+    .two > div, .three > div, .kpiGrid > div { min-width: 0; }
+    .chartBox {
+      position: relative;
+      width: 100%;
+      height: 320px;
+    }
+    .chartBox canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+    }
+
+    /* Sortable header styling */
+    th.sortable{
+      cursor: pointer;
+      user-select: none;
+    }
+    th.sortable:hover{
+      background: rgba(255,255,255,0.03);
+    }
+    .sort-indicator{
+      display: inline-block;
+      width: 10px;
+      margin-left: 6px;
+      color: rgba(234,240,255,0.65);
+      font-size: 11px;
+    }
+
+    /* Prevent the whole page from ever scrolling sideways */
+    html, body { overflow-x: hidden; }
+
+    /* Make the preview wrapper the horizontal scroll container */
+    #panelUpload .scroll { overflow-x: auto; overflow-y: auto; }
+
+    /* IMPORTANT: only the preview table should be allowed to become wider than its container */
+    #panelUpload .scroll table {
+    width: max-content;
+    min-width: 100%;
+    }
+
+
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="topline">
+      <div>
+        <h1>Train a Random Forest on a CSV — locally</h1>
+        <div class="sub">
+          Drop a CSV, pick the column you want to predict, and train a strong baseline model. Nothing is uploaded — everything runs on your device.
+        </div>
+      </div>
+      <div class="badges">
+        <div class="badge" title="Data stays in this browser tab. No server involved.">🔒 Local-only</div>
+        <div class="badge" id="hwBadge">🧠 CPU threads: ?</div>
+        <button class="btn danger" id="resetAllBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="stepper" id="stepper"></div>
+  </div>
+
+  <div class="wrap">
+    <div class="grid">
+
+      <!-- STEP 1: UPLOAD -->
+      <section class="card" id="panelUpload">
+        <h2>Upload</h2>
+
+        <div class="drop" id="dropZone">
+          <div>
+            <div style="font-weight:650;margin-bottom:6px;">Drop a CSV to start</div>
+            <div class="muted">or <button class="btn" id="browseBtn">Browse…</button> <button class="btn ghost" id="sampleBtn">Use a sample CSV</button></div>
+            <input id="fileInput" type="file" accept=".csv,text/csv" />
+            <div class="muted2" style="margin-top:10px;">First row must be column headers.</div>
+          </div>
+        </div>
+
+        <div id="uploadStatus" class="row" style="margin-top:12px;"></div>
+
+        <div id="uploadSummary" class="hidden" style="margin-top:12px;">
+          <div class="row space">
+            <div class="row">
+              <span class="pill good" id="dsLoadedPill">Loaded</span>
+              <span class="pill" id="dsShapePill">—</span>
+              <span class="pill" id="dsPreviewPill">Preview</span>
+            </div>
+            <button class="btn primary" id="continueToSetupBtn" disabled>Continue</button>
+          </div>
+
+          <div class="hr"></div>
+          <div class="muted2">Preview (first 12 rows)</div>
+          <div class="scroll" style="margin-top:8px;max-height:320px;">
+            <table id="previewTable"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2: SETUP -->
+      <section class="card hidden" id="panelSetup">
+        <h2>Choose target & confirm setup</h2>
+
+        <div class="three">
+          <div>
+            <div class="field">
+              <label for="targetSelect">What do you want to predict?</label>
+              <select id="targetSelect"></select>
+            </div>
+
+            <div class="row" style="margin-top:10px;">
+              <span class="pill" id="taskPill">Task: —</span>
+              <span class="pill" id="rowsPill">Rows: —</span>
+              <span class="pill" id="colsPill">Columns: —</span>
+              <span class="pill" id="reviewPill">Needs review: —</span>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="two">
+              <div class="field">
+                <label>Train/test split</label>
+                <select id="splitMode">
+                  <option value="auto" selected>Auto (recommended)</option>
+                  <option value="time">Time-based (if you have dates)</option>
+                  <option value="random">Random</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="testFrac">Test fraction</label>
+                <input id="testFrac" type="number" min="0.05" max="0.5" step="0.05" value="0.2" />
+              </div>
+            </div>
+
+            <div class="two" style="margin-top:10px;">
+              <div class="field">
+                <label for="splitDateCol">Time column (for time-based split)</label>
+                <select id="splitDateCol" disabled></select>
+              </div>
+
+              <div class="field">
+                <label for="taskMode">Task mode</label>
+                <select id="taskMode">
+                  <option value="auto" selected>Auto</option>
+                  <option value="regression">Regression</option>
+                  <option value="classification">Classification</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="two" style="margin-top:10px;">
+              <div class="field">
+                <label for="targetTransform">Target transform</label>
+                <select id="targetTransform">
+                  <option value="none" selected>None</option>
+                  <option value="log1p">log1p (for non-negative targets)</option>
+                </select>
+                <div class="muted2">If enabled, we train on transformed targets and invert predictions back.</div>
+              </div>
+
+              <div class="field">
+                <label for="maxRows">Max rows (0 = all)</label>
+                <input id="maxRows" type="number" min="0" step="1000" value="50000" />
+                <div class="muted2">Useful for quick iteration on huge CSVs.</div>
+              </div>
+            </div>
+
+            <div class="hr"></div>
+
+            <div id="setupCallout" class="callout hidden"></div>
+
+            <div class="row space" style="margin-top:12px;">
+              <button class="btn" id="backToUploadBtn">Back</button>
+              <button class="btn primary" id="continueToTrainBtn" disabled>Continue</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="callout" style="margin-bottom:10px;">
+              <div style="font-weight:650;margin-bottom:6px;">Quick checks</div>
+              <div class="muted2">
+                You can train immediately. If anything looks off, expand “Review columns” below to override types or exclude ID-like columns.
+              </div>
+            </div>
+
+            <details id="reviewDetails">
+              <summary>Review columns (advanced)</summary>
+              <div class="hr"></div>
+
+              <div class="two" style="margin-bottom:10px;">
+                <div class="field">
+                  <label for="colSearch">Search columns</label>
+                  <input id="colSearch" type="text" placeholder="Type to filter…" />
+                </div>
+                <div class="field">
+                  <label for="showOnlyIssues">Filter</label>
+                  <select id="showOnlyIssues">
+                    <option value="all" selected>All columns</option>
+                    <option value="issues">Only needs review</option>
+                    <option value="excluded">Only excluded</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="scroll" style="max-height:420px;">
+                <table id="reviewColumnsTable">
+                  <thead>
+                    <tr>
+                      <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="name">Column <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="confidence">Confidence <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="colConfigBody"></tbody>
+                </table>
+              </div>
+
+              <div class="muted2" style="margin-top:10px;">
+                “Confidence” is a heuristic based on sample parseability and cardinality. ID-like columns often look predictive but can harm robustness.
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 3: TRAIN -->
+      <section class="card hidden" id="panelTrain">
+        <h2>Train</h2>
+
+        <div class="muted" style="margin-bottom:10px;">
+          Choose a training preset. The time estimates update after we do a quick calibration on your device.
+        </div>
+
+        <div class="presetRow" id="presetRow"></div>
+
+        <details id="advancedTrainDetails" style="margin-top:12px;">
+          <summary>Advanced</summary>
+          <div class="hr"></div>
+
+          <div class="two">
+            <div class="field">
+              <label for="seed">Random seed</label>
+              <input id="seed" type="number" value="42" />
+            </div>
+            <div class="field">
+              <label for="replacement">Bootstrap sampling</label>
+              <select id="replacement">
+                <option value="true" selected>true</option>
+                <option value="false">false</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="two" style="margin-top:10px;">
+            <div class="field">
+              <label for="nEstimators">Trees</label>
+              <input id="nEstimators" type="number" min="10" step="10" value="200" />
+            </div>
+            <div class="field">
+              <label for="maxFeatures">maxFeatures</label>
+              <input id="maxFeatures" type="text" value="0.5" placeholder="e.g. 0.5 or 12" />
+            </div>
+          </div>
+
+          <div class="muted2" style="margin-top:10px;">
+            Defaults follow common best practice for tabular baselines: enough trees, subsampled features, and bagging for stability.
+          </div>
+        </details>
+
+        <div class="hr"></div>
+
+        <div class="row space">
+          <button class="btn" id="backToSetupBtn">Back</button>
+          <div class="row">
+            <div id="trainStatus" class="muted2"></div>
+            <span class="pill" id="trainETA" style="display:none;">ETA: —</span>
+            <button class="btn danger" id="stopBtn" disabled>Stop</button>
+            <button class="btn primary" id="trainBtn" disabled>Train model</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 4: RESULTS -->
+      <section class="card hidden" id="panelResults">
+        <h2>Results</h2>
+
+        <div class="kpiGrid">
+          <div class="kpi">
+            <div class="lbl" id="primaryMetricLabel">—</div>
+            <div class="big mono" id="primaryMetricValue">—</div>
+            <div class="small" id="primaryMetricSub">—</div>
+          </div>
+
+          <div class="kpi">
+            <div class="lbl">Setup</div>
+            <div class="small mono" id="setupSummary">—</div>
+            <div class="small mono" id="featureSummary">—</div>
+          </div>
+
+          <div class="kpi">
+            <div class="lbl">Next</div>
+            <div class="small">Export a portable artifact (model + preprocessing + sample loader).</div>
+            <div class="row" style="margin-top:10px;">
+              <button class="btn primary" id="jumpToExportBtn">Export</button>
+              <button class="btn" id="backToTrainBtn">Back</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div id="resultsCallouts" class="grid" style="gap:10px;"></div>
+
+        <div class="hr"></div>
+
+        <div class="two">
+          <div>
+            <div class="row space" style="margin-bottom:8px;">
+              <div class="muted">What matters (feature importance)</div>
+              <div class="row">
+                <select id="importanceMode" style="width:220px;">
+                  <option value="base" selected>Aggregate by column</option>
+                  <option value="derived">Show derived features</option>
+                </select>
+              </div>
+            </div>
+            <div class="chartBox">
+              <canvas id="fiChart"></canvas>
+            </div>
+            <div class="muted2" style="margin-top:8px;">
+              Aggregation groups derived features (e.g. date parts + missing indicators) back to their original column.
+            </div>
+          </div>
+
+          <div>
+            <div class="row space" style="margin-bottom:8px;">
+              <div class="muted" id="secondaryChartTitle">—</div>
+              <div class="row">
+                <span class="pill" id="secondaryChartPill">—</span>
+              </div>
+            </div>
+            <div class="chartBox">
+              <canvas id="secondaryChart"></canvas>
+            </div>
+            <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="row space" style="margin-bottom:8px;">
+          <div class="muted">Predictions explorer</div>
+          <div class="row">
+            <input id="predFilter" type="text" placeholder="Filter (true/pred contains…)" style="width:260px;" />
+            <input id="pageSize" type="number" min="10" step="10" value="50" style="width:90px;" />
+            <button class="btn" id="prevPage">Prev</button>
+            <button class="btn" id="nextPage">Next</button>
+            <button class="btn" id="downloadPredCsvBtn">Download predictions CSV</button>
+          </div>
+        </div>
+
+        <div class="scroll">
+          <table id="predTable"></table>
+        </div>
+
+        <div class="muted2" style="margin-top:10px;">
+          This table shows raw input rows from your CSV (test split) alongside predictions. Use filters to focus on specific values.
+        </div>
+      </section>
+
+      <!-- STEP 5: EXPORT -->
+      <section class="card hidden" id="panelExport">
+        <h2>Export</h2>
+
+        <div class="row space">
+          <div class="row">
+            <span class="pill" id="artifactPill">Artifact: not ready</span>
+            <span class="pill" id="artifactDetailPill">—</span>
+          </div>
+          <div class="row">
+            <button class="btn" id="backToResultsBtn">Back</button>
+            <button class="btn primary" id="downloadZipBtn" disabled>Download rf_artifact.zip</button>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="muted" style="margin-bottom:8px;">Sample loader</div>
+        <pre class="code" id="sampleCode"></pre>
+
+        <div class="hr"></div>
+        <div class="callout">
+          <div style="font-weight:650;margin-bottom:6px;">Note on opening locally</div>
+          <div class="muted2">
+            Some browsers restrict ES module imports when opening HTML via <span class="mono">file://</span>.
+            If you see import/CORS errors, run a tiny local server (e.g. <span class="mono">python -m http.server</span>) and open <span class="mono">http://localhost:8000</span>.
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <script type="module">
+    // Charting stays on main thread
+    import { RandomForestRegression, RandomForestClassifier } from "https://esm.sh/ml-random-forest@2.1.0";
+
+    // ----------------------------
+    // State
+    // ----------------------------
+    const STEPS = [
+      { key: "upload",  title: "Upload" },
+      { key: "setup",   title: "Target" },
+      { key: "train",   title: "Train" },
+      { key: "results", title: "Results" },
+      { key: "export",  title: "Export" },
+    ];
+
+    let APP = {
+      step: 0,
+      raw: { fileName: null, rows: [], columns: [], colMeta: {}, targetCol: null },
+      setup: {
+        splitMode: "auto",
+        splitDateCol: null,
+        testFrac: 0.2,
+        taskMode: "auto",
+        targetTransform: "none",
+        maxRows: 50000,
+        excluded: new Set()
+      },
+      train: {
+        preset: "balanced",
+        rfOptions: null,
+        model: null,
+        pipeline: null,
+        featureNames: [],
+        baseForDerived: [],
+        split: { trainIdx: [], testIdx: [] },
+        yTrain: [],
+        yTest: [],
+        yPred: [],
+        yPredLabel: [],
+        testRowRefs: [],
+        fiDerived: [],
+        fiBase: [],
+        // time estimation
+        perfCoeff: null,            // seconds / (rows*features*trees)
+        lastETASeconds: null,
+        // worker/stop
+        running: false,
+        worker: null,
+        countdownTimer: null,
+        countdownStartMs: null
+      },
+      ui: {
+        charts: { fi: null, secondary: null },
+        predPage: 0,
+        predFilter: "",
+        colSort: { key: "name", dir: "asc" }
+      }
+    };
+
+    // ----------------------------
+    // DOM helpers
+    // ----------------------------
+    const $ = (id) => document.getElementById(id);
+    const show = (el) => el.classList.remove("hidden");
+    const hide = (el) => el.classList.add("hidden");
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function truncate(s, maxLen = 200) {
+      const t = (s === null || s === undefined) ? "" : String(s);
+      if (t.length <= maxLen) return t;
+      return t.slice(0, Math.max(0, maxLen - 1)) + "…";
+    }
+
+    // ----------------------------
+    // Core utils
+    // ----------------------------
+    function normStr(v) { return (v === null || v === undefined) ? "" : String(v).trim(); }
+
+    function parseNum(v) {
+      const s = normStr(v);
+      if (!s) return NaN;
+      const x = Number(s);
+      return Number.isFinite(x) ? x : NaN;
+    }
+
+    function looksLikeDateString(s) {
+      const t = s.trim();
+      if (!t) return false;
+      if (!(/[\/\-T:]/.test(t))) return false;
+      const p1 = /^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}(\b|T)/;
+      const p2 = /^\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}(\b|T)/;
+      const p3 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+      return p1.test(t) || p2.test(t) || p3.test(t);
+    }
+
+    function parseDate(v) {
+      const s = normStr(v);
+      if (!s) return null;
+      if (!looksLikeDateString(s)) return null;
+      const d = new Date(s);
+      if (Number.isNaN(d.getTime())) return null;
+      return d;
+    }
+
+    function mulberry32(seed) {
+      let t = seed >>> 0;
+      return function() {
+        t += 0x6D2B79F5;
+        let x = t;
+        x = Math.imul(x ^ (x >>> 15), x | 1);
+        x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+        return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function shuffleInPlace(arr, rng) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function median(values) {
+      const a = values.filter(Number.isFinite);
+      const n = a.length;
+      if (!n) return 0;
+      a.sort((x,y)=>x-y);
+      const m = Math.floor(n/2);
+      return (n%2) ? a[m] : (a[m-1] + a[m]) / 2;
+    }
+
+    function dateParts(d) {
+      const year = d.getFullYear();
+      const month = d.getMonth() + 1;
+      const day = d.getDate();
+      const dow = d.getDay();
+      const start = new Date(d.getFullYear(), 0, 1);
+      const dayOfYear = Math.floor((d - start) / 86400000) + 1;
+
+      const isMonthStart = day === 1;
+      const isMonthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() === day;
+
+      const qStartMonths = new Set([1, 4, 7, 10]);
+      const qEndMonths = new Set([3, 6, 9, 12]);
+      const isQuarterStart = qStartMonths.has(month) && isMonthStart;
+      const isQuarterEnd = qEndMonths.has(month) && isMonthEnd;
+
+      const isYearStart = (month === 1 && day === 1);
+      const isYearEnd = (month === 12 && day === 31);
+
+      return {
+        year, month, day,
+        dayofweek: dow,
+        dayofyear: dayOfYear,
+        is_month_end: isMonthEnd ? 1 : 0,
+        is_month_start: isMonthStart ? 1 : 0,
+        is_quarter_end: isQuarterEnd ? 1 : 0,
+        is_quarter_start: isQuarterStart ? 1 : 0,
+        is_year_end: isYearEnd ? 1 : 0,
+        is_year_start: isYearStart ? 1 : 0,
+        elapsed: d.getTime()
+      };
+    }
+
+    function rmse(yTrue, yPred) {
+      let s = 0;
+      const n = yTrue.length;
+      for (let i = 0; i < n; i++) {
+        const e = (yPred[i] - yTrue[i]);
+        s += e * e;
+      }
+      return Math.sqrt(s / Math.max(1, n));
+    }
+
+    function mae(yTrue, yPred) {
+      let s = 0;
+      const n = yTrue.length;
+      for (let i = 0; i < n; i++) s += Math.abs(yPred[i] - yTrue[i]);
+      return s / Math.max(1, n);
+    }
+
+    function r2(yTrue, yPred) {
+      const n = yTrue.length;
+      if (!n) return NaN;
+      let mean = 0;
+      for (let i = 0; i < n; i++) mean += yTrue[i];
+      mean /= n;
+
+      let ssTot = 0;
+      let ssRes = 0;
+      for (let i = 0; i < n; i++) {
+        const dt = yTrue[i] - mean;
+        ssTot += dt * dt;
+        const dr = yTrue[i] - yPred[i];
+        ssRes += dr * dr;
+      }
+      return 1 - (ssRes / Math.max(1e-12, ssTot));
+    }
+
+    function rmsle(yTrue, yPred) {
+      for (let i = 0; i < yTrue.length; i++) {
+        if (yTrue[i] < 0 || yPred[i] < 0) return null;
+      }
+      let s = 0;
+      const n = yTrue.length;
+      for (let i = 0; i < n; i++) {
+        const a = Math.log1p(yTrue[i]);
+        const b = Math.log1p(yPred[i]);
+        const e = a - b;
+        s += e * e;
+      }
+      return Math.sqrt(s / Math.max(1, n));
+    }
+
+    function accuracy(yTrue, yPred) {
+      let ok = 0;
+      for (let i = 0; i < yTrue.length; i++) if (yTrue[i] === yPred[i]) ok++;
+      return ok / Math.max(1, yTrue.length);
+    }
+
+    function f1Macro(yTrue, yPred, numClasses) {
+      const tp = new Array(numClasses).fill(0);
+      const fp = new Array(numClasses).fill(0);
+      const fn = new Array(numClasses).fill(0);
+
+      for (let i = 0; i < yTrue.length; i++) {
+        const t = yTrue[i];
+        const p = yPred[i];
+        if (t === p) tp[t]++;
+        else { fp[p]++; fn[t]++; }
+      }
+
+      let f1Sum = 0;
+      for (let c = 0; c < numClasses; c++) {
+        const precision = tp[c] / Math.max(1, (tp[c] + fp[c]));
+        const recall = tp[c] / Math.max(1, (tp[c] + fn[c]));
+        const f1 = (precision + recall) ? (2 * precision * recall) / (precision + recall) : 0;
+        f1Sum += f1;
+      }
+      return f1Sum / Math.max(1, numClasses);
+    }
+
+    function formatNum(x, digits = 6) {
+      if (x === null || x === undefined) return "—";
+      if (!Number.isFinite(x)) return String(x);
+      return x.toFixed(digits);
+    }
+
+    function formatDuration(sec) {
+      if (!Number.isFinite(sec) || sec < 0) return "—";
+      const s = Math.max(0, Math.round(sec));
+      const m = Math.floor(s / 60);
+      const r = s % 60;
+      if (m <= 0) return `${r}s`;
+      const h = Math.floor(m / 60);
+      const mm = m % 60;
+      if (h <= 0) return `${m}m ${r}s`;
+      return `${h}h ${mm}m`;
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+
+    // ----------------------------
+    // Column sort helpers
+    // ----------------------------
+    function typeRank(t) {
+      if (t === "continuous") return 0;
+      if (t === "categorical") return 1;
+      if (t === "date") return 2;
+      return 3;
+    }
+
+    function flagsRank(m) {
+      let r = 0;
+      if (m?.flags?.idLike) r += 2;
+      if (m?.flags?.lowConfidence) r += 1;
+      return r;
+    }
+
+    function sortIndicatorText(isActive, dir) {
+      if (!isActive) return "";
+      return dir === "asc" ? "▲" : "▼";
+    }
+
+    // ----------------------------
+    // Stepper
+    // ----------------------------
+    function renderStepper() {
+      const s = $("stepper");
+      s.innerHTML = STEPS.map((st, i) => {
+        const cls = (i === APP.step) ? "step active" : (i < APP.step ? "step done" : "step");
+        const dot = (i < APP.step) ? "✓" : String(i + 1);
+        return `<div class="${cls}" data-step="${i}">
+          <div class="dot">${dot}</div>
+          <div style="font-size:12px;">${escapeHtml(st.title)}</div>
+        </div>`;
+      }).join("");
+
+      s.querySelectorAll("[data-step]").forEach(el => {
+        el.addEventListener("click", () => {
+          const i = Number(el.getAttribute("data-step"));
+          if (!Number.isFinite(i)) return;
+          gotoStep(i);
+        });
+      });
+    }
+
+    function gotoStep(i) {
+      const clamped = Math.max(0, Math.min(STEPS.length - 1, i));
+      APP.step = clamped;
+      renderStepper();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      const panels = {
+        0: $("panelUpload"),
+        1: $("panelSetup"),
+        2: $("panelTrain"),
+        3: $("panelResults"),
+        4: $("panelExport"),
+      };
+
+      Object.entries(panels).forEach(([k, el]) => {
+        if (Number(k) === APP.step) show(el);
+        else hide(el);
+      });
+
+      // update preset estimates when entering Train
+      if (APP.step === 2) renderPresets();
+
+      syncButtons();
+    }
+
+    // ----------------------------
+    // Inference + metadata
+    // ----------------------------
+    function inferColumnType(col, rows) {
+      const maxN = Math.min(rows.length, 2000);
+      let nonEmpty = 0, numeric = 0, integerish = 0, dateish = 0;
+      const uniq = new Set();
+      const examples = [];
+
+      for (let i = 0, seen = 0; i < rows.length && seen < maxN; i++) {
+        const s = normStr(rows[i][col]);
+        if (!s) continue;
+        nonEmpty++; seen++;
+
+        if (examples.length < 4 && !examples.includes(s)) examples.push(s);
+        uniq.add(s);
+
+        const x = parseNum(s);
+        if (Number.isFinite(x)) {
+          numeric++;
+          if (Number.isInteger(x)) integerish++;
+        } else {
+          const d = parseDate(s);
+          if (d) dateish++;
+        }
+      }
+
+      const missingFrac = rows.length ? (1 - (nonEmpty / Math.max(1, Math.min(rows.length, maxN)))) : 0;
+      const uniqueSample = uniq.size;
+
+      const fracNum = nonEmpty ? (numeric / nonEmpty) : 0;
+      const fracDate = nonEmpty ? (dateish / nonEmpty) : 0;
+      const fracInt = numeric ? (integerish / numeric) : 0;
+
+      let inferred = "categorical";
+      let confidence = 0.55;
+
+      if (fracDate >= 0.85 && fracNum < 0.40) { inferred = "date"; confidence = Math.min(0.98, 0.70 + 0.30 * fracDate); }
+      else if (fracNum >= 0.92) {
+        if (fracInt >= 0.98 && uniqueSample <= 50) { inferred = "categorical"; confidence = 0.85; }
+        else if (uniqueSample <= 20 && fracInt >= 0.90) { inferred = "categorical"; confidence = 0.80; }
+        else { inferred = "continuous"; confidence = Math.min(0.98, 0.70 + 0.30 * fracNum); }
+      } else {
+        inferred = "categorical";
+        confidence = Math.max(0.55, 0.65 - 0.20 * (fracNum + fracDate));
+      }
+
+      const name = col.toLowerCase();
+      const idByName = (name === "id") || name.endsWith("id") || name.includes("_id") || name.includes(" id") || name.includes("identifier");
+      const uniqueRatio = nonEmpty ? (uniqueSample / nonEmpty) : 0;
+      const idLike = idByName || (inferred !== "date" && fracInt >= 0.95 && uniqueRatio >= 0.95 && uniqueSample >= 50);
+
+      return {
+        inferredType: inferred,
+        confidence,
+        missingFrac,
+        uniqueSample,
+        examples,
+        flags: { idLike, lowConfidence: confidence < 0.70 },
+        include: true
+      };
+    }
+
+    function confidenceLabel(c) {
+      if (c >= 0.85) return { txt: "High", cls: "pill good" };
+      if (c >= 0.70) return { txt: "Med", cls: "pill warn" };
+      return { txt: "Low", cls: "pill bad" };
+    }
+
+    // ----------------------------
+    // Sorting wire-up for Review Columns headers
+    // ----------------------------
+    function wireReviewSortHeaders() {
+      const table = $("reviewColumnsTable");
+      if (!table) return;
+
+      table.querySelectorAll("th.sortable[data-sort]").forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.getAttribute("data-sort");
+          if (!key) return;
+
+          if (APP.ui.colSort.key === key) APP.ui.colSort.dir = (APP.ui.colSort.dir === "asc") ? "desc" : "asc";
+          else { APP.ui.colSort.key = key; APP.ui.colSort.dir = "asc"; }
+
+          renderColumnTable();
+        });
+      });
+    }
+
+    // ----------------------------
+    // Rendering: Upload preview
+    // ----------------------------
+    function renderPreviewTable(rows, columns) {
+      const cols = columns.slice(0, Math.min(columns.length, 12));
+      const head = "<thead><tr>" + cols.map(c => `<th>${escapeHtml(c)}</th>`).join("") + "</tr></thead>";
+      const body = rows.slice(0, 12).map(r => {
+        const tds = cols.map(c => {
+          const full = normStr(r[c]) || "";
+          const clipped = truncate(full, 200);
+          return `<td title="${escapeHtml(clipped)}">${escapeHtml(clipped)}</td>`;
+        }).join("");
+        return `<tr>${tds}</tr>`;
+      }).join("");
+      $("previewTable").innerHTML = head + `<tbody>${body}</tbody>`;
+    }
+
+    // ----------------------------
+    // Setup rendering
+    // ----------------------------
+    function computeNeedsReview() {
+      const meta = APP.raw.colMeta;
+      let n = 0;
+      for (const c of APP.raw.columns) {
+        const m = meta[c];
+        if (!m) continue;
+        if (!m.include) continue;
+        if (m.flags.lowConfidence) n++;
+      }
+      return n;
+    }
+
+    function listDateColumns() {
+      const meta = APP.raw.colMeta;
+      return APP.raw.columns.filter(c => meta[c]?.include && meta[c]?.inferredType === "date");
+    }
+
+    function decideTaskFromTarget(rows, targetCol, taskMode, meta) {
+      if (taskMode === "regression") return "regression";
+      if (taskMode === "classification") return "classification";
+
+      const t = meta[targetCol]?.inferredType;
+      if (t === "continuous") return "regression";
+      if (t === "categorical") return "classification";
+      if (t === "date") return "regression";
+
+      const maxN = Math.min(rows.length, 1500);
+      let nonEmpty = 0, numeric = 0, uniq = new Set();
+      for (let i = 0, seen = 0; i < rows.length && seen < maxN; i++) {
+        const s = normStr(rows[i][targetCol]);
+        if (!s) continue;
+        nonEmpty++; seen++;
+        uniq.add(s);
+        const x = parseNum(s);
+        if (Number.isFinite(x)) numeric++;
+      }
+      const fracNum = nonEmpty ? (numeric / nonEmpty) : 0;
+      if (fracNum >= 0.90 && uniq.size > 20) return "regression";
+      return "classification";
+    }
+
+    function syncSetupUI() {
+      $("rowsPill").textContent = `Rows: ${APP.raw.rows.length}`;
+      $("colsPill").textContent = `Columns: ${APP.raw.columns.length}`;
+
+      const needs = computeNeedsReview();
+      $("reviewPill").textContent = `Needs review: ${needs}`;
+
+      const hasTarget = !!APP.raw.targetCol;
+      $("continueToTrainBtn").disabled = !hasTarget;
+
+      const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
+      $("taskPill").textContent = `Task: ${task || "—"}`;
+
+      const dateCols = listDateColumns();
+      const splitMode = $("splitMode").value;
+
+      $("splitDateCol").innerHTML = dateCols.length
+        ? dateCols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")
+        : `<option value="">(no date columns detected)</option>`;
+
+      if (!APP.setup.splitDateCol && dateCols.length) APP.setup.splitDateCol = dateCols[0];
+      if (APP.setup.splitDateCol && dateCols.includes(APP.setup.splitDateCol)) $("splitDateCol").value = APP.setup.splitDateCol;
+
+      const autoAllowsTime = dateCols.length > 0;
+      const wantsTime = (splitMode === "time") || (splitMode === "auto" && autoAllowsTime);
+      $("splitDateCol").disabled = !wantsTime;
+
+      const c = $("setupCallout");
+      if (!hasTarget) {
+        c.className = "callout";
+        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Pick a target to continue</div>
+                       <div class="muted2">Once selected, we’ll recommend a split strategy and a model task.</div>`;
+        show(c);
+      } else {
+        const splitText = wantsTime
+          ? `Time-based split using <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span>.`
+          : `Random split.`;
+
+        const idLike = APP.raw.columns.filter(cc => APP.raw.colMeta[cc]?.include && APP.raw.colMeta[cc]?.flags?.idLike);
+        const idHint = idLike.length
+          ? `<div class="muted2" style="margin-top:6px;">We flagged ${idLike.length} ID-like column(s). Consider excluding them in “Review columns” if you care about robustness.</div>`
+          : ``;
+
+        c.className = wantsTime ? "callout good" : "callout";
+        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Ready</div>
+                       <div class="muted2">${splitText} You can train immediately.</div>${idHint}`;
+        show(c);
+      }
+    }
+
+    function renderTargetSelect() {
+      const cols = APP.raw.columns;
+      const options = cols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      $("targetSelect").innerHTML = `<option value="" disabled ${APP.raw.targetCol ? "" : "selected"}>(select a column)</option>` + options;
+      if (APP.raw.targetCol) $("targetSelect").value = APP.raw.targetCol;
+    }
+
+    function renderColumnTable() {
+      const meta = APP.raw.colMeta;
+      const target = APP.raw.targetCol;
+
+      // update header indicators
+      document.querySelectorAll("#reviewColumnsTable th.sortable[data-sort]").forEach(th => {
+        const k = th.getAttribute("data-sort");
+        const ind = th.querySelector(".sort-indicator");
+        if (!ind) return;
+        ind.textContent = sortIndicatorText(k === APP.ui.colSort.key, APP.ui.colSort.dir);
+      });
+
+      const q = normStr($("colSearch").value).toLowerCase();
+      const filterMode = $("showOnlyIssues").value;
+
+      const sortKey = APP.ui.colSort?.key || "name";
+      const sortDir = APP.ui.colSort?.dir || "asc";
+      const dirMul = (sortDir === "asc") ? 1 : -1;
+
+      const colsSorted = APP.raw.columns.slice().sort((a, b) => {
+        const ma = meta[a], mb = meta[b];
+
+        // pin target at top
+        if (APP.raw.targetCol) {
+          if (a === APP.raw.targetCol && b !== APP.raw.targetCol) return -1;
+          if (b === APP.raw.targetCol && a !== APP.raw.targetCol) return 1;
+        }
+
+        let va, vb;
+        switch (sortKey) {
+          case "include": va = (ma?.include ? 1 : 0); vb = (mb?.include ? 1 : 0); break;
+          case "name": va = a.toLowerCase(); vb = b.toLowerCase(); break;
+          case "type": va = typeRank(ma?.inferredType); vb = typeRank(mb?.inferredType); break;
+          case "confidence": va = ma?.confidence ?? 0; vb = mb?.confidence ?? 0; break;
+          case "missing": va = ma?.missingFrac ?? 0; vb = mb?.missingFrac ?? 0; break;
+          case "unique": va = ma?.uniqueSample ?? 0; vb = mb?.uniqueSample ?? 0; break;
+          case "flags": va = flagsRank(ma); vb = flagsRank(mb); break;
+          case "examples": va = (ma?.examples?.[0] ?? "").toLowerCase(); vb = (mb?.examples?.[0] ?? "").toLowerCase(); break;
+          default: va = a.toLowerCase(); vb = b.toLowerCase();
+        }
+
+        if (typeof va === "number" && typeof vb === "number") {
+          if (va === vb) return 0;
+          return (va < vb ? -1 : 1) * dirMul;
+        } else {
+          va = String(va); vb = String(vb);
+          if (va === vb) return 0;
+          return (va < vb ? -1 : 1) * dirMul;
+        }
+      });
+
+      const rows = colsSorted
+        .filter(c => !q || c.toLowerCase().includes(q))
+        .filter(c => {
+          const m = meta[c];
+          if (!m) return true;
+          if (filterMode === "issues") return m.flags.lowConfidence || m.flags.idLike;
+          if (filterMode === "excluded") return !m.include;
+          return true;
+        })
+        .map(col => {
+          const m = meta[col];
+          const missPct = (m.missingFrac * 100);
+          const conf = confidenceLabel(m.confidence);
+
+          const typeSelect = `
+            <select data-coltype="${escapeHtml(col)}" style="width:140px;">
+              <option value="categorical" ${m.inferredType==="categorical"?"selected":""}>categorical</option>
+              <option value="continuous" ${m.inferredType==="continuous"?"selected":""}>continuous</option>
+              <option value="date" ${m.inferredType==="date"?"selected":""}>date</option>
+            </select>
+          `;
+
+          const flags = [];
+          if (m.flags.idLike) flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          if (m.flags.lowConfidence) flags.push(`<span class="pill bad" title="Heuristic type inference is uncertain">Review</span>`);
+          const flagsHtml = flags.length ? flags.join(" ") : `<span class="muted2">—</span>`;
+
+          const includeDisabled = (target && col === target) ? "disabled" : "";
+          const includeChecked = (m.include || (target && col === target)) ? "checked" : "";
+          const includeBox = `<input type="checkbox" data-include="${escapeHtml(col)}" ${includeChecked} ${includeDisabled} />`;
+
+          const examplesFull = (m.examples || []).slice(0, 3).map(x => truncate(x, 80)).join(", ");
+          const examples = truncate(examplesFull, 200);
+
+          return `
+            <tr>
+              <td>${includeBox}</td>
+              <td class="mono">${escapeHtml(col)}</td>
+              <td>${typeSelect}</td>
+              <td><span class="${conf.cls}">${conf.txt}</span></td>
+              <td>${escapeHtml(missPct.toFixed(1) + "%")}</td>
+              <td>${escapeHtml(String(m.uniqueSample))}</td>
+              <td>${flagsHtml}</td>
+              <td title="${escapeHtml(examples)}">${escapeHtml(examples)}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      $("colConfigBody").innerHTML = rows;
+
+      $("colConfigBody").querySelectorAll("input[type=checkbox][data-include]").forEach(cb => {
+        cb.addEventListener("change", () => {
+          const col = cb.getAttribute("data-include");
+          const targetCol = APP.raw.targetCol;
+          if (targetCol && col === targetCol) return;
+          APP.raw.colMeta[col].include = cb.checked;
+          syncSetupUI();
+          refreshSplitDateCol();
+          renderPresets();
+        });
+      });
+
+      $("colConfigBody").querySelectorAll("select[data-coltype]").forEach(sel => {
+        sel.addEventListener("change", () => {
+          const col = sel.getAttribute("data-coltype");
+          APP.raw.colMeta[col].inferredType = sel.value;
+          APP.raw.colMeta[col].confidence = Math.max(APP.raw.colMeta[col].confidence, 0.90);
+          APP.raw.colMeta[col].flags.lowConfidence = false;
+          syncSetupUI();
+          refreshSplitDateCol();
+          renderColumnTable();
+          renderPresets();
+        });
+      });
+    }
+
+    function refreshSplitDateCol() {
+      const dateCols = APP.raw.columns.filter(c => APP.raw.colMeta[c]?.include && APP.raw.colMeta[c]?.inferredType === "date");
+      const current = APP.setup.splitDateCol;
+
+      $("splitDateCol").innerHTML = dateCols.length
+        ? dateCols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")
+        : `<option value="">(no date columns detected)</option>`;
+
+      if (dateCols.length) {
+        if (current && dateCols.includes(current)) $("splitDateCol").value = current;
+        else { APP.setup.splitDateCol = dateCols[0]; $("splitDateCol").value = dateCols[0]; }
+      } else {
+        APP.setup.splitDateCol = null;
+      }
+
+      syncSetupUI();
+    }
+
+    // ----------------------------
+    // Build dataset (preprocess)
+    // ----------------------------
+    function sampleRowIndices(nRows, maxRows, seed) {
+      if (!maxRows || maxRows <= 0 || nRows <= maxRows) return Array.from({ length: nRows }, (_, i) => i);
+      const rng = mulberry32(seed);
+      const idx = Array.from({ length: nRows }, (_, i) => i);
+      shuffleInPlace(idx, rng);
+      return idx.slice(0, maxRows);
+    }
+
+    function parseMaxFeatures(v, nFeatures) {
+      const s = normStr(v);
+      if (!s) return 0.5;
+      const x = Number(s);
+      if (!Number.isFinite(x)) return 0.5;
+      if (x > 0 && x < 1) return x;
+      const k = Math.floor(x);
+      if (k >= 1) return Math.min(k, nFeatures);
+      return 0.5;
+    }
+
+    function buildInverseMapping(mappingObj) {
+      if (!mappingObj) return null;
+      const inv = {};
+      for (const [k, v] of Object.entries(mappingObj)) inv[v] = k;
+      return inv;
+    }
+
+    function buildDatasetForTraining(maxRowsOverride = null) {
+      const rows = APP.raw.rows;
+      const columns = APP.raw.columns;
+      const targetCol = APP.raw.targetCol;
+      const meta = APP.raw.colMeta;
+
+      const seed = Math.floor(parseNum($("seed").value) || 42);
+      const maxRows = (maxRowsOverride === null) ? (Math.floor(parseNum($("maxRows").value) || 0)) : maxRowsOverride;
+
+      const usedIdx = sampleRowIndices(rows.length, maxRows, seed);
+      const usedRows = usedIdx.map(i => rows[i]);
+
+      const includeCols = columns.filter(c => (c === targetCol) || (meta[c]?.include));
+      const featureCols = includeCols.filter(c => c !== targetCol);
+
+      const contCols = featureCols.filter(c => meta[c]?.inferredType === "continuous");
+      const catCols  = featureCols.filter(c => meta[c]?.inferredType === "categorical");
+      const dateCols = featureCols.filter(c => meta[c]?.inferredType === "date");
+
+      const contValues = Object.fromEntries(contCols.map(c => [c, []]));
+      const dateValues = Object.fromEntries(dateCols.map(c => [c, []]));
+      const catSeen = Object.fromEntries(catCols.map(c => [c, new Map()]));
+
+      for (const r of usedRows) {
+        for (const c of contCols) {
+          const x = parseNum(r[c]);
+          if (Number.isFinite(x)) contValues[c].push(x);
+        }
+        for (const c of dateCols) {
+          const d = parseDate(r[c]);
+          if (d) dateValues[c].push(d.getTime());
+        }
+        for (const c of catCols) {
+          const s = normStr(r[c]) || "#na#";
+          if (!catSeen[c].has(s)) catSeen[c].set(s, true);
+        }
+      }
+
+      const contMedian = {};
+      for (const c of contCols) contMedian[c] = median(contValues[c]);
+
+      const dateMedian = {};
+      for (const c of dateCols) dateMedian[c] = median(dateValues[c]);
+
+      const catMapping = {};
+      for (const c of catCols) {
+        const m = new Map();
+        m.set("#na#", 0);
+        let id = 1;
+        for (const k of catSeen[c].keys()) {
+          if (k === "#na#") continue;
+          m.set(k, id++);
+        }
+        catMapping[c] = Object.fromEntries(m.entries());
+      }
+
+      const task = decideTaskFromTarget(usedRows, targetCol, APP.setup.taskMode, meta);
+
+      let targetMapping = null;
+      let numTargetClasses = null;
+
+      if (task === "classification") {
+        const seen = new Map();
+        seen.set("#na#", 0);
+        let id = 1;
+        for (const r of usedRows) {
+          const s = normStr(r[targetCol]) || "#na#";
+          if (!seen.has(s)) seen.set(s, id++);
+        }
+        targetMapping = Object.fromEntries(seen.entries());
+        numTargetClasses = seen.size;
+      }
+
+      const DATE_PARTS = [
+        "year","month","day","dayofweek","dayofyear",
+        "is_month_end","is_month_start","is_quarter_end","is_quarter_start","is_year_end","is_year_start",
+        "elapsed"
+      ];
+
+      const featureNames = [];
+      const baseForDerived = [];
+
+      for (const c of contCols) {
+        featureNames.push(c); baseForDerived.push(c);
+        featureNames.push(`${c}_na`); baseForDerived.push(c);
+      }
+
+      for (const c of catCols) {
+        featureNames.push(c); baseForDerived.push(c);
+      }
+
+      for (const c of dateCols) {
+        for (const p of DATE_PARTS) { featureNames.push(`${c}_${p}`); baseForDerived.push(c); }
+        featureNames.push(`${c}_na`); baseForDerived.push(c);
+      }
+
+      const targetTransform = APP.setup.targetTransform;
+
+      const X = [];
+      const y = [];
+      const rowRefs = [];
+
+      for (const r of usedRows) {
+        let yiRaw;
+        if (task === "regression") {
+          const tType = meta[targetCol]?.inferredType;
+          if (tType === "date") {
+            const d = parseDate(r[targetCol]);
+            if (!d) continue;
+            yiRaw = d.getTime();
+          } else {
+            const x = parseNum(r[targetCol]);
+            if (!Number.isFinite(x)) continue;
+            yiRaw = x;
+          }
+        } else {
+          const s = normStr(r[targetCol]) || "#na#";
+          yiRaw = targetMapping[s] ?? 0;
+        }
+
+        let yi = yiRaw;
+        if (task === "regression" && targetTransform === "log1p") {
+          if (yiRaw < 0) continue;
+          yi = Math.log1p(yiRaw);
+        }
+
+        const feats = [];
+
+        for (const c of contCols) {
+          const x = parseNum(r[c]);
+          const miss = !Number.isFinite(x);
+          feats.push(miss ? contMedian[c] : x);
+          feats.push(miss ? 1 : 0);
+        }
+
+        for (const c of catCols) {
+          const s = normStr(r[c]) || "#na#";
+          const mid = catMapping[c][s];
+          feats.push((mid === undefined) ? 0 : mid);
+        }
+
+        for (const c of dateCols) {
+          const d = parseDate(r[c]);
+          const miss = !d;
+          const dt = miss ? new Date(dateMedian[c]) : d;
+          const p = dateParts(dt);
+          feats.push(p.year);
+          feats.push(p.month);
+          feats.push(p.day);
+          feats.push(p.dayofweek);
+          feats.push(p.dayofyear);
+          feats.push(p.is_month_end);
+          feats.push(p.is_month_start);
+          feats.push(p.is_quarter_end);
+          feats.push(p.is_quarter_start);
+          feats.push(p.is_year_end);
+          feats.push(p.is_year_start);
+          feats.push(p.elapsed);
+          feats.push(miss ? 1 : 0);
+        }
+
+        X.push(feats);
+        y.push(yi);
+        rowRefs.push(r);
+      }
+
+      const pipeline = {
+        schemaVersion: "1.2",
+        createdAt: new Date().toISOString(),
+        fileName: APP.raw.fileName,
+        originalColumns: [...columns],
+        includedColumns: [...includeCols],
+        targetCol,
+        task,
+        targetTransform,
+        preprocess: {
+          continuous: { cols: [...contCols], median: { ...contMedian } },
+          categorical: { cols: [...catCols], mapping: JSON.parse(JSON.stringify(catMapping)), missingToken: "#na#", unknownId: 0 },
+          date: { cols: [...dateCols], medianElapsed: { ...dateMedian }, parts: [...DATE_PARTS] }
+        },
+        derivedFeatureNames: [...featureNames],
+        derivedFeatureBase: [...baseForDerived],
+        target: { col: targetCol, mapping: targetMapping, numClasses: numTargetClasses },
+        library: { name: "ml-random-forest", version: "2.1.0" }
+      };
+
+      return { X, y, rowRefs, featureNames, baseForDerived, pipeline, task };
+    }
+
+    // ----------------------------
+    // Split
+    // ----------------------------
+    function splitRandom(n, testFrac, seed) {
+      const rng = mulberry32(seed);
+      const idx = Array.from({ length: n }, (_, i) => i);
+      shuffleInPlace(idx, rng);
+      const nTest = Math.max(1, Math.floor(n * testFrac));
+      const testIdx = idx.slice(0, nTest);
+      const trainIdx = idx.slice(nTest);
+      return { trainIdx, testIdx };
+    }
+
+    function splitTimeBased(rowRefs, dateCol, testFrac) {
+      const keys = rowRefs.map((r, i) => {
+        const d = parseDate(r[dateCol]);
+        const t = d ? d.getTime() : Number.NEGATIVE_INFINITY;
+        return { i, t };
+      });
+      keys.sort((a,b)=>a.t-b.t);
+
+      const n = keys.length;
+      const nTest = Math.max(1, Math.floor(n * testFrac));
+      const test = keys.slice(Math.max(0, n - nTest)).map(o => o.i);
+      const train = keys.slice(0, Math.max(0, n - nTest)).map(o => o.i);
+      return { trainIdx: train, testIdx: test };
+    }
+
+    function effectiveSplitMode() {
+      const chosen = $("splitMode").value;
+      if (chosen === "random") return "random";
+      if (chosen === "time") return "time";
+      const dateCols = APP.raw.columns.filter(c => APP.raw.colMeta[c]?.include && APP.raw.colMeta[c]?.inferredType === "date");
+      return dateCols.length ? "time" : "random";
+    }
+
+    // ----------------------------
+    // Charts
+    // ----------------------------
+    function destroyChart(ch) { if (ch) { try { ch.destroy(); } catch {} } return null; }
+
+    function renderFIChart(pairs, titleLabel) {
+      const top = pairs.slice(0, 20);
+      const labels = top.map(x => x.name);
+      const data = top.map(x => x.imp);
+
+      const ctx = $("fiChart").getContext("2d");
+      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+
+      APP.ui.charts.fi = new Chart(ctx, {
+        type: "bar",
+        data: { labels, datasets: [{ label: titleLabel || "importance", data }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: "y",
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
+            y: { ticks: { color: "rgba(234,240,255,0.75)" }, grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    function renderRegressionScatter(yTrue, yPred) {
+      const n = yTrue.length;
+      const maxPts = Math.min(2000, n);
+      const rng = mulberry32(1337);
+      const idx = Array.from({ length: n }, (_, i) => i);
+      shuffleInPlace(idx, rng);
+      const pick = idx.slice(0, maxPts);
+      const pts = pick.map(i => ({ x: yTrue[i], y: yPred[i] }));
+
+      const ctx = $("secondaryChart").getContext("2d");
+      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+
+      APP.ui.charts.secondary = new Chart(ctx, {
+        type: "scatter",
+        data: { datasets: [{ label: "pred vs true", data: pts, pointRadius: 2 }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { title: { display: true, text: "true" }, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
+            y: { title: { display: true, text: "pred" }, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } }
+          }
+        }
+      });
+    }
+
+    function renderConfusionMatrix(yTrue, yPred, invMap, maxClasses = 10) {
+      const numClasses = Object.keys(invMap || {}).length || 0;
+      const classes = Array.from({ length: numClasses }, (_, i) => i);
+
+      const support = new Map();
+      for (const t of yTrue) support.set(t, (support.get(t) || 0) + 1);
+      classes.sort((a,b)=>(support.get(b)||0)-(support.get(a)||0));
+      const top = classes.slice(0, Math.min(maxClasses, classes.length));
+
+      const labelOf = (c) => (invMap && invMap[c] !== undefined) ? String(invMap[c]) : String(c);
+      const labels = top.map(labelOf);
+
+      const counts = top.map(() => new Map());
+      for (let i = 0; i < yTrue.length; i++) {
+        const t = yTrue[i];
+        const p = yPred[i];
+        const j = top.indexOf(t);
+        if (j === -1) continue;
+        counts[j].set(p, (counts[j].get(p) || 0) + 1);
+      }
+
+      const accRow = top.map((t, i) => {
+        const diag = counts[i].get(t) || 0;
+        const sup = support.get(t) || 1;
+        return diag / sup;
+      });
+
+      const ctx = $("secondaryChart").getContext("2d");
+      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+
+      APP.ui.charts.secondary = new Chart(ctx, {
+        type: "bar",
+        data: { labels, datasets: [{ label: "per-class accuracy (top classes)", data: accRow }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: "rgba(234,240,255,0.75)" }, grid: { display: false } },
+            y: { min: 0, max: 1, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } }
+          }
+        }
+      });
+    }
+
+    // ----------------------------
+    // Feature importance aggregation
+    // ----------------------------
+    function aggregateFI(fiDerived, featureNames, baseForDerived) {
+      const agg = new Map();
+      for (let i = 0; i < fiDerived.length; i++) {
+        const base = baseForDerived[i] || featureNames[i] || `f${i}`;
+        agg.set(base, (agg.get(base) || 0) + (Number.isFinite(fiDerived[i]) ? fiDerived[i] : 0));
+      }
+      return Array.from(agg.entries())
+        .map(([name, imp]) => ({ name, imp }))
+        .sort((a,b)=>b.imp-a.imp);
+    }
+
+    // ----------------------------
+    // Predictions explorer (unchanged core)
+    // ----------------------------
+    function currentPredView() {
+      const pageSize = Math.max(10, Math.floor(parseNum($("pageSize").value) || 50));
+      const filter = normStr($("predFilter").value).toLowerCase();
+      APP.ui.predFilter = filter;
+
+      const yTrueDisp = APP.train.pipeline.task === "classification"
+        ? APP.train.yTest.map(v => String(APP.train.pipeline.targetInvMapping?.[v] ?? v))
+        : APP.train.yTest.map(v => String(v));
+
+      const yPredDisp = APP.train.pipeline.task === "classification"
+        ? APP.train.yPredLabel
+        : APP.train.yPred.map(v => String(v));
+
+      const idxAll = Array.from({ length: APP.train.yTest.length }, (_, i) => i);
+      const idxFiltered = filter
+        ? idxAll.filter(i => (yTrueDisp[i] || "").toLowerCase().includes(filter) || (yPredDisp[i] || "").toLowerCase().includes(filter))
+        : idxAll;
+
+      const n = idxFiltered.length;
+      const maxPage = Math.max(0, Math.ceil(n / pageSize) - 1);
+      APP.ui.predPage = Math.max(0, Math.min(APP.ui.predPage, maxPage));
+
+      const start = APP.ui.predPage * pageSize;
+      const end = Math.min(n, start + pageSize);
+      const pageIdx = idxFiltered.slice(start, end);
+
+      return { pageSize, filter, idxFiltered, pageIdx, n, start, end, maxPage, yTrueDisp, yPredDisp };
+    }
+
+    function renderPredTable() {
+      const targetCol = APP.raw.targetCol;
+      const featureCols = APP.raw.columns.filter(c => c !== targetCol);
+      const colsShown = featureCols.slice(0, Math.min(10, featureCols.length));
+      const view = currentPredView();
+
+      const headCols = ["__y_true__", "__y_pred__", "__err__"].concat(colsShown);
+      const thead = "<thead><tr>" + headCols.map(c => `<th>${escapeHtml(c)}</th>`).join("") + "</tr></thead>";
+
+      const rowsHtml = view.pageIdx.map(i => {
+        const r = APP.train.testRowRefs[i];
+        const yt = view.yTrueDisp[i];
+        const yp = view.yPredDisp[i];
+
+        const err = (APP.train.pipeline.task === "regression")
+          ? (Number(yp) - Number(yt))
+          : (yp === yt ? 0 : 1);
+
+        const cells = [
+          `<td class="mono">${escapeHtml(String(yt))}</td>`,
+          `<td class="mono">${escapeHtml(String(yp))}</td>`,
+          `<td class="mono">${escapeHtml(String(Number.isFinite(err) ? formatNum(err, 6) : err))}</td>`
+        ];
+
+        for (const c of colsShown) {
+          cells.push(`<td>${escapeHtml(truncate(normStr(r[c]) || "", 200))}</td>`);
+        }
+
+        return `<tr>${cells.join("")}</tr>`;
+      }).join("");
+
+      $("predTable").innerHTML = thead + `<tbody>${rowsHtml}</tbody>`;
+    }
+
+    function buildPredictionsCsv() {
+      const targetCol = APP.raw.targetCol;
+      const cols = ["y_true", "y_pred"].concat(APP.raw.columns.filter(c => c !== targetCol));
+      const inv = APP.train.pipeline.targetInvMapping;
+
+      const lines = [];
+      lines.push(cols.map(c => `"${String(c).replaceAll('"','""')}"`).join(","));
+
+      for (let i = 0; i < APP.train.testRowRefs.length; i++) {
+        const r = APP.train.testRowRefs[i];
+
+        let yt = APP.train.yTest[i];
+        let yp = APP.train.yPred[i];
+
+        if (APP.train.pipeline.task === "classification") {
+          yt = inv?.[yt] ?? yt;
+          yp = APP.train.yPredLabel[i];
+        }
+
+        const row = [];
+        row.push(String(yt));
+        row.push(String(yp));
+        for (const c of APP.raw.columns.filter(c => c !== targetCol)) row.push(normStr(r[c]) || "");
+
+        lines.push(row.map(x => `"${String(x).replaceAll('"','""')}"`).join(","));
+      }
+
+      return lines.join("\n");
+    }
+
+    // ----------------------------
+    // Presets + pre-estimates
+    // ----------------------------
+    const PRESETS = {
+      fast:     { name: "Fast", desc: "Quick baseline for iteration.", nEstimators: 80,  maxRows: 20000, maxFeatures: "0.5", replacement: true },
+      balanced: { name: "Balanced", desc: "Recommended default.",        nEstimators: 200, maxRows: 50000, maxFeatures: "0.5", replacement: true },
+      thorough: { name: "Thorough", desc: "More trees, more accuracy.",   nEstimators: 600, maxRows: 0,     maxFeatures: "0.5", replacement: true },
+    };
+
+    function estimateDerivedFeatureCount() {
+      const target = APP.raw.targetCol;
+      if (!target) return null;
+
+      const meta = APP.raw.colMeta;
+      const cols = APP.raw.columns;
+
+      let cont = 0, cat = 0, date = 0;
+      for (const c of cols) {
+        if (c === target) continue;
+        const m = meta[c];
+        if (!m || !m.include) continue;
+        if (m.inferredType === "continuous") cont++;
+        else if (m.inferredType === "categorical") cat++;
+        else if (m.inferredType === "date") date++;
+      }
+
+      const DATE_PARTS = 12; // year,month,day,dow,doy,6 flags,elapsed => 12; plus _na below
+      const derived = (cont * 2) + (cat * 1) + (date * (DATE_PARTS + 1));
+      return derived;
+    }
+
+    function estimateSecondsForPreset(presetKey) {
+      const p = PRESETS[presetKey];
+      const coeff = APP.train.perfCoeff;
+      const fCount = estimateDerivedFeatureCount();
+      if (!coeff || !fCount) return null;
+
+      const rows = APP.raw.rows.length;
+      const effectiveRows = (p.maxRows && p.maxRows > 0) ? Math.min(rows, p.maxRows) : rows;
+      // approximate train fraction
+      const nTrain = Math.max(1, Math.floor(effectiveRows * (1 - (APP.setup.testFrac || 0.2))));
+      const est = coeff * (nTrain * fCount * p.nEstimators);
+      return est;
+    }
+
+    function renderPresets() {
+      const row = $("presetRow");
+      row.innerHTML = Object.entries(PRESETS).map(([key, p]) => {
+        const active = (APP.train.preset === key) ? "preset active" : "preset";
+        const eta = estimateSecondsForPreset(key);
+        const etaText = eta === null
+          ? `Estimated time: (calibrating…)`
+          : `Estimated time: ~${formatDuration(eta)}`;
+
+        return `
+          <div class="${active}" data-preset="${escapeHtml(key)}">
+            <div class="title">
+              <div class="name">${escapeHtml(p.name)}</div>
+              <span class="pill">${escapeHtml(key === "balanced" ? "recommended" : "preset")}</span>
+            </div>
+            <div class="desc">${escapeHtml(p.desc)}</div>
+            <div class="muted2" style="margin-top:10px;">
+              Trees: <span class="mono">${p.nEstimators}</span> · Max rows: <span class="mono">${p.maxRows || "all"}</span> · maxFeatures: <span class="mono">${p.maxFeatures}</span>
+            </div>
+            <div class="eta">${escapeHtml(etaText)}</div>
+          </div>
+        `;
+      }).join("");
+
+      row.querySelectorAll("[data-preset]").forEach(el => {
+        el.addEventListener("click", () => {
+          APP.train.preset = el.getAttribute("data-preset");
+          const p = PRESETS[APP.train.preset];
+
+          $("nEstimators").value = String(p.nEstimators);
+          $("maxRows").value = String(p.maxRows);
+          $("maxFeatures").value = String(p.maxFeatures);
+          $("replacement").value = p.replacement ? "true" : "false";
+
+          renderPresets();
+        });
+      });
+    }
+
+    // ----------------------------
+    // Worker-based training (supports Stop)
+    // ----------------------------
+    function stopTrainingUI(message = "Stopped") {
+      if (APP.train.countdownTimer) { clearInterval(APP.train.countdownTimer); APP.train.countdownTimer = null; }
+      APP.train.countdownStartMs = null;
+      APP.train.lastETASeconds = null;
+
+      APP.train.running = false;
+
+      const etaEl = $("trainETA");
+      etaEl.style.display = "none";
+      etaEl.textContent = "ETA: —";
+
+      $("stopBtn").disabled = true;
+      $("trainBtn").disabled = !APP.raw.targetCol;
+      $("trainStatus").innerHTML = `<span class="pill warn">${escapeHtml(message)}</span>`;
+    }
+
+    function stopTrainingHard(message = "Stopped") {
+      try {
+        if (APP.train.worker) {
+          APP.train.worker.terminate();
+          APP.train.worker = null;
+        }
+      } catch {}
+      stopTrainingUI(message);
+    }
+
+    function startCountdown(etaSeconds) {
+      APP.train.lastETASeconds = etaSeconds;
+      APP.train.countdownStartMs = performance.now();
+      const etaEl = $("trainETA");
+      etaEl.style.display = "inline-flex";
+
+      if (APP.train.countdownTimer) clearInterval(APP.train.countdownTimer);
+      APP.train.countdownTimer = setInterval(() => {
+        if (!APP.train.running) return;
+        const elapsed = (performance.now() - APP.train.countdownStartMs) / 1000;
+        const remaining = Math.max(0, (APP.train.lastETASeconds ?? 0) - elapsed);
+        etaEl.textContent = `ETA: ${formatDuration(remaining)}`;
+      }, 500);
+    }
+
+    function createTrainingWorker() {
+      const code = `
+        import { RandomForestRegression, RandomForestClassifier } from "https://esm.sh/ml-random-forest@2.1.0";
+
+        function now(){ return (self.performance && performance.now) ? performance.now() : Date.now(); }
+
+        self.onmessage = async (e) => {
+          const msg = e.data || {};
+          const { cmd } = msg;
+
+          try {
+            if (cmd === "calibrate") {
+              const { task, rfOptions, Xtrain, ytrain, calibTrees, calibRows } = msg;
+
+              const nRows = Math.min(calibRows, Xtrain.length);
+              const Xc = Xtrain.slice(0, nRows);
+              const yc = ytrain.slice(0, nRows);
+
+              const opt = { ...rfOptions, nEstimators: calibTrees };
+
+              const t0 = now();
+              const m = (task === "regression") ? new RandomForestRegression(opt) : new RandomForestClassifier(opt);
+              m.train(Xc, yc);
+              const t1 = now();
+
+              const seconds = (t1 - t0) / 1000;
+              self.postMessage({ phase: "calibrate", seconds, calibTrees, calibRows: nRows, features: (Xc[0] ? Xc[0].length : 0) });
+              return;
+            }
+
+            if (cmd === "train") {
+              const { task, rfOptions, Xtrain, ytrain, Xtest } = msg;
+
+              const t0 = now();
+              const m = (task === "regression") ? new RandomForestRegression(rfOptions) : new RandomForestClassifier(rfOptions);
+              m.train(Xtrain, ytrain);
+              const t1 = now();
+
+              let ypred = null;
+              try { ypred = m.predict(Xtest); } catch { ypred = null; }
+
+              let oobPred = null;
+              try { oobPred = m.predictOOB(); } catch { oobPred = null; }
+
+              let fi = null;
+              try { fi = m.featureImportance(); } catch { fi = null; }
+
+              const modelJson = m.toJSON();
+              const seconds = (t1 - t0) / 1000;
+
+              self.postMessage({
+                phase: "train_done",
+                seconds,
+                modelJson,
+                ypred,
+                oobPred,
+                fi
+              });
+              return;
+            }
+          } catch (err) {
+            self.postMessage({ phase: "error", message: (err && err.message) ? err.message : String(err) });
+          }
+        };
+      `;
+      const blob = new Blob([code], { type: "text/javascript" });
+      const url = URL.createObjectURL(blob);
+      const w = new Worker(url, { type: "module" });
+      // Best effort: revoke after worker spins up
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return w;
+    }
+
+    // ----------------------------
+    // Training flow (calibrate -> ETA -> train; Stop terminates worker)
+    // ----------------------------
+    async function trainModel() {
+      if (APP.train.running) return;
+
+      $("trainBtn").disabled = true;
+      $("stopBtn").disabled = false;
+      APP.train.running = true;
+
+      $("trainStatus").innerHTML = `<span class="spinner"></span> Preparing data…`;
+      $("trainETA").style.display = "none";
+
+      await new Promise(r => setTimeout(r, 0));
+
+      const testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.2));
+      APP.setup.testFrac = testFrac;
+
+      const seed = Math.floor(parseNum($("seed").value) || 42);
+      const replacement = ($("replacement").value === "true");
+      const nEstimators = Math.max(10, Math.floor(parseNum($("nEstimators").value) || 200));
+
+      let built;
+      try {
+        built = buildDatasetForTraining(null);
+      } catch (e) {
+        stopTrainingUI("Failed");
+        $("trainStatus").innerHTML = `<span class="pill bad">Failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
+        return;
+      }
+
+      const { X, y, rowRefs, featureNames, baseForDerived, pipeline, task } = built;
+
+      if (!X.length) {
+        stopTrainingUI("No usable rows");
+        $("trainStatus").innerHTML = `<span class="pill bad">No usable rows</span> <span class="muted2">Check target parsing or transform choice.</span>`;
+        return;
+      }
+
+      // split in main thread (cheap)
+      const splitMode = effectiveSplitMode();
+      let split;
+      if (splitMode === "time") split = splitTimeBased(rowRefs, APP.setup.splitDateCol, testFrac);
+      else split = splitRandom(X.length, testFrac, seed);
+
+      const trainIdx = split.trainIdx;
+      const testIdx = split.testIdx;
+
+      const Xtrain = trainIdx.map(i => X[i]);
+      const ytrain = trainIdx.map(i => y[i]);
+      const Xtest  = testIdx.map(i => X[i]);
+      const ytest  = testIdx.map(i => y[i]);
+      const testRowRefs = testIdx.map(i => rowRefs[i]);
+
+      const maxFeaturesParsed = parseMaxFeatures($("maxFeatures").value, featureNames.length);
+      const rfOptions = { seed, maxFeatures: maxFeaturesParsed, replacement, nEstimators };
+
+      // create worker and begin calibration
+      APP.train.worker = createTrainingWorker();
+
+      const calibTrees = Math.min(30, Math.max(10, Math.floor(nEstimators / 8)));
+      const calibRows = Math.min(6000, Math.max(1500, Math.floor(Xtrain.length / 10)));
+
+      $("trainStatus").innerHTML = `<span class="spinner"></span> Calibrating on your device (quick) …`;
+
+      // handle worker events
+      APP.train.worker.onmessage = async (ev) => {
+        const msg = ev.data || {};
+        if (!APP.train.running) return;
+
+        if (msg.phase === "error") {
+          stopTrainingHard("Error");
+          $("trainStatus").innerHTML = `<span class="pill bad">Worker error</span> <span class="mono">${escapeHtml(msg.message || "unknown")}</span>`;
+          return;
+        }
+
+        if (msg.phase === "calibrate") {
+          // coeff: seconds / (rows * features * trees)
+          const seconds = msg.seconds;
+          const rowsUsed = msg.calibRows;
+          const feats = msg.features || (featureNames.length);
+          const trees = msg.calibTrees;
+
+          const denom = Math.max(1, rowsUsed * feats * trees);
+          const coeff = seconds / denom;
+
+          APP.train.perfCoeff = coeff;
+          try { localStorage.setItem("rf_perf_coeff_v1", String(coeff)); } catch {}
+
+          // estimate full training time on train split
+          const eta = coeff * (Xtrain.length * featureNames.length * nEstimators);
+          startCountdown(eta);
+          renderPresets();
+
+          $("trainStatus").innerHTML = `<span class="spinner"></span> Training (${task})…`;
+
+          // kick off full training
+          APP.train.worker.postMessage({
+            cmd: "train",
+            task,
+            rfOptions,
+            Xtrain,
+            ytrain,
+            Xtest
+          });
+
+          return;
+        }
+
+        if (msg.phase === "train_done") {
+          const trainSeconds = msg.seconds;
+
+          // stop countdown
+          if (APP.train.countdownTimer) { clearInterval(APP.train.countdownTimer); APP.train.countdownTimer = null; }
+          $("trainETA").textContent = `ETA: 0s`;
+          $("trainETA").style.display = "none";
+
+          // unpack results
+          const modelJson = msg.modelJson;
+          const ypred = msg.ypred;
+          const oobPred = msg.oobPred;
+          const fi = msg.fi;
+
+          // rebuild model object in main thread for serialization/compat
+          let model;
+          try {
+            model = (task === "regression") ? RandomForestRegression.load(modelJson) : RandomForestClassifier.load(modelJson);
+          } catch (e) {
+            // still keep JSON even if load fails
+            model = null;
+          }
+
+          // invert predictions if needed
+          const transform = pipeline.targetTransform;
+          let ytestRaw = ytest.slice();
+          let ypredRaw = (ypred ? ypred.slice() : []);
+
+          if (pipeline.task === "regression" && transform === "log1p") {
+            ytestRaw = ytest.map(v => Math.expm1(v));
+            ypredRaw = ypred ? ypred.map(v => Math.expm1(v)) : [];
+          }
+
+          const invTarget = buildInverseMapping(pipeline.target.mapping);
+
+          // compute FI derived + base
+          const fiDerived = (fi && fi.length === featureNames.length)
+            ? featureNames.map((name, i) => ({ name, imp: Number.isFinite(fi[i]) ? fi[i] : 0 }))
+                .sort((a,b)=>b.imp-a.imp)
+            : [];
+
+          const fiBase = (fi && fi.length === featureNames.length)
+            ? aggregateFI(fi, featureNames, baseForDerived)
+            : [];
+
+          // store
+          APP.train.rfOptions = rfOptions;
+          APP.train.model = model;
+          APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
+          APP.train.featureNames = featureNames;
+          APP.train.baseForDerived = baseForDerived;
+          APP.train.split = split;
+          APP.train.yTrain = ytrain;
+          APP.train.yTest = ytestRaw;
+          APP.train.yPred = ypredRaw;
+          APP.train.testRowRefs = testRowRefs;
+          APP.train.fiDerived = fiDerived;
+          APP.train.fiBase = fiBase;
+
+          if (pipeline.task === "classification") {
+            const inv = invTarget || {};
+            APP.train.yPredLabel = ypred ? ypred.map(v => String(inv[v] ?? v)) : [];
+            APP.train.yTestLabel = ytest.map(v => String(inv[v] ?? v));
+          } else {
+            APP.train.yPredLabel = ypredRaw.map(v => String(v));
+            APP.train.yTestLabel = ytestRaw.map(v => String(v));
+          }
+
+          // cleanup worker
+          try { APP.train.worker.terminate(); } catch {}
+          APP.train.worker = null;
+
+          // finish UI
+          APP.train.running = false;
+          $("stopBtn").disabled = true;
+          $("trainBtn").disabled = !APP.raw.targetCol;
+
+          $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Trained in ${formatDuration(trainSeconds)}.</span>`;
+
+          renderResults({ oobPred, ytrain });
+          gotoStep(3);
+          return;
+        }
+      };
+
+      // kick off calibration
+      APP.train.worker.postMessage({
+        cmd: "calibrate",
+        task,
+        rfOptions,
+        Xtrain,
+        ytrain,
+        calibTrees,
+        calibRows
+      });
+    }
+
+    // ----------------------------
+    // Results rendering
+    // ----------------------------
+    function renderResults({ oobPred, ytrain }) {
+      const pl = APP.train.pipeline;
+      const task = pl.task;
+
+      const splitMode = effectiveSplitMode();
+      const splitText = splitMode === "time"
+        ? `time-based (${APP.setup.splitDateCol})`
+        : "random";
+
+      $("setupSummary").textContent =
+        `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+
+      $("featureSummary").textContent =
+        `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+
+      $("resultsCallouts").innerHTML = "";
+      const addCallout = (cls, title, body) => {
+        const el = document.createElement("div");
+        el.className = `callout ${cls || ""}`.trim();
+        el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">${escapeHtml(title)}</div>
+                        <div class="muted2">${body}</div>`;
+        $("resultsCallouts").appendChild(el);
+      };
+
+      if (task === "regression") {
+        const yTrue = APP.train.yTest;
+        const yPred = APP.train.yPred;
+
+        const rm = rmse(yTrue, yPred);
+        const ma = mae(yTrue, yPred);
+        const r = r2(yTrue, yPred);
+        const rl = rmsle(yTrue, yPred);
+
+        $("primaryMetricLabel").textContent = "Test RMSE";
+        $("primaryMetricValue").textContent = formatNum(rm, 6);
+        $("primaryMetricSub").textContent = `MAE=${formatNum(ma,6)} · R²=${formatNum(r,6)} · RMSLE=${rl===null?"n/a":formatNum(rl,6)}`;
+
+        let oobRm = null;
+        if (oobPred && oobPred.length === ytrain.length) {
+          if (pl.targetTransform === "log1p") {
+            const yt = ytrain.map(v => Math.expm1(v));
+            const yp = oobPred.map(v => Math.expm1(v));
+            oobRm = rmse(yt, yp);
+          } else {
+            oobRm = rmse(ytrain, oobPred);
+          }
+        }
+
+        if (oobRm !== null && rm > oobRm * 1.15) {
+          addCallout("warn",
+            "Test error is worse than OOB error",
+            "This often indicates distribution shift between train and test (common with time-like IDs or changing behavior). Consider a time-based split, and/or excluding ID-like columns."
+          );
+        } else {
+          addCallout("good",
+            "Baseline looks healthy",
+            "Random forests are a strong first pass for tabular data. Next, focus on interpretation (top drivers) and sanity-check suspicious predictors."
+          );
+        }
+
+        $("secondaryChartTitle").textContent = "Predicted vs true (scatter)";
+        $("secondaryChartPill").textContent = `n=${APP.train.yTest.length}`;
+        $("secondaryChartHint").textContent = "Ideally points cluster around the diagonal. Outliers can indicate missingness, leakage, or rare categories.";
+        renderRegressionScatter(APP.train.yTest, APP.train.yPred);
+
+      } else {
+        const yTrue = APP.train.yTest.map(v => Number(v));
+        const yPred = APP.train.yPred.map(v => Number(v));
+
+        const acc = accuracy(yTrue, yPred);
+        const f1 = f1Macro(yTrue, yPred, pl.target.numClasses || 2);
+
+        $("primaryMetricLabel").textContent = "Test Accuracy";
+        $("primaryMetricValue").textContent = formatNum(acc, 6);
+        $("primaryMetricSub").textContent = `Macro-F1=${formatNum(f1,6)} · Classes=${pl.target.numClasses}`;
+
+        let oobAcc = null;
+        if (oobPred && oobPred.length === ytrain.length) {
+          oobAcc = accuracy(ytrain.map(v=>Number(v)), oobPred.map(v=>Number(v)));
+        }
+
+        if (oobAcc !== null && acc < oobAcc - 0.05) {
+          addCallout("warn",
+            "Generalization gap detected",
+            "Test accuracy is noticeably worse than OOB accuracy. Consider excluding ID-like columns or using a time-based split if the data has temporal structure."
+          );
+        } else {
+          addCallout("good",
+            "Baseline looks healthy",
+            "Next, inspect feature importance and consider if the most important columns make sense operationally."
+          );
+        }
+
+        $("secondaryChartTitle").textContent = "Per-class accuracy (top classes)";
+        $("secondaryChartPill").textContent = `classes=${pl.target.numClasses}`;
+        $("secondaryChartHint").textContent = "This highlights which labels the model struggles with. For many classes, we show only the most frequent.";
+        renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 10);
+      }
+
+      const mode = $("importanceMode").value;
+      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance");
+      else renderFIChart(APP.train.fiBase, "importance");
+
+      APP.ui.predPage = 0;
+      $("predFilter").value = "";
+      renderPredTable();
+
+      updateExportUI();
+    }
+
+    // ----------------------------
+    // Export
+    // ----------------------------
+    function buildArtifact() {
+      const model = APP.train.model;
+      const pipeline = APP.train.pipeline;
+      if (!model || !pipeline) return null;
+
+      return {
+        schemaVersion: pipeline.schemaVersion,
+        createdAt: pipeline.createdAt,
+        fileName: pipeline.fileName,
+        originalColumns: pipeline.originalColumns,
+        includedColumns: pipeline.includedColumns,
+        selectedTypes: Object.fromEntries(Object.entries(APP.raw.colMeta).map(([k, v]) => [k, v.inferredType])),
+        targetCol: pipeline.targetCol,
+        task: pipeline.task,
+        targetTransform: pipeline.targetTransform,
+        derivedFeatureNames: pipeline.derivedFeatureNames,
+        derivedFeatureBase: pipeline.derivedFeatureBase,
+        preprocess: pipeline.preprocess,
+        target: {
+          col: pipeline.target.col,
+          mapping: pipeline.target.mapping,
+          numClasses: pipeline.target.numClasses
+        },
+        rfOptions: APP.train.rfOptions,
+        model: model.toJSON(),
+        library: pipeline.library
+      };
+    }
+
+    function buildSampleCode(artifact) {
+      return `/**
+ * rf_artifact.json contains:
+ * - preprocessing pipeline (label encoders, medians, date expansion)
+ * - a serialized ml-random-forest model (toJSON())
+ *
+ * Browser example uses ESM CDN import via esm.sh
+ * Node example uses 'ml-random-forest' from npm.
+ */
+
+import { RandomForestRegression, RandomForestClassifier } from "https://esm.sh/ml-random-forest@2.1.0";
+
+function normStr(v){ return (v===null||v===undefined) ? "" : String(v).trim(); }
+function parseNum(v){ const s=normStr(v); if(!s) return NaN; const x=Number(s); return Number.isFinite(x)?x:NaN; }
+
+function looksLikeDateString(s){
+  const t=s.trim(); if(!t) return false;
+  if(!(/[\\/\\-T:]/.test(t))) return false;
+  const p1=/^\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2}(\\b|T)/;
+  const p2=/^\\d{1,2}[-\\/]\\d{1,2}[-\\/]\\d{2,4}(\\b|T)/;
+  const p3=/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}/;
+  return p1.test(t)||p2.test(t)||p3.test(t);
+}
+function parseDate(v){
+  const s=normStr(v); if(!s) return null;
+  if(!looksLikeDateString(s)) return null;
+  const d=new Date(s); if(Number.isNaN(d.getTime())) return null;
+  return d;
+}
+function dateParts(d){
+  const year=d.getFullYear(), month=d.getMonth()+1, day=d.getDate(), dow=d.getDay();
+  const start=new Date(d.getFullYear(),0,1);
+  const dayOfYear=Math.floor((d-start)/86400000)+1;
+
+  const isMonthStart=(day===1);
+  const isMonthEnd=(new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()===day);
+
+  const qStart=new Set([1,4,7,10]), qEnd=new Set([3,6,9,12]);
+  const isQuarterStart=qStart.has(month)&&isMonthStart;
+  const isQuarterEnd=qEnd.has(month)&&isMonthEnd;
+
+  const isYearStart=(month===1&&day===1);
+  const isYearEnd=(month===12&&day===31);
+
+  return {
+    year,month,day,dayofweek:dow,dayofyear:dayOfYear,
+    is_month_end:isMonthEnd?1:0, is_month_start:isMonthStart?1:0,
+    is_quarter_end:isQuarterEnd?1:0, is_quarter_start:isQuarterStart?1:0,
+    is_year_end:isYearEnd?1:0, is_year_start:isYearStart?1:0,
+    elapsed:d.getTime()
+  };
+}
+
+function transformRow(row, artifact){
+  const contCols=artifact.preprocess.continuous.cols;
+  const catCols=artifact.preprocess.categorical.cols;
+  const dateCols=artifact.preprocess.date.cols;
+
+  const feats=[];
+
+  for(const c of contCols){
+    const x=parseNum(row[c]);
+    const miss=!Number.isFinite(x);
+    feats.push(miss ? artifact.preprocess.continuous.median[c] : x);
+    feats.push(miss ? 1 : 0);
+  }
+
+  for(const c of catCols){
+    const s=normStr(row[c]) || artifact.preprocess.categorical.missingToken;
+    const m=artifact.preprocess.categorical.mapping[c];
+    feats.push((m[s]===undefined) ? artifact.preprocess.categorical.unknownId : m[s]);
+  }
+
+  for(const c of dateCols){
+    const d=parseDate(row[c]);
+    const miss=!d;
+    const dt=miss ? new Date(artifact.preprocess.date.medianElapsed[c]) : d;
+    const p=dateParts(dt);
+
+    feats.push(p.year); feats.push(p.month); feats.push(p.day);
+    feats.push(p.dayofweek); feats.push(p.dayofyear);
+    feats.push(p.is_month_end); feats.push(p.is_month_start);
+    feats.push(p.is_quarter_end); feats.push(p.is_quarter_start);
+    feats.push(p.is_year_end); feats.push(p.is_year_start);
+    feats.push(p.elapsed);
+    feats.push(miss ? 1 : 0);
+  }
+
+  return feats;
+}
+
+function loadModel(artifact){
+  return (artifact.task==="regression")
+    ? RandomForestRegression.load(artifact.model)
+    : RandomForestClassifier.load(artifact.model);
+}
+
+function invertTargetIfNeeded(yPred, artifact){
+  if(artifact.task!=="regression") return yPred;
+  if(artifact.targetTransform==="log1p") return Math.expm1(yPred);
+  return yPred;
+}
+
+// Example:
+// const artifact = await (await fetch("./rf_artifact.json")).json();
+// const model = loadModel(artifact);
+// const x = transformRow(rowObj, artifact);
+// let yPred = model.predict([x])[0];
+// yPred = invertTargetIfNeeded(yPred, artifact);
+// console.log("prediction:", yPred);
+`;
+    }
+
+    async function updateExportUI() {
+      const artifact = buildArtifact();
+      if (!artifact) {
+        $("artifactPill").className = "pill";
+        $("artifactPill").textContent = "Artifact: not ready";
+        $("artifactDetailPill").textContent = "Train a model first";
+        $("downloadZipBtn").disabled = true;
+        $("sampleCode").textContent = "";
+        return;
+      }
+
+      $("artifactPill").className = "pill good";
+      $("artifactPill").textContent = "Artifact: ready";
+      $("artifactDetailPill").textContent = `task=${artifact.task} · features=${artifact.derivedFeatureNames.length}`;
+      $("downloadZipBtn").disabled = false;
+      $("sampleCode").textContent = buildSampleCode(artifact);
+    }
+
+    // ----------------------------
+    // App wiring
+    // ----------------------------
+    function syncButtons() {
+      $("continueToSetupBtn").disabled = !(APP.raw.rows.length && APP.raw.columns.length);
+      $("continueToTrainBtn").disabled = !APP.raw.targetCol;
+      $("trainBtn").disabled = !APP.raw.targetCol || APP.train.running;
+      $("stopBtn").disabled = !APP.train.running;
+      updateExportUI();
+    }
+
+    function hardReset() {
+      stopTrainingHard("Reset");
+
+      APP.step = 0;
+      APP.raw = { fileName: null, rows: [], columns: [], colMeta: {}, targetCol: null };
+      APP.setup = { splitMode: "auto", splitDateCol: null, testFrac: 0.2, taskMode: "auto", targetTransform: "none", maxRows: 50000, excluded: new Set() };
+      APP.train.preset = "balanced";
+      APP.train.rfOptions = null;
+      APP.train.model = null;
+      APP.train.pipeline = null;
+      APP.train.featureNames = [];
+      APP.train.baseForDerived = [];
+      APP.train.split = { trainIdx: [], testIdx: [] };
+      APP.train.yTrain = [];
+      APP.train.yTest = [];
+      APP.train.yPred = [];
+      APP.train.yPredLabel = [];
+      APP.train.testRowRefs = [];
+      APP.train.fiDerived = [];
+      APP.train.fiBase = [];
+      APP.ui.predPage = 0;
+      APP.ui.predFilter = "";
+      APP.ui.colSort = { key: "name", dir: "asc" };
+
+      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+
+      hide($("uploadSummary"));
+      $("uploadStatus").innerHTML = "";
+      $("previewTable").innerHTML = "";
+      $("colConfigBody").innerHTML = "";
+      $("predTable").innerHTML = "";
+      $("resultsCallouts").innerHTML = "";
+
+      $("testFrac").value = "0.2";
+      $("seed").value = "42";
+      $("maxRows").value = "50000";
+      $("taskMode").value = "auto";
+      $("targetTransform").value = "none";
+      $("splitMode").value = "auto";
+      $("colSearch").value = "";
+      $("showOnlyIssues").value = "all";
+      $("predFilter").value = "";
+      $("pageSize").value = "50";
+      $("importanceMode").value = "base";
+
+      // try to load previous perf coeff for pre-estimates
+      try {
+        const v = localStorage.getItem("rf_perf_coeff_v1");
+        const x = v ? Number(v) : null;
+        if (x && Number.isFinite(x) && x > 0) APP.train.perfCoeff = x;
+      } catch {}
+
+      renderPresets();
+      gotoStep(0);
+      syncButtons();
+    }
+
+    function handleParsed(rows, cols, fileName) {
+      if (!rows.length || !cols.length) {
+        $("uploadStatus").innerHTML = `<span class="pill bad">Parse failed</span><span class="muted2">No rows/columns found.</span>`;
+        return;
+      }
+
+      APP.raw.fileName = fileName || "data.csv";
+      APP.raw.rows = rows;
+      APP.raw.columns = cols;
+
+      const meta = {};
+      for (const c of cols) meta[c] = inferColumnType(c, rows);
+      APP.raw.colMeta = meta;
+
+      $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
+      $("dsShapePill").textContent = `${rows.length} rows · ${cols.length} cols`;
+
+      renderPreviewTable(rows, cols);
+
+      show($("uploadSummary"));
+      $("uploadStatus").innerHTML = `<span class="pill good">Ready</span><span class="muted2">Continue to pick a target.</span>`;
+
+      $("continueToSetupBtn").disabled = false;
+
+      APP.raw.targetCol = null;
+      renderTargetSelect();
+      renderColumnTable();
+      refreshSplitDateCol();
+      syncSetupUI();
+
+      renderPresets();
+      syncButtons();
+    }
+
+    function handleFile(file) {
+      if (!file) return;
+
+      $("uploadStatus").innerHTML = `<span class="spinner"></span><span class="muted2">Parsing <span class="mono">${escapeHtml(file.name)}</span>…</span>`;
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+        worker: true,
+        complete: (res) => {
+          const rows = res.data || [];
+          const cols = (res.meta && res.meta.fields) ? res.meta.fields.filter(Boolean) : [];
+          handleParsed(rows, cols, file.name);
+        },
+        error: (err) => {
+          $("uploadStatus").innerHTML = `<span class="pill bad">Parse error</span><span class="mono">${escapeHtml(err?.message || String(err))}</span>`;
+        }
+      });
+    }
+
+    function sampleCsvText() {
+      return [
+        "price,year_made,product_size,state,sale_date,machine_hours",
+        "12000,2008,Medium,CA,2011-01-13,4200",
+        "5400,1999,Small,TX,2010-07-02,8100",
+        "22000,2012,Large,WA,2011-11-20,1200",
+        "18000,2006,Medium,CA,2011-09-12,3900",
+        "2500,1995,Compact,NY,2009-03-05,11000",
+        "31000,2013,Large,FL,2012-04-18,800",
+        "9800,2004,Small,TX,2010-12-09,5600",
+        "7600,2001,Small,WA,2011-06-21,6400",
+        "15500,2007,Medium,NY,2011-10-30,4100",
+        "45000,2014,Large,CA,2012-05-09,300",
+      ].join("\n");
+    }
+
+    function parseSampleCsvText(text) {
+      const res = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: false });
+      const rows = res.data || [];
+      const cols = (res.meta && res.meta.fields) ? res.meta.fields.filter(Boolean) : [];
+      handleParsed(rows, cols, "sample.csv");
+    }
+
+    // ----------------------------
+    // Events
+    // ----------------------------
+    $("hwBadge").textContent = `🧠 CPU threads: ${navigator.hardwareConcurrency || "?"}`;
+    $("resetAllBtn").addEventListener("click", hardReset);
+
+    $("browseBtn").addEventListener("click", () => $("fileInput").click());
+    $("fileInput").addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0];
+      handleFile(f);
+    });
+
+    $("sampleBtn").addEventListener("click", () => parseSampleCsvText(sampleCsvText()));
+
+    const dz = $("dropZone");
+    dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("dragover"); });
+    dz.addEventListener("dragleave", () => dz.classList.remove("dragover"));
+    dz.addEventListener("drop", (e) => {
+      e.preventDefault(); dz.classList.remove("dragover");
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      handleFile(f);
+    });
+
+    $("continueToSetupBtn").addEventListener("click", () => {
+      renderTargetSelect();
+      renderColumnTable();
+      refreshSplitDateCol();
+      syncSetupUI();
+      gotoStep(1);
+    });
+
+    $("backToUploadBtn").addEventListener("click", () => gotoStep(0));
+    $("continueToTrainBtn").addEventListener("click", () => gotoStep(2));
+    $("backToSetupBtn").addEventListener("click", () => gotoStep(1));
+    $("backToTrainBtn").addEventListener("click", () => gotoStep(2));
+    $("jumpToExportBtn").addEventListener("click", () => gotoStep(4));
+    $("backToResultsBtn").addEventListener("click", () => gotoStep(3));
+
+    $("targetSelect").addEventListener("change", () => {
+      APP.raw.targetCol = $("targetSelect").value;
+      if (APP.raw.targetCol && APP.raw.colMeta[APP.raw.targetCol]) APP.raw.colMeta[APP.raw.targetCol].include = true;
+      renderColumnTable();
+      syncSetupUI();
+      renderPresets();
+      syncButtons();
+    });
+
+    $("taskMode").addEventListener("change", () => { APP.setup.taskMode = $("taskMode").value; syncSetupUI(); renderPresets(); });
+    $("targetTransform").addEventListener("change", () => { APP.setup.targetTransform = $("targetTransform").value; syncSetupUI(); renderPresets(); });
+    $("maxRows").addEventListener("change", () => { APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0); syncSetupUI(); renderPresets(); });
+
+    $("splitMode").addEventListener("change", () => { APP.setup.splitMode = $("splitMode").value; syncSetupUI(); renderPresets(); });
+    $("splitDateCol").addEventListener("change", () => { APP.setup.splitDateCol = $("splitDateCol").value; syncSetupUI(); renderPresets(); });
+    $("testFrac").addEventListener("change", () => { APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.2)); syncSetupUI(); renderPresets(); });
+
+    $("colSearch").addEventListener("input", () => renderColumnTable());
+    $("showOnlyIssues").addEventListener("change", () => renderColumnTable());
+
+    $("trainBtn").addEventListener("click", trainModel);
+    $("stopBtn").addEventListener("click", () => stopTrainingHard("Stopped"));
+
+    $("importanceMode").addEventListener("change", () => {
+      if (!APP.train.pipeline) return;
+      const mode = $("importanceMode").value;
+      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance");
+      else renderFIChart(APP.train.fiBase, "importance");
+    });
+
+    $("predFilter").addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });
+    $("pageSize").addEventListener("change", () => { APP.ui.predPage = 0; renderPredTable(); });
+
+    $("prevPage").addEventListener("click", () => { APP.ui.predPage = Math.max(0, APP.ui.predPage - 1); renderPredTable(); });
+    $("nextPage").addEventListener("click", () => { APP.ui.predPage = APP.ui.predPage + 1; renderPredTable(); });
+
+    $("downloadPredCsvBtn").addEventListener("click", () => {
+      if (!APP.train.pipeline) return;
+      const csv = buildPredictionsCsv();
+      downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "test_predictions.csv");
+    });
+
+    $("downloadZipBtn").addEventListener("click", async () => {
+      const artifact = buildArtifact();
+      if (!artifact) return;
+
+      const sample = $("sampleCode").textContent || "";
+      const predCsv = APP.train.pipeline ? buildPredictionsCsv() : "";
+
+      const readme = `# Random Forest Artifact
+
+This zip contains:
+- rf_artifact.json: preprocessing pipeline + serialized ml-random-forest model
+- use_model.js: sample loader code (browser ESM + Node)
+- test_predictions.csv: your test split with predictions (for inspection)
+
+Notes
+- Categorical features are label-encoded. Missing/unknown -> id 0 ("#na#").
+- Continuous features are median-imputed + "_na" missing-indicator columns.
+- Date features are expanded into date parts + "_na".
+- If you trained with targetTransform=log1p, predictions should be inverted with expm1.
+
+Compatibility
+- Serialization uses ml-random-forest@2.1.0
+`;
+
+      const zip = new JSZip();
+      zip.file("rf_artifact.json", JSON.stringify(artifact, null, 2));
+      zip.file("use_model.js", sample);
+      zip.file("test_predictions.csv", predCsv);
+      zip.file("README.md", readme);
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      downloadBlob(blob, "rf_artifact.zip");
+    });
+
+    // ----------------------------
+    // Sort wiring
+    // ----------------------------
+    wireReviewSortHeaders();
+
+    // ----------------------------
+    // Init
+    // ----------------------------
+    // restore past coeff if available (for pre-estimates)
+    try {
+      const v = localStorage.getItem("rf_perf_coeff_v1");
+      const x = v ? Number(v) : null;
+      if (x && Number.isFinite(x) && x > 0) APP.train.perfCoeff = x;
+    } catch {}
+
+    renderStepper();
+    renderPresets();
+    hardReset();
+
+    // keep preset values synced on first load
+    const p = PRESETS[APP.train.preset];
+    $("nEstimators").value = String(p.nEstimators);
+    $("maxRows").value = String(p.maxRows);
+    $("maxFeatures").value = String(p.maxFeatures);
+    $("replacement").value = p.replacement ? "true" : "false";
+    syncButtons();
+  </script>
+</body>
+</html>

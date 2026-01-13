@@ -769,6 +769,8 @@
         // worker/stop
         running: false,
         worker: null,
+        workerUrl: null,
+        workerUrlTimer: null,
         countdownTimer: null,
         countdownStartMs: null
       },
@@ -1976,12 +1978,40 @@
     // ----------------------------
     // Worker-based training (supports Stop)
     // ----------------------------
-    function stopTrainingUI(message = "Stopped") {
+    function revokeWorkerUrl() {
+      if (APP.train.workerUrl) {
+        try { URL.revokeObjectURL(APP.train.workerUrl); } catch {}
+      }
+      APP.train.workerUrl = null;
+      if (APP.train.workerUrlTimer) {
+        clearTimeout(APP.train.workerUrlTimer);
+        APP.train.workerUrlTimer = null;
+      }
+    }
+
+    function releaseTrainingWorker() {
+      if (APP.train.worker) {
+        try {
+          APP.train.worker.onmessage = null;
+          APP.train.worker.onerror = null;
+          APP.train.worker.onmessageerror = null;
+          APP.train.worker.terminate();
+        } catch {}
+        APP.train.worker = null;
+      }
+      revokeWorkerUrl();
+    }
+
+    function releaseTrainingResources() {
       if (APP.train.countdownTimer) { clearInterval(APP.train.countdownTimer); APP.train.countdownTimer = null; }
       APP.train.countdownStartMs = null;
       APP.train.lastETASeconds = null;
-
+      releaseTrainingWorker();
       APP.train.running = false;
+    }
+
+    function stopTrainingUI(message = "Stopped") {
+      releaseTrainingResources();
 
       const etaEl = $("trainETA");
       etaEl.style.display = "none";
@@ -1993,12 +2023,6 @@
     }
 
     function stopTrainingHard(message = "Stopped") {
-      try {
-        if (APP.train.worker) {
-          APP.train.worker.terminate();
-          APP.train.worker = null;
-        }
-      } catch {}
       stopTrainingUI(message);
     }
 
@@ -2083,10 +2107,13 @@
         };
       `;
       const blob = new Blob([code], { type: "text/javascript" });
+      revokeWorkerUrl();
       const url = URL.createObjectURL(blob);
       const w = new Worker(url, { type: "module" });
       // Best effort: revoke after worker spins up
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      APP.train.workerUrl = url;
+      if (APP.train.workerUrlTimer) clearTimeout(APP.train.workerUrlTimer);
+      APP.train.workerUrlTimer = setTimeout(() => revokeWorkerUrl(), 1000);
       return w;
     }
 
@@ -2268,8 +2295,7 @@
           }
 
           // cleanup worker
-          try { APP.train.worker.terminate(); } catch {}
-          APP.train.worker = null;
+          releaseTrainingWorker();
 
           // finish UI
           APP.train.running = false;
@@ -2779,6 +2805,10 @@ function invertTargetIfNeeded(yPred, artifact){
 
     $("trainBtn").addEventListener("click", trainModel);
     $("stopBtn").addEventListener("click", () => stopTrainingHard("Stopped"));
+
+    const releaseOnUnload = () => releaseTrainingResources();
+    window.addEventListener("pagehide", releaseOnUnload);
+    window.addEventListener("beforeunload", releaseOnUnload);
 
     $("importanceMode").addEventListener("change", () => {
       if (!APP.train.pipeline) return;

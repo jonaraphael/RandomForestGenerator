@@ -348,10 +348,46 @@
       color: rgba(234,240,255,0.65);
       font-size: 11px;
     }
+
+    .globalDropOverlay{
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: grid;
+      place-items: center;
+      background: rgba(7,11,22,0.60);
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
+    .globalDropOverlay .inner{
+      border: 2px dashed rgba(139,92,246,0.70);
+      background: rgba(15,24,51,0.65);
+      border-radius: 16px;
+      padding: 18px 16px;
+      width: min(720px, calc(100vw - 36px));
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+    .globalDropOverlay .title{
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      margin-bottom: 6px;
+    }
+    .globalDropOverlay .hint{
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
   </style>
 </head>
 
 <body>
+  <div id="globalDropOverlay" class="globalDropOverlay hidden" aria-hidden="true">
+    <div class="inner">
+      <div class="title">Drop a CSV to start over</div>
+      <div class="hint">You can drop a file anywhere on this page.</div>
+    </div>
+  </div>
   <div class="topbar">
     <div class="topline">
       <div>
@@ -769,6 +805,7 @@
           fi: null,
           secondary: null
         },
+        parseSeq: 0,
         predPage: 0,
         predFilter: "",
         colSort: { key: "name", dir: "asc" }
@@ -2478,6 +2515,7 @@ function invertTargetIfNeeded(yPred, artifact){
     }
 
     function hardReset() {
+      APP.ui.parseSeq = (APP.ui.parseSeq || 0) + 1;
       APP.step = 0;
       APP.raw = { fileName: null, rows: [], columns: [], colMeta: {}, targetCol: null };
       APP.setup = { splitMode: "auto", splitDateCol: null, testFrac: 0.2, taskMode: "auto", targetTransform: "none", maxRows: 50000, excluded: new Set() };
@@ -2530,6 +2568,36 @@ function invertTargetIfNeeded(yPred, artifact){
       gotoStep(0);
     }
 
+    function resetForNewFile() {
+      const prefs = {
+        splitMode: $("splitMode").value,
+        testFrac: parseNum($("testFrac").value) || 0.2,
+        taskMode: $("taskMode").value,
+        targetTransform: $("targetTransform").value,
+        maxRows: Math.floor(parseNum($("maxRows").value) || 0),
+        seed: $("seed").value,
+        preset: APP.train.preset || "balanced",
+      };
+
+      hardReset();
+
+      APP.setup.splitMode = prefs.splitMode;
+      APP.setup.testFrac = Math.min(0.5, Math.max(0.05, prefs.testFrac));
+      APP.setup.taskMode = prefs.taskMode;
+      APP.setup.targetTransform = prefs.targetTransform;
+      APP.setup.maxRows = Math.max(0, prefs.maxRows);
+
+      $("splitMode").value = prefs.splitMode;
+      $("testFrac").value = String(APP.setup.testFrac);
+      $("taskMode").value = prefs.taskMode;
+      $("targetTransform").value = prefs.targetTransform;
+      $("maxRows").value = String(APP.setup.maxRows);
+      $("seed").value = prefs.seed;
+
+      APP.train.preset = prefs.preset;
+      renderPresets();
+    }
+
     function handleParsed(rows, cols, fileName) {
       if (!rows.length || !cols.length) {
         $("uploadStatus").innerHTML = `<span class="pill bad">Parse failed</span><span class="muted2">No rows/columns found.</span>`;
@@ -2565,6 +2633,7 @@ function invertTargetIfNeeded(yPred, artifact){
     function handleFile(file) {
       if (!file) return;
 
+      const parseSeq = (APP.ui.parseSeq = (APP.ui.parseSeq || 0) + 1);
       $("uploadStatus").innerHTML = `<span class="spinner"></span><span class="muted2">Parsing <span class="mono">${escapeHtml(file.name)}</span>…</span>`;
 
       Papa.parse(file, {
@@ -2573,11 +2642,13 @@ function invertTargetIfNeeded(yPred, artifact){
         dynamicTyping: false,
         worker: true,
         complete: (res) => {
+          if (parseSeq !== APP.ui.parseSeq) return;
           const rows = res.data || [];
           const cols = (res.meta && res.meta.fields) ? res.meta.fields.filter(Boolean) : [];
           handleParsed(rows, cols, file.name);
         },
         error: (err) => {
+          if (parseSeq !== APP.ui.parseSeq) return;
           $("uploadStatus").innerHTML = `<span class="pill bad">Parse error</span><span class="mono">${escapeHtml(err?.message || String(err))}</span>`;
         }
       });
@@ -2639,6 +2710,7 @@ function invertTargetIfNeeded(yPred, artifact){
     }
 
     function parseSampleCsvText(text) {
+      APP.ui.parseSeq = (APP.ui.parseSeq || 0) + 1;
       const res = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: false });
       const rows = res.data || [];
       const cols = (res.meta && res.meta.fields) ? res.meta.fields.filter(Boolean) : [];
@@ -2654,18 +2726,75 @@ function invertTargetIfNeeded(yPred, artifact){
     $("browseBtn").addEventListener("click", () => $("fileInput").click());
     $("fileInput").addEventListener("change", (e) => {
       const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      resetForNewFile();
       handleFile(f);
     });
 
-    $("sampleBtn").addEventListener("click", () => parseSampleCsvText(sampleCsvText()));
+    $("sampleBtn").addEventListener("click", () => {
+      resetForNewFile();
+      parseSampleCsvText(sampleCsvText());
+    });
 
     const dz = $("dropZone");
-    dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("dragover"); });
-    dz.addEventListener("dragleave", () => dz.classList.remove("dragover"));
+    dz.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add("dragover"); });
+    dz.addEventListener("dragleave", (e) => { e.stopPropagation(); dz.classList.remove("dragover"); });
     dz.addEventListener("drop", (e) => {
-      e.preventDefault(); dz.classList.remove("dragover");
+      e.preventDefault(); e.stopPropagation(); dz.classList.remove("dragover");
       const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      resetForNewFile();
       handleFile(f);
+    });
+
+    function isFileDragEvent(e) {
+      const dt = e.dataTransfer;
+      if (!dt) return false;
+      if (dt.files && dt.files.length) return true;
+      const types = dt.types ? Array.from(dt.types) : [];
+      return types.includes("Files");
+    }
+
+    let globalDragDepth = 0;
+    function setGlobalDropOverlayVisible(visible) {
+      const el = $("globalDropOverlay");
+      if (!el) return;
+      if (visible) el.classList.remove("hidden");
+      else el.classList.add("hidden");
+    }
+
+    window.addEventListener("dragenter", (e) => {
+      if (!isFileDragEvent(e)) return;
+      globalDragDepth += 1;
+      setGlobalDropOverlayVisible(true);
+    }, true);
+
+    window.addEventListener("dragleave", (e) => {
+      if (!globalDragDepth) return;
+      globalDragDepth = Math.max(0, globalDragDepth - 1);
+      if (!globalDragDepth) setGlobalDropOverlayVisible(false);
+    }, true);
+
+    window.addEventListener("dragover", (e) => {
+      if (!isFileDragEvent(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      setGlobalDropOverlayVisible(true);
+    });
+
+    window.addEventListener("drop", (e) => {
+      if (!isFileDragEvent(e)) return;
+      e.preventDefault();
+      globalDragDepth = 0;
+      setGlobalDropOverlayVisible(false);
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      resetForNewFile();
+      handleFile(f);
+    });
+
+    window.addEventListener("dragend", () => {
+      globalDragDepth = 0;
+      setGlobalDropOverlayVisible(false);
     });
 
     $("continueToSetupBtn").addEventListener("click", () => {

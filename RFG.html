@@ -753,6 +753,9 @@
 
   <script type="module">
     import { RandomForestRegression, RandomForestClassifier } from "https://esm.sh/ml-random-forest@2.1.0";
+    import { DecisionTreeClassifier, DecisionTreeRegression } from "https://esm.sh/ml-cart@^2.1.1?target=es2022";
+    import { Matrix, MatrixColumnSelectionView } from "https://esm.sh/ml-matrix@^6.8.2?target=es2022";
+    import { MersenneTwister19937, integer } from "https://esm.sh/random-js@^2.1.0?target=es2022";
 
     // ----------------------------
     // State
@@ -804,6 +807,11 @@
         charts: {
           fi: null,
           secondary: null
+        },
+        training: {
+          startMs: 0,
+          totalUnits: 0,
+          completedUnits: 0,
         },
         parseSeq: 0,
         predPage: 0,
@@ -1011,6 +1019,19 @@
       if (x === null || x === undefined) return "—";
       if (!Number.isFinite(x)) return String(x);
       return x.toFixed(digits);
+    }
+
+    function formatDuration(ms) {
+      if (!Number.isFinite(ms) || ms < 0) return "—";
+      if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
+      if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+      const s = Math.round(ms / 1000);
+      const m = Math.floor(s / 60);
+      const rs = s % 60;
+      if (m < 60) return `${m}m ${rs}s`;
+      const h = Math.floor(m / 60);
+      const rm = m % 60;
+      return `${h}h ${rm}m`;
     }
 
     function downloadBlob(blob, filename) {
@@ -2117,7 +2138,197 @@
     // ----------------------------
     // Training
     // ----------------------------
+    function trainingStatusHtml(task, completedUnits, totalUnits, startMs) {
+      const elapsedMs = performance.now() - startMs;
+      let etaText = "estimating…";
+      if (completedUnits > 0 && totalUnits > 0) {
+        const msPerUnit = elapsedMs / Math.max(1, completedUnits);
+        const remainingMs = msPerUnit * Math.max(0, totalUnits - completedUnits);
+        etaText = formatDuration(remainingMs);
+      }
+
+      const prog = (totalUnits > 0)
+        ? `Tree <span class="mono">${completedUnits}</span>/<span class="mono">${totalUnits}</span>`
+        : `Tree <span class="mono">${completedUnits}</span>`;
+
+      return `<span class="spinner"></span> Training (${escapeHtml(task)})… ` +
+        `<span class="muted2">${prog} · Elapsed <span class="mono">${formatDuration(elapsedMs)}</span> · ETA <span class="mono">${etaText}</span></span>`;
+    }
+
+    function isFrac01(x) {
+      return x > 0 && x <= 1;
+    }
+
+    function isFloatNotInt(x) {
+      return Number(x) === x && x % 1 !== 0;
+    }
+
+    function rngFromSeed(seed) {
+      if (seed === undefined) return MersenneTwister19937.autoSeed();
+      if (Number.isInteger(seed)) return MersenneTwister19937.seed(seed);
+      throw new RangeError(`Expected seed must be undefined or integer not ${seed}`);
+    }
+
+    function sampleWithBagging(X, y, seed, includeOob) {
+      const engine = rngFromSeed(seed);
+      const pickRow = integer(0, X.rows - 1);
+
+      const rows = new Array(X.rows);
+      const ys = new Array(X.rows);
+      const seen = includeOob ? new Array(X.rows).fill(0) : null;
+      let unseenCount = includeOob ? X.rows : 0;
+
+      for (let i = 0; i < X.rows; i++) {
+        const idx = pickRow(engine);
+        rows[i] = X.getRow(idx);
+        ys[i] = y[idx];
+        if (includeOob) {
+          if (seen[idx]++ === 0) unseenCount--;
+        }
+      }
+
+      let Xoob = null;
+      let ioob = [];
+      if (includeOob) {
+        const oobRows = new Array(unseenCount);
+        const oobIdx = new Array(unseenCount);
+        let p = unseenCount;
+        for (let i = X.rows - 1; i >= 0 && p > 0; --i) {
+          if (seen[i] === 0) {
+            oobRows[--p] = X.getRow(i);
+            oobIdx[p] = i;
+          }
+        }
+        Xoob = new Matrix(oobRows);
+        ioob = oobIdx;
+      }
+
+      return { X: new Matrix(rows), y: ys, Xoob, ioob, seed: engine.next() };
+    }
+
+    function selectRandomFeatures(X, n, replacement, seed) {
+      if (X.columns < n) throw new RangeError("N should be less or equal to the number of columns of X");
+
+      const engine = rngFromSeed(seed);
+      const pickCol = integer(0, X.columns - 1);
+      const Xsub = new Matrix(X.rows, n);
+
+      let usedIndex;
+      if (replacement) {
+        usedIndex = new Array(n);
+        for (let i = 0; i < n; i++) {
+          const c = pickCol(engine);
+          usedIndex[i] = c;
+          Xsub.setColumn(i, X.getColumn(c));
+        }
+      } else {
+        const used = new Set();
+        let c = pickCol(engine);
+        for (let i = 0; i < n; i++) {
+          while (used.has(c)) c = pickCol(engine);
+          Xsub.setColumn(i, X.getColumn(c));
+          used.add(c);
+        }
+        usedIndex = Array.from(used);
+      }
+
+      return { X: Xsub, usedIndex, seed: engine.next() };
+    }
+
+    function computeOobResults(oobEntries, y, selectionFn) {
+      const all = Array.from({ length: y.length }, () => []);
+      for (const entry of oobEntries) {
+        if (!entry) continue;
+        const idxs = entry.index || [];
+        const preds = entry.predicted || [];
+        for (let i = 0; i < idxs.length; i++) {
+          all[idxs[i]].push(preds[i]);
+        }
+      }
+      return all.map((preds, i) => ({
+        true: y[i],
+        all: preds,
+        predicted: selectionFn(preds),
+      }));
+    }
+
+    async function trainForestWithProgress(model, X, y, { onProgress }) {
+      let seed = model.seed;
+      let Xm = Matrix.checkMatrix(X);
+      let ym = y;
+
+      model.maxFeatures = model.maxFeatures || Xm.columns;
+      model.numberFeatures = Xm.columns;
+      model.numberSamples = Xm.rows;
+
+      if (isFrac01(model.maxFeatures)) model.n = Math.floor(Xm.columns * model.maxFeatures);
+      else if (Number.isInteger(model.maxFeatures)) {
+        if (model.maxFeatures > Xm.columns) throw new RangeError(`The maxFeatures parameter should be less than ${Xm.columns}`);
+        model.n = model.maxFeatures;
+      } else {
+        throw new RangeError(`Cannot process the maxFeatures parameter ${model.maxFeatures}`);
+      }
+
+      if (model.maxSamples) {
+        if (model.maxSamples < 0) throw new RangeError("Please choose a positive value for maxSamples");
+        if (isFloatNotInt(model.maxSamples)) {
+          if (model.maxSamples > 1) throw new RangeError("Please choose either a float value between 0 and 1 or a positive integer for maxSamples");
+          model.numberSamples = Math.floor(Xm.rows * model.maxSamples);
+        } else if (Number.isInteger(model.maxSamples)) {
+          if (model.maxSamples > Xm.rows) throw new RangeError(`The maxSamples parameter should be less than ${Xm.rows}`);
+          model.numberSamples = model.maxSamples;
+        }
+      }
+
+      if (model.maxSamples && Xm.rows !== model.numberSamples) {
+        const sub = new Matrix(model.numberSamples, Xm.columns);
+        for (let i = 0; i < model.numberSamples; i++) sub.setRow(i, Xm.getRow(i));
+        Xm = sub;
+        ym = ym.slice(0, model.numberSamples);
+      }
+
+      const nEstimators = model.nEstimators;
+      const TreeClass = model.isClassifier ? DecisionTreeClassifier : DecisionTreeRegression;
+
+      model.estimators = new Array(nEstimators);
+      model.indexes = new Array(nEstimators);
+
+      const includeOob = Boolean(!model.noOOB && model.useSampleBagging);
+      const oobEntries = includeOob ? new Array(nEstimators) : null;
+      const yieldEvery = Math.max(1, Math.floor(nEstimators / 100));
+
+      for (let t = 0; t < nEstimators; t++) {
+        const bag = model.useSampleBagging
+          ? sampleWithBagging(Xm, ym, seed, includeOob)
+          : { X: Xm, y: ym, seed, Xoob: null, ioob: [] };
+        seed = bag.seed;
+
+        const feat = selectRandomFeatures(bag.X, model.n, model.replacement, seed);
+        seed = feat.seed;
+
+        model.indexes[t] = feat.usedIndex;
+        model.estimators[t] = new TreeClass(model.treeOptions);
+        model.estimators[t].train(feat.X, bag.y);
+
+        if (includeOob && bag.Xoob && bag.ioob && bag.ioob.length) {
+          const XoobSub = new MatrixColumnSelectionView(bag.Xoob, model.indexes[t]);
+          oobEntries[t] = { index: bag.ioob, predicted: model.estimators[t].predict(XoobSub) };
+        }
+
+        onProgress(t + 1, nEstimators);
+
+        if ((t + 1) < nEstimators && ((t + 1) % yieldEvery === 0)) {
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      if (includeOob && oobEntries) {
+        model.oobResults = computeOobResults(oobEntries, ym, model.selection.bind(model));
+      }
+    }
+
     async function trainModel() {
+      APP.ui.training.startMs = performance.now();
       $("trainStatus").innerHTML = `<span class="spinner"></span> Preparing data…`;
       $("trainBtn").disabled = true;
 
@@ -2156,13 +2367,21 @@
       const maxFeaturesParsed = parseMaxFeatures($("maxFeatures").value, featureNames.length);
       const rfOptions = { seed, maxFeatures: maxFeaturesParsed, replacement, nEstimators };
 
-      $("trainStatus").innerHTML = `<span class="spinner"></span> Training (${task})…`;
+      APP.ui.training.totalUnits = nEstimators;
+      APP.ui.training.completedUnits = 0;
+      $("trainStatus").innerHTML = trainingStatusHtml(task, 0, nEstimators, APP.ui.training.startMs);
       await new Promise(r => setTimeout(r, 0));
 
       let model;
       try {
         model = (task === "regression") ? new RandomForestRegression(rfOptions) : new RandomForestClassifier(rfOptions);
-        model.train(Xtrain, ytrain);
+        await trainForestWithProgress(model, Xtrain, ytrain, {
+          onProgress: (completedUnits, totalUnits) => {
+            APP.ui.training.completedUnits = completedUnits;
+            APP.ui.training.totalUnits = totalUnits;
+            $("trainStatus").innerHTML = trainingStatusHtml(task, completedUnits, totalUnits, APP.ui.training.startMs);
+          },
+        });
       } catch (e) {
         $("trainStatus").innerHTML = `<span class="pill bad">Train failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
         $("trainBtn").disabled = false;

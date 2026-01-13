@@ -14,11 +14,14 @@
     :root{
       --bg0:#070b16;
       --bg1:#0b1226;
+      --panel:#0f1833;
+      --panel2:#0c1430;
       --text:#eaf0ff;
       --muted:rgba(234,240,255,0.75);
       --muted2:rgba(234,240,255,0.55);
       --border:rgba(234,240,255,0.12);
       --border2:rgba(234,240,255,0.08);
+      --primary:#6d28d9;
       --primary2:#8b5cf6;
       --good:#32d583;
       --warn:#fdb022;
@@ -114,13 +117,13 @@
     }
 
     .grid{display:grid;grid-template-columns:1fr;gap:14px}
+
     .card{
       border:1px solid var(--border);
       background:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
       box-shadow: var(--shadow);
       border-radius:var(--radius);
       padding:14px;
-      min-width: 0;
     }
 
     .card h2{margin:0 0 10px;font-size:14px;color:rgba(234,240,255,0.92);letter-spacing:0.15px}
@@ -197,7 +200,7 @@
       max-height:420px;
       -webkit-overflow-scrolling: touch;
     }
-    .scroll table {
+    .scroll table{
       width: max-content;
       min-width: 100%;
     }
@@ -288,7 +291,6 @@
     .preset .title{display:flex;justify-content:space-between;align-items:center;gap:10px}
     .preset .name{font-weight:650}
     .preset .desc{margin-top:8px;color:var(--muted);font-size:12px;line-height:1.35}
-    .preset .eta{margin-top:10px;color:var(--muted2);font-size:12px}
 
     .spinner{
       width:14px;height:14px;border-radius:50%;
@@ -345,14 +347,6 @@
       color: rgba(234,240,255,0.65);
       font-size: 11px;
     }
-
-    /* Prevent the whole page from ever scrolling sideways */
-    html, body { overflow-x: hidden; }
-
-    /* Make the preview wrapper the horizontal scroll container */
-    #panelUpload .scroll { overflow-x: auto; overflow-y: auto; }
-
-
   </style>
 </head>
 
@@ -548,7 +542,7 @@
         <h2>Train</h2>
 
         <div class="muted" style="margin-bottom:10px;">
-          Choose a training preset. The time estimates update after we do a quick calibration on your device.
+          Choose a training preset. You can fine-tune settings in “Advanced”.
         </div>
 
         <div class="presetRow" id="presetRow"></div>
@@ -593,8 +587,6 @@
           <button class="btn" id="backToSetupBtn">Back</button>
           <div class="row">
             <div id="trainStatus" class="muted2"></div>
-            <span class="pill" id="trainETA" style="display:none;">ETA: —</span>
-            <button class="btn danger" id="stopBtn" disabled>Stop</button>
             <button class="btn primary" id="trainBtn" disabled>Train model</button>
           </div>
         </div>
@@ -722,7 +714,6 @@
   </div>
 
   <script type="module">
-    // Charting stays on main thread
     import { RandomForestRegression, RandomForestClassifier } from "https://esm.sh/ml-random-forest@2.1.0";
 
     // ----------------------------
@@ -738,7 +729,13 @@
 
     let APP = {
       step: 0,
-      raw: { fileName: null, rows: [], columns: [], colMeta: {}, targetCol: null },
+      raw: {
+        fileName: null,
+        rows: [],
+        columns: [],
+        colMeta: {}, // {col: {inferredType, confidence, missingFrac, uniqueSample, examples[], flags:{idLike,lowConfidence}, include:true}}
+        targetCol: null
+      },
       setup: {
         splitMode: "auto",
         splitDateCol: null,
@@ -762,20 +759,13 @@
         yPredLabel: [],
         testRowRefs: [],
         fiDerived: [],
-        fiBase: [],
-        // time estimation
-        perfCoeff: null,            // seconds / (rows*features*trees)
-        lastETASeconds: null,
-        // worker/stop
-        running: false,
-        worker: null,
-        workerUrl: null,
-        workerUrlTimer: null,
-        countdownTimer: null,
-        countdownStartMs: null
+        fiBase: []
       },
       ui: {
-        charts: { fi: null, secondary: null },
+        charts: {
+          fi: null,
+          secondary: null
+        },
         predPage: 0,
         predFilter: "",
         colSort: { key: "name", dir: "asc" }
@@ -807,7 +797,10 @@
     // ----------------------------
     // Core utils
     // ----------------------------
-    function normStr(v) { return (v === null || v === undefined) ? "" : String(v).trim(); }
+    function normStr(v) {
+      if (v === null || v === undefined) return "";
+      return String(v).trim();
+    }
 
     function parseNum(v) {
       const s = normStr(v);
@@ -980,18 +973,6 @@
       return x.toFixed(digits);
     }
 
-    function formatDuration(sec) {
-      if (!Number.isFinite(sec) || sec < 0) return "—";
-      const s = Math.max(0, Math.round(sec));
-      const m = Math.floor(s / 60);
-      const r = s % 60;
-      if (m <= 0) return `${r}s`;
-      const h = Math.floor(m / 60);
-      const mm = m % 60;
-      if (h <= 0) return `${m}m ${r}s`;
-      return `${h}h ${mm}m`;
-    }
-
     function downloadBlob(blob, filename) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1067,9 +1048,6 @@
         else hide(el);
       });
 
-      // update preset estimates when entering Train
-      if (APP.step === 2) renderPresets();
-
       syncButtons();
     }
 
@@ -1123,6 +1101,7 @@
       const name = col.toLowerCase();
       const idByName = (name === "id") || name.endsWith("id") || name.includes("_id") || name.includes(" id") || name.includes("identifier");
       const uniqueRatio = nonEmpty ? (uniqueSample / nonEmpty) : 0;
+
       const idLike = idByName || (inferred !== "date" && fracInt >= 0.95 && uniqueRatio >= 0.95 && uniqueSample >= 50);
 
       return {
@@ -1131,7 +1110,10 @@
         missingFrac,
         uniqueSample,
         examples,
-        flags: { idLike, lowConfidence: confidence < 0.70 },
+        flags: {
+          idLike,
+          lowConfidence: confidence < 0.70
+        },
         include: true
       };
     }
@@ -1154,9 +1136,12 @@
           const key = th.getAttribute("data-sort");
           if (!key) return;
 
-          if (APP.ui.colSort.key === key) APP.ui.colSort.dir = (APP.ui.colSort.dir === "asc") ? "desc" : "asc";
-          else { APP.ui.colSort.key = key; APP.ui.colSort.dir = "asc"; }
-
+          if (APP.ui.colSort.key === key) {
+            APP.ui.colSort.dir = (APP.ui.colSort.dir === "asc") ? "desc" : "asc";
+          } else {
+            APP.ui.colSort.key = key;
+            APP.ui.colSort.dir = "asc";
+          }
           renderColumnTable();
         });
       });
@@ -1248,6 +1233,7 @@
 
       const autoAllowsTime = dateCols.length > 0;
       const wantsTime = (splitMode === "time") || (splitMode === "auto" && autoAllowsTime);
+
       $("splitDateCol").disabled = !wantsTime;
 
       const c = $("setupCallout");
@@ -1277,6 +1263,7 @@
       const cols = APP.raw.columns;
       const options = cols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
       $("targetSelect").innerHTML = `<option value="" disabled ${APP.raw.targetCol ? "" : "selected"}>(select a column)</option>` + options;
+
       if (APP.raw.targetCol) $("targetSelect").value = APP.raw.targetCol;
     }
 
@@ -1310,29 +1297,59 @@
 
         let va, vb;
         switch (sortKey) {
-          case "include": va = (ma?.include ? 1 : 0); vb = (mb?.include ? 1 : 0); break;
-          case "name": va = a.toLowerCase(); vb = b.toLowerCase(); break;
-          case "type": va = typeRank(ma?.inferredType); vb = typeRank(mb?.inferredType); break;
-          case "confidence": va = ma?.confidence ?? 0; vb = mb?.confidence ?? 0; break;
-          case "missing": va = ma?.missingFrac ?? 0; vb = mb?.missingFrac ?? 0; break;
-          case "unique": va = ma?.uniqueSample ?? 0; vb = mb?.uniqueSample ?? 0; break;
-          case "flags": va = flagsRank(ma); vb = flagsRank(mb); break;
-          case "examples": va = (ma?.examples?.[0] ?? "").toLowerCase(); vb = (mb?.examples?.[0] ?? "").toLowerCase(); break;
-          default: va = a.toLowerCase(); vb = b.toLowerCase();
+          case "include":
+            va = (ma?.include ? 1 : 0);
+            vb = (mb?.include ? 1 : 0);
+            break;
+          case "name":
+            va = a.toLowerCase();
+            vb = b.toLowerCase();
+            break;
+          case "type":
+            va = typeRank(ma?.inferredType);
+            vb = typeRank(mb?.inferredType);
+            break;
+          case "confidence":
+            va = ma?.confidence ?? 0;
+            vb = mb?.confidence ?? 0;
+            break;
+          case "missing":
+            va = ma?.missingFrac ?? 0;
+            vb = mb?.missingFrac ?? 0;
+            break;
+          case "unique":
+            va = ma?.uniqueSample ?? 0;
+            vb = mb?.uniqueSample ?? 0;
+            break;
+          case "flags":
+            va = flagsRank(ma);
+            vb = flagsRank(mb);
+            break;
+          case "examples":
+            va = (ma?.examples?.[0] ?? "").toLowerCase();
+            vb = (mb?.examples?.[0] ?? "").toLowerCase();
+            break;
+          default:
+            va = a.toLowerCase();
+            vb = b.toLowerCase();
         }
 
         if (typeof va === "number" && typeof vb === "number") {
           if (va === vb) return 0;
           return (va < vb ? -1 : 1) * dirMul;
         } else {
-          va = String(va); vb = String(vb);
+          va = String(va);
+          vb = String(vb);
           if (va === vb) return 0;
           return (va < vb ? -1 : 1) * dirMul;
         }
       });
 
       const rows = colsSorted
-        .filter(c => !q || c.toLowerCase().includes(q))
+        .filter(c => {
+          if (!q) return true;
+          return c.toLowerCase().includes(q);
+        })
         .filter(c => {
           const m = meta[c];
           if (!m) return true;
@@ -1362,7 +1379,10 @@
           const includeChecked = (m.include || (target && col === target)) ? "checked" : "";
           const includeBox = `<input type="checkbox" data-include="${escapeHtml(col)}" ${includeChecked} ${includeDisabled} />`;
 
-          const examplesFull = (m.examples || []).slice(0, 3).map(x => truncate(x, 80)).join(", ");
+          const examplesFull = (m.examples || [])
+            .slice(0, 3)
+            .map(x => truncate(x, 80))
+            .join(", ");
           const examples = truncate(examplesFull, 200);
 
           return `
@@ -1390,7 +1410,6 @@
           APP.raw.colMeta[col].include = cb.checked;
           syncSetupUI();
           refreshSplitDateCol();
-          renderPresets();
         });
       });
 
@@ -1402,8 +1421,7 @@
           APP.raw.colMeta[col].flags.lowConfidence = false;
           syncSetupUI();
           refreshSplitDateCol();
-          renderColumnTable();
-          renderPresets();
+          renderColumnTable(); // so sorting by type/confidence updates instantly
         });
       });
     }
@@ -1417,8 +1435,12 @@
         : `<option value="">(no date columns detected)</option>`;
 
       if (dateCols.length) {
-        if (current && dateCols.includes(current)) $("splitDateCol").value = current;
-        else { APP.setup.splitDateCol = dateCols[0]; $("splitDateCol").value = dateCols[0]; }
+        if (current && dateCols.includes(current)) {
+          $("splitDateCol").value = current;
+        } else {
+          APP.setup.splitDateCol = dateCols[0];
+          $("splitDateCol").value = dateCols[0];
+        }
       } else {
         APP.setup.splitDateCol = null;
       }
@@ -1430,7 +1452,9 @@
     // Build dataset (preprocess)
     // ----------------------------
     function sampleRowIndices(nRows, maxRows, seed) {
-      if (!maxRows || maxRows <= 0 || nRows <= maxRows) return Array.from({ length: nRows }, (_, i) => i);
+      if (!maxRows || maxRows <= 0 || nRows <= maxRows) {
+        return Array.from({ length: nRows }, (_, i) => i);
+      }
       const rng = mulberry32(seed);
       const idx = Array.from({ length: nRows }, (_, i) => i);
       shuffleInPlace(idx, rng);
@@ -1455,14 +1479,14 @@
       return inv;
     }
 
-    function buildDatasetForTraining(maxRowsOverride = null) {
+    function buildDataset() {
       const rows = APP.raw.rows;
       const columns = APP.raw.columns;
       const targetCol = APP.raw.targetCol;
       const meta = APP.raw.colMeta;
 
       const seed = Math.floor(parseNum($("seed").value) || 42);
-      const maxRows = (maxRowsOverride === null) ? (Math.floor(parseNum($("maxRows").value) || 0)) : maxRowsOverride;
+      const maxRows = Math.floor(parseNum($("maxRows").value) || 0);
 
       const usedIdx = sampleRowIndices(rows.length, maxRows, seed);
       const usedRows = usedIdx.map(i => rows[i]);
@@ -1622,7 +1646,7 @@
       }
 
       const pipeline = {
-        schemaVersion: "1.2",
+        schemaVersion: "1.1",
         createdAt: new Date().toISOString(),
         fileName: APP.raw.fileName,
         originalColumns: [...columns],
@@ -1683,7 +1707,10 @@
     // ----------------------------
     // Charts
     // ----------------------------
-    function destroyChart(ch) { if (ch) { try { ch.destroy(); } catch {} } return null; }
+    function destroyChart(ch) {
+      if (ch) { try { ch.destroy(); } catch {} }
+      return null;
+    }
 
     function renderFIChart(pairs, titleLabel) {
       const top = pairs.slice(0, 20);
@@ -1716,6 +1743,7 @@
       const idx = Array.from({ length: n }, (_, i) => i);
       shuffleInPlace(idx, rng);
       const pick = idx.slice(0, maxPts);
+
       const pts = pick.map(i => ({ x: yTrue[i], y: yPred[i] }));
 
       const ctx = $("secondaryChart").getContext("2d");
@@ -1796,7 +1824,7 @@
     }
 
     // ----------------------------
-    // Predictions explorer (unchanged core)
+    // Predictions explorer
     // ----------------------------
     function currentPredView() {
       const pageSize = Math.max(10, Math.floor(parseNum($("pageSize").value) || 50));
@@ -1831,6 +1859,7 @@
       const targetCol = APP.raw.targetCol;
       const featureCols = APP.raw.columns.filter(c => c !== targetCol);
       const colsShown = featureCols.slice(0, Math.min(10, featureCols.length));
+
       const view = currentPredView();
 
       const headCols = ["__y_true__", "__y_pred__", "__err__"].concat(colsShown);
@@ -1838,6 +1867,7 @@
 
       const rowsHtml = view.pageIdx.map(i => {
         const r = APP.train.testRowRefs[i];
+
         const yt = view.yTrueDisp[i];
         const yp = view.yPredDisp[i];
 
@@ -1892,7 +1922,7 @@
     }
 
     // ----------------------------
-    // Presets + pre-estimates
+    // Presets
     // ----------------------------
     const PRESETS = {
       fast:     { name: "Fast", desc: "Quick baseline for iteration.", nEstimators: 80,  maxRows: 20000, maxFeatures: "0.5", replacement: true },
@@ -1900,51 +1930,10 @@
       thorough: { name: "Thorough", desc: "More trees, more accuracy.",   nEstimators: 600, maxRows: 0,     maxFeatures: "0.5", replacement: true },
     };
 
-    function estimateDerivedFeatureCount() {
-      const target = APP.raw.targetCol;
-      if (!target) return null;
-
-      const meta = APP.raw.colMeta;
-      const cols = APP.raw.columns;
-
-      let cont = 0, cat = 0, date = 0;
-      for (const c of cols) {
-        if (c === target) continue;
-        const m = meta[c];
-        if (!m || !m.include) continue;
-        if (m.inferredType === "continuous") cont++;
-        else if (m.inferredType === "categorical") cat++;
-        else if (m.inferredType === "date") date++;
-      }
-
-      const DATE_PARTS = 12; // year,month,day,dow,doy,6 flags,elapsed => 12; plus _na below
-      const derived = (cont * 2) + (cat * 1) + (date * (DATE_PARTS + 1));
-      return derived;
-    }
-
-    function estimateSecondsForPreset(presetKey) {
-      const p = PRESETS[presetKey];
-      const coeff = APP.train.perfCoeff;
-      const fCount = estimateDerivedFeatureCount();
-      if (!coeff || !fCount) return null;
-
-      const rows = APP.raw.rows.length;
-      const effectiveRows = (p.maxRows && p.maxRows > 0) ? Math.min(rows, p.maxRows) : rows;
-      // approximate train fraction
-      const nTrain = Math.max(1, Math.floor(effectiveRows * (1 - (APP.setup.testFrac || 0.2))));
-      const est = coeff * (nTrain * fCount * p.nEstimators);
-      return est;
-    }
-
     function renderPresets() {
       const row = $("presetRow");
       row.innerHTML = Object.entries(PRESETS).map(([key, p]) => {
         const active = (APP.train.preset === key) ? "preset active" : "preset";
-        const eta = estimateSecondsForPreset(key);
-        const etaText = eta === null
-          ? `Estimated time: (calibrating…)`
-          : `Estimated time: ~${formatDuration(eta)}`;
-
         return `
           <div class="${active}" data-preset="${escapeHtml(key)}">
             <div class="title">
@@ -1955,7 +1944,6 @@
             <div class="muted2" style="margin-top:10px;">
               Trees: <span class="mono">${p.nEstimators}</span> · Max rows: <span class="mono">${p.maxRows || "all"}</span> · maxFeatures: <span class="mono">${p.maxFeatures}</span>
             </div>
-            <div class="eta">${escapeHtml(etaText)}</div>
           </div>
         `;
       }).join("");
@@ -1976,159 +1964,11 @@
     }
 
     // ----------------------------
-    // Worker-based training (supports Stop)
-    // ----------------------------
-    function revokeWorkerUrl() {
-      if (APP.train.workerUrl) {
-        try { URL.revokeObjectURL(APP.train.workerUrl); } catch {}
-      }
-      APP.train.workerUrl = null;
-      if (APP.train.workerUrlTimer) {
-        clearTimeout(APP.train.workerUrlTimer);
-        APP.train.workerUrlTimer = null;
-      }
-    }
-
-    function releaseTrainingWorker() {
-      if (APP.train.worker) {
-        try {
-          APP.train.worker.onmessage = null;
-          APP.train.worker.onerror = null;
-          APP.train.worker.onmessageerror = null;
-          APP.train.worker.terminate();
-        } catch {}
-        APP.train.worker = null;
-      }
-      revokeWorkerUrl();
-    }
-
-    function releaseTrainingResources() {
-      if (APP.train.countdownTimer) { clearInterval(APP.train.countdownTimer); APP.train.countdownTimer = null; }
-      APP.train.countdownStartMs = null;
-      APP.train.lastETASeconds = null;
-      releaseTrainingWorker();
-      APP.train.running = false;
-    }
-
-    function stopTrainingUI(message = "Stopped") {
-      releaseTrainingResources();
-
-      const etaEl = $("trainETA");
-      etaEl.style.display = "none";
-      etaEl.textContent = "ETA: —";
-
-      $("stopBtn").disabled = true;
-      $("trainBtn").disabled = !APP.raw.targetCol;
-      $("trainStatus").innerHTML = `<span class="pill warn">${escapeHtml(message)}</span>`;
-    }
-
-    function stopTrainingHard(message = "Stopped") {
-      stopTrainingUI(message);
-    }
-
-    function startCountdown(etaSeconds) {
-      APP.train.lastETASeconds = etaSeconds;
-      APP.train.countdownStartMs = performance.now();
-      const etaEl = $("trainETA");
-      etaEl.style.display = "inline-flex";
-
-      if (APP.train.countdownTimer) clearInterval(APP.train.countdownTimer);
-      APP.train.countdownTimer = setInterval(() => {
-        if (!APP.train.running) return;
-        const elapsed = (performance.now() - APP.train.countdownStartMs) / 1000;
-        const remaining = Math.max(0, (APP.train.lastETASeconds ?? 0) - elapsed);
-        etaEl.textContent = `ETA: ${formatDuration(remaining)}`;
-      }, 500);
-    }
-
-    function createTrainingWorker() {
-      const code = `
-        import { RandomForestRegression, RandomForestClassifier } from "https://esm.sh/ml-random-forest@2.1.0";
-
-        function now(){ return (self.performance && performance.now) ? performance.now() : Date.now(); }
-
-        self.onmessage = async (e) => {
-          const msg = e.data || {};
-          const { cmd } = msg;
-
-          try {
-            if (cmd === "calibrate") {
-              const { task, rfOptions, Xtrain, ytrain, calibTrees, calibRows } = msg;
-
-              const nRows = Math.min(calibRows, Xtrain.length);
-              const Xc = Xtrain.slice(0, nRows);
-              const yc = ytrain.slice(0, nRows);
-
-              const opt = { ...rfOptions, nEstimators: calibTrees };
-
-              const t0 = now();
-              const m = (task === "regression") ? new RandomForestRegression(opt) : new RandomForestClassifier(opt);
-              m.train(Xc, yc);
-              const t1 = now();
-
-              const seconds = (t1 - t0) / 1000;
-              self.postMessage({ phase: "calibrate", seconds, calibTrees, calibRows: nRows, features: (Xc[0] ? Xc[0].length : 0) });
-              return;
-            }
-
-            if (cmd === "train") {
-              const { task, rfOptions, Xtrain, ytrain, Xtest } = msg;
-
-              const t0 = now();
-              const m = (task === "regression") ? new RandomForestRegression(rfOptions) : new RandomForestClassifier(rfOptions);
-              m.train(Xtrain, ytrain);
-              const t1 = now();
-
-              let ypred = null;
-              try { ypred = m.predict(Xtest); } catch { ypred = null; }
-
-              let oobPred = null;
-              try { oobPred = m.predictOOB(); } catch { oobPred = null; }
-
-              let fi = null;
-              try { fi = m.featureImportance(); } catch { fi = null; }
-
-              const modelJson = m.toJSON();
-              const seconds = (t1 - t0) / 1000;
-
-              self.postMessage({
-                phase: "train_done",
-                seconds,
-                modelJson,
-                ypred,
-                oobPred,
-                fi
-              });
-              return;
-            }
-          } catch (err) {
-            self.postMessage({ phase: "error", message: (err && err.message) ? err.message : String(err) });
-          }
-        };
-      `;
-      const blob = new Blob([code], { type: "text/javascript" });
-      revokeWorkerUrl();
-      const url = URL.createObjectURL(blob);
-      const w = new Worker(url, { type: "module" });
-      // Best effort: revoke after worker spins up
-      APP.train.workerUrl = url;
-      if (APP.train.workerUrlTimer) clearTimeout(APP.train.workerUrlTimer);
-      APP.train.workerUrlTimer = setTimeout(() => revokeWorkerUrl(), 1000);
-      return w;
-    }
-
-    // ----------------------------
-    // Training flow (calibrate -> ETA -> train; Stop terminates worker)
+    // Training
     // ----------------------------
     async function trainModel() {
-      if (APP.train.running) return;
-
-      $("trainBtn").disabled = true;
-      $("stopBtn").disabled = false;
-      APP.train.running = true;
-
       $("trainStatus").innerHTML = `<span class="spinner"></span> Preparing data…`;
-      $("trainETA").style.display = "none";
+      $("trainBtn").disabled = true;
 
       await new Promise(r => setTimeout(r, 0));
 
@@ -2141,26 +1981,29 @@
 
       let built;
       try {
-        built = buildDatasetForTraining(null);
+        built = buildDataset();
       } catch (e) {
-        stopTrainingUI("Failed");
         $("trainStatus").innerHTML = `<span class="pill bad">Failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
+        $("trainBtn").disabled = false;
         return;
       }
 
       const { X, y, rowRefs, featureNames, baseForDerived, pipeline, task } = built;
 
       if (!X.length) {
-        stopTrainingUI("No usable rows");
         $("trainStatus").innerHTML = `<span class="pill bad">No usable rows</span> <span class="muted2">Check target parsing or transform choice.</span>`;
+        $("trainBtn").disabled = false;
         return;
       }
 
-      // split in main thread (cheap)
       const splitMode = effectiveSplitMode();
       let split;
-      if (splitMode === "time") split = splitTimeBased(rowRefs, APP.setup.splitDateCol, testFrac);
-      else split = splitRandom(X.length, testFrac, seed);
+      if (splitMode === "time") {
+        const dateCol = APP.setup.splitDateCol;
+        split = splitTimeBased(rowRefs, dateCol, testFrac);
+      } else {
+        split = splitRandom(X.length, testFrac, seed);
+      }
 
       const trainIdx = split.trainIdx;
       const testIdx = split.testIdx;
@@ -2174,152 +2017,85 @@
       const maxFeaturesParsed = parseMaxFeatures($("maxFeatures").value, featureNames.length);
       const rfOptions = { seed, maxFeatures: maxFeaturesParsed, replacement, nEstimators };
 
-      // create worker and begin calibration
-      APP.train.worker = createTrainingWorker();
+      $("trainStatus").innerHTML = `<span class="spinner"></span> Training (${task})…`;
+      await new Promise(r => setTimeout(r, 0));
 
-      const calibTrees = Math.min(30, Math.max(10, Math.floor(nEstimators / 8)));
-      const calibRows = Math.min(6000, Math.max(1500, Math.floor(Xtrain.length / 10)));
+      let model;
+      try {
+        model = (task === "regression") ? new RandomForestRegression(rfOptions) : new RandomForestClassifier(rfOptions);
+        model.train(Xtrain, ytrain);
+      } catch (e) {
+        $("trainStatus").innerHTML = `<span class="pill bad">Train failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
+        $("trainBtn").disabled = false;
+        return;
+      }
 
-      $("trainStatus").innerHTML = `<span class="spinner"></span> Calibrating on your device (quick) …`;
+      $("trainStatus").innerHTML = `<span class="spinner"></span> Scoring test split…`;
+      await new Promise(r => setTimeout(r, 0));
 
-      // handle worker events
-      APP.train.worker.onmessage = async (ev) => {
-        const msg = ev.data || {};
-        if (!APP.train.running) return;
+      let ypred;
+      try {
+        ypred = model.predict(Xtest);
+      } catch (e) {
+        $("trainStatus").innerHTML = `<span class="pill bad">Predict failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
+        $("trainBtn").disabled = false;
+        return;
+      }
 
-        if (msg.phase === "error") {
-          stopTrainingHard("Error");
-          $("trainStatus").innerHTML = `<span class="pill bad">Worker error</span> <span class="mono">${escapeHtml(msg.message || "unknown")}</span>`;
-          return;
-        }
+      let oobPred = null;
+      try { oobPred = model.predictOOB(); } catch {}
 
-        if (msg.phase === "calibrate") {
-          // coeff: seconds / (rows * features * trees)
-          const seconds = msg.seconds;
-          const rowsUsed = msg.calibRows;
-          const feats = msg.features || (featureNames.length);
-          const trees = msg.calibTrees;
+      let fi = null;
+      try { fi = model.featureImportance(); } catch { fi = null; }
 
-          const denom = Math.max(1, rowsUsed * feats * trees);
-          const coeff = seconds / denom;
+      const fiDerived = (fi && fi.length === featureNames.length)
+        ? featureNames.map((name, i) => ({ name, imp: Number.isFinite(fi[i]) ? fi[i] : 0 }))
+            .sort((a,b)=>b.imp-a.imp)
+        : [];
 
-          APP.train.perfCoeff = coeff;
-          try { localStorage.setItem("rf_perf_coeff_v1", String(coeff)); } catch {}
+      const fiBase = (fi && fi.length === featureNames.length)
+        ? aggregateFI(fi, featureNames, baseForDerived)
+        : [];
 
-          // estimate full training time on train split
-          const eta = coeff * (Xtrain.length * featureNames.length * nEstimators);
-          startCountdown(eta);
-          renderPresets();
+      const transform = pipeline.targetTransform;
+      let ytestRaw = ytest.slice();
+      let ypredRaw = ypred.slice();
 
-          $("trainStatus").innerHTML = `<span class="spinner"></span> Training (${task})…`;
+      if (pipeline.task === "regression" && transform === "log1p") {
+        ytestRaw = ytest.map(v => Math.expm1(v));
+        ypredRaw = ypred.map(v => Math.expm1(v));
+      }
 
-          // kick off full training
-          APP.train.worker.postMessage({
-            cmd: "train",
-            task,
-            rfOptions,
-            Xtrain,
-            ytrain,
-            Xtest
-          });
+      const invTarget = buildInverseMapping(pipeline.target.mapping);
 
-          return;
-        }
+      APP.train.rfOptions = rfOptions;
+      APP.train.model = model;
+      APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
+      APP.train.featureNames = featureNames;
+      APP.train.baseForDerived = baseForDerived;
+      APP.train.split = split;
+      APP.train.yTrain = ytrain;
+      APP.train.yTest = ytestRaw;
+      APP.train.yPred = ypredRaw;
+      APP.train.testRowRefs = testRowRefs;
+      APP.train.fiDerived = fiDerived;
+      APP.train.fiBase = fiBase;
 
-        if (msg.phase === "train_done") {
-          const trainSeconds = msg.seconds;
+      if (pipeline.task === "classification") {
+        const inv = invTarget || {};
+        APP.train.yPredLabel = ypred.map(v => String(inv[v] ?? v));
+        APP.train.yTestLabel = ytest.map(v => String(inv[v] ?? v));
+      } else {
+        APP.train.yPredLabel = ypredRaw.map(v => String(v));
+        APP.train.yTestLabel = ytestRaw.map(v => String(v));
+      }
 
-          // stop countdown
-          if (APP.train.countdownTimer) { clearInterval(APP.train.countdownTimer); APP.train.countdownTimer = null; }
-          $("trainETA").textContent = `ETA: 0s`;
-          $("trainETA").style.display = "none";
+      renderResults({ oobPred, ytrain });
 
-          // unpack results
-          const modelJson = msg.modelJson;
-          const ypred = msg.ypred;
-          const oobPred = msg.oobPred;
-          const fi = msg.fi;
+      $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
+      $("trainBtn").disabled = false;
 
-          // rebuild model object in main thread for serialization/compat
-          let model;
-          try {
-            model = (task === "regression") ? RandomForestRegression.load(modelJson) : RandomForestClassifier.load(modelJson);
-          } catch (e) {
-            // still keep JSON even if load fails
-            model = null;
-          }
-
-          // invert predictions if needed
-          const transform = pipeline.targetTransform;
-          let ytestRaw = ytest.slice();
-          let ypredRaw = (ypred ? ypred.slice() : []);
-
-          if (pipeline.task === "regression" && transform === "log1p") {
-            ytestRaw = ytest.map(v => Math.expm1(v));
-            ypredRaw = ypred ? ypred.map(v => Math.expm1(v)) : [];
-          }
-
-          const invTarget = buildInverseMapping(pipeline.target.mapping);
-
-          // compute FI derived + base
-          const fiDerived = (fi && fi.length === featureNames.length)
-            ? featureNames.map((name, i) => ({ name, imp: Number.isFinite(fi[i]) ? fi[i] : 0 }))
-                .sort((a,b)=>b.imp-a.imp)
-            : [];
-
-          const fiBase = (fi && fi.length === featureNames.length)
-            ? aggregateFI(fi, featureNames, baseForDerived)
-            : [];
-
-          // store
-          APP.train.rfOptions = rfOptions;
-          APP.train.model = model;
-          APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
-          APP.train.featureNames = featureNames;
-          APP.train.baseForDerived = baseForDerived;
-          APP.train.split = split;
-          APP.train.yTrain = ytrain;
-          APP.train.yTest = ytestRaw;
-          APP.train.yPred = ypredRaw;
-          APP.train.testRowRefs = testRowRefs;
-          APP.train.fiDerived = fiDerived;
-          APP.train.fiBase = fiBase;
-
-          if (pipeline.task === "classification") {
-            const inv = invTarget || {};
-            APP.train.yPredLabel = ypred ? ypred.map(v => String(inv[v] ?? v)) : [];
-            APP.train.yTestLabel = ytest.map(v => String(inv[v] ?? v));
-          } else {
-            APP.train.yPredLabel = ypredRaw.map(v => String(v));
-            APP.train.yTestLabel = ytestRaw.map(v => String(v));
-          }
-
-          // cleanup worker
-          releaseTrainingWorker();
-
-          // finish UI
-          APP.train.running = false;
-          $("stopBtn").disabled = true;
-          $("trainBtn").disabled = !APP.raw.targetCol;
-
-          $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Trained in ${formatDuration(trainSeconds)}.</span>`;
-
-          renderResults({ oobPred, ytrain });
-          gotoStep(3);
-          return;
-        }
-      };
-
-      // kick off calibration
-      APP.train.worker.postMessage({
-        cmd: "calibrate",
-        task,
-        rfOptions,
-        Xtrain,
-        ytrain,
-        calibTrees,
-        calibRows
-      });
+      gotoStep(3);
     }
 
     // ----------------------------
@@ -2604,31 +2380,30 @@ function invertTargetIfNeeded(yPred, artifact){
     function syncButtons() {
       $("continueToSetupBtn").disabled = !(APP.raw.rows.length && APP.raw.columns.length);
       $("continueToTrainBtn").disabled = !APP.raw.targetCol;
-      $("trainBtn").disabled = !APP.raw.targetCol || APP.train.running;
-      $("stopBtn").disabled = !APP.train.running;
+      $("trainBtn").disabled = !APP.raw.targetCol;
       updateExportUI();
     }
 
     function hardReset() {
-      stopTrainingHard("Reset");
-
       APP.step = 0;
       APP.raw = { fileName: null, rows: [], columns: [], colMeta: {}, targetCol: null };
       APP.setup = { splitMode: "auto", splitDateCol: null, testFrac: 0.2, taskMode: "auto", targetTransform: "none", maxRows: 50000, excluded: new Set() };
-      APP.train.preset = "balanced";
-      APP.train.rfOptions = null;
-      APP.train.model = null;
-      APP.train.pipeline = null;
-      APP.train.featureNames = [];
-      APP.train.baseForDerived = [];
-      APP.train.split = { trainIdx: [], testIdx: [] };
-      APP.train.yTrain = [];
-      APP.train.yTest = [];
-      APP.train.yPred = [];
-      APP.train.yPredLabel = [];
-      APP.train.testRowRefs = [];
-      APP.train.fiDerived = [];
-      APP.train.fiBase = [];
+      APP.train = {
+        preset: "balanced",
+        rfOptions: null,
+        model: null,
+        pipeline: null,
+        featureNames: [],
+        baseForDerived: [],
+        split: { trainIdx: [], testIdx: [] },
+        yTrain: [],
+        yTest: [],
+        yPred: [],
+        yPredLabel: [],
+        testRowRefs: [],
+        fiDerived: [],
+        fiBase: []
+      };
       APP.ui.predPage = 0;
       APP.ui.predFilter = "";
       APP.ui.colSort = { key: "name", dir: "asc" };
@@ -2655,16 +2430,10 @@ function invertTargetIfNeeded(yPred, artifact){
       $("pageSize").value = "50";
       $("importanceMode").value = "base";
 
-      // try to load previous perf coeff for pre-estimates
-      try {
-        const v = localStorage.getItem("rf_perf_coeff_v1");
-        const x = v ? Number(v) : null;
-        if (x && Number.isFinite(x) && x > 0) APP.train.perfCoeff = x;
-      } catch {}
-
+      APP.train.preset = "balanced";
       renderPresets();
+
       gotoStep(0);
-      syncButtons();
     }
 
     function handleParsed(rows, cols, fileName) {
@@ -2696,8 +2465,6 @@ function invertTargetIfNeeded(yPred, artifact){
       renderColumnTable();
       refreshSplitDateCol();
       syncSetupUI();
-
-      renderPresets();
       syncButtons();
     }
 
@@ -2723,60 +2490,19 @@ function invertTargetIfNeeded(yPred, artifact){
     }
 
     function sampleCsvText() {
-      const rows = ["price,year_made,product_size,state,sale_date,machine_hours"];
-      const sizes = ["Compact", "Small", "Medium", "Large"];
-      const states = ["CA", "TX", "WA", "NY", "FL", "IL", "PA", "OH", "GA", "NC"];
-      const sizeOffsets = {
-        Compact: -4200,
-        Small: -2200,
-        Medium: 0,
-        Large: 5200,
-      };
-      const stateOffsets = {
-        CA: 2600,
-        TX: -400,
-        WA: 900,
-        NY: 1400,
-        FL: -200,
-        IL: 300,
-        PA: 600,
-        OH: -500,
-        GA: -300,
-        NC: 200,
-      };
-      let seed = 987654321;
-      const rand = () => {
-        seed = (seed * 1664525 + 1013904223) % 4294967296;
-        return seed / 4294967296;
-      };
-      const randInt = (min, max) => Math.floor(rand() * (max - min + 1)) + min;
-      const pad2 = (value) => String(value).padStart(2, "0");
-      const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
-
-      for (let i = 0; i < 100; i += 1) {
-        const yearMade = randInt(1992, 2015);
-        const size = sizes[randInt(0, sizes.length - 1)];
-        const state = states[randInt(0, states.length - 1)];
-        const machineHours = randInt(300, 12000);
-        const saleYear = randInt(2009, 2013);
-        const saleMonth = randInt(1, 12);
-        const saleDay = randInt(1, daysInMonth(saleYear, saleMonth));
-        const saleDate = `${saleYear}-${pad2(saleMonth)}-${pad2(saleDay)}`;
-        const age = Math.max(0, saleYear - yearMade);
-        const noise = (rand() - 0.5) * 3600;
-        const price = 14000
-          + (yearMade - 1990) * 520
-          - machineHours * 0.35
-          - age * 280
-          + sizeOffsets[size]
-          + stateOffsets[state]
-          + noise;
-        const finalPrice = Math.max(2000, Math.round(price));
-
-        rows.push(`${finalPrice},${yearMade},${size},${state},${saleDate},${machineHours}`);
-      }
-
-      return rows.join("\n");
+      return [
+        "price,year_made,product_size,state,sale_date,machine_hours",
+        "12000,2008,Medium,CA,2011-01-13,4200",
+        "5400,1999,Small,TX,2010-07-02,8100",
+        "22000,2012,Large,WA,2011-11-20,1200",
+        "18000,2006,Medium,CA,2011-09-12,3900",
+        "2500,1995,Compact,NY,2009-03-05,11000",
+        "31000,2013,Large,FL,2012-04-18,800",
+        "9800,2004,Small,TX,2010-12-09,5600",
+        "7600,2001,Small,WA,2011-06-21,6400",
+        "15500,2007,Medium,NY,2011-10-30,4100",
+        "45000,2014,Large,CA,2012-05-09,300",
+      ].join("\n");
     }
 
     function parseSampleCsvText(text) {
@@ -2829,30 +2555,46 @@ function invertTargetIfNeeded(yPred, artifact){
       if (APP.raw.targetCol && APP.raw.colMeta[APP.raw.targetCol]) APP.raw.colMeta[APP.raw.targetCol].include = true;
       renderColumnTable();
       syncSetupUI();
-      renderPresets();
       syncButtons();
     });
 
-    $("taskMode").addEventListener("change", () => { APP.setup.taskMode = $("taskMode").value; syncSetupUI(); renderPresets(); });
-    $("targetTransform").addEventListener("change", () => { APP.setup.targetTransform = $("targetTransform").value; syncSetupUI(); renderPresets(); });
-    $("maxRows").addEventListener("change", () => { APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0); syncSetupUI(); renderPresets(); });
+    $("taskMode").addEventListener("change", () => {
+      APP.setup.taskMode = $("taskMode").value;
+      syncSetupUI();
+    });
 
-    $("splitMode").addEventListener("change", () => { APP.setup.splitMode = $("splitMode").value; syncSetupUI(); renderPresets(); });
-    $("splitDateCol").addEventListener("change", () => { APP.setup.splitDateCol = $("splitDateCol").value; syncSetupUI(); renderPresets(); });
-    $("testFrac").addEventListener("change", () => { APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.2)); syncSetupUI(); renderPresets(); });
+    $("targetTransform").addEventListener("change", () => {
+      APP.setup.targetTransform = $("targetTransform").value;
+      syncSetupUI();
+    });
+
+    $("maxRows").addEventListener("change", () => {
+      APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0);
+      syncSetupUI();
+    });
+
+    $("splitMode").addEventListener("change", () => {
+      APP.setup.splitMode = $("splitMode").value;
+      syncSetupUI();
+    });
+
+    $("splitDateCol").addEventListener("change", () => {
+      APP.setup.splitDateCol = $("splitDateCol").value;
+      syncSetupUI();
+    });
+
+    $("testFrac").addEventListener("change", () => {
+      APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.2));
+      syncSetupUI();
+    });
 
     $("colSearch").addEventListener("input", () => renderColumnTable());
     $("showOnlyIssues").addEventListener("change", () => renderColumnTable());
 
     $("trainBtn").addEventListener("click", trainModel);
-    $("stopBtn").addEventListener("click", () => stopTrainingHard("Stopped"));
-
-    const releaseOnUnload = () => releaseTrainingResources();
-    window.addEventListener("pagehide", releaseOnUnload);
-    window.addEventListener("beforeunload", releaseOnUnload);
 
     $("importanceMode").addEventListener("change", () => {
-      if (!APP.train.pipeline) return;
+      if (!APP.train.model) return;
       const mode = $("importanceMode").value;
       if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance");
       else renderFIChart(APP.train.fiBase, "importance");
@@ -2865,7 +2607,7 @@ function invertTargetIfNeeded(yPred, artifact){
     $("nextPage").addEventListener("click", () => { APP.ui.predPage = APP.ui.predPage + 1; renderPredTable(); });
 
     $("downloadPredCsvBtn").addEventListener("click", () => {
-      if (!APP.train.pipeline) return;
+      if (!APP.train.model) return;
       const csv = buildPredictionsCsv();
       downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "test_predictions.csv");
     });
@@ -2875,7 +2617,7 @@ function invertTargetIfNeeded(yPred, artifact){
       if (!artifact) return;
 
       const sample = $("sampleCode").textContent || "";
-      const predCsv = APP.train.pipeline ? buildPredictionsCsv() : "";
+      const predCsv = APP.train.model ? buildPredictionsCsv() : "";
 
       const readme = `# Random Forest Artifact
 
@@ -2905,22 +2647,12 @@ Compatibility
     });
 
     // ----------------------------
-    // Sort wiring
-    // ----------------------------
-    wireReviewSortHeaders();
-
-    // ----------------------------
     // Init
     // ----------------------------
-    // restore past coeff if available (for pre-estimates)
-    try {
-      const v = localStorage.getItem("rf_perf_coeff_v1");
-      const x = v ? Number(v) : null;
-      if (x && Number.isFinite(x) && x > 0) APP.train.perfCoeff = x;
-    } catch {}
-
     renderStepper();
     renderPresets();
+    wireReviewSortHeaders();
+
     hardReset();
 
     // keep preset values synced on first load

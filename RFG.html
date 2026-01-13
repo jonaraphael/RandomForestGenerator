@@ -2723,19 +2723,60 @@ function invertTargetIfNeeded(yPred, artifact){
     }
 
     function sampleCsvText() {
-      return [
-        "price,year_made,product_size,state,sale_date,machine_hours",
-        "12000,2008,Medium,CA,2011-01-13,4200",
-        "5400,1999,Small,TX,2010-07-02,8100",
-        "22000,2012,Large,WA,2011-11-20,1200",
-        "18000,2006,Medium,CA,2011-09-12,3900",
-        "2500,1995,Compact,NY,2009-03-05,11000",
-        "31000,2013,Large,FL,2012-04-18,800",
-        "9800,2004,Small,TX,2010-12-09,5600",
-        "7600,2001,Small,WA,2011-06-21,6400",
-        "15500,2007,Medium,NY,2011-10-30,4100",
-        "45000,2014,Large,CA,2012-05-09,300",
-      ].join("\n");
+      const rows = ["price,year_made,product_size,state,sale_date,machine_hours"];
+      const sizes = ["Compact", "Small", "Medium", "Large"];
+      const states = ["CA", "TX", "WA", "NY", "FL", "IL", "PA", "OH", "GA", "NC"];
+      const sizeOffsets = {
+        Compact: -4200,
+        Small: -2200,
+        Medium: 0,
+        Large: 5200,
+      };
+      const stateOffsets = {
+        CA: 2600,
+        TX: -400,
+        WA: 900,
+        NY: 1400,
+        FL: -200,
+        IL: 300,
+        PA: 600,
+        OH: -500,
+        GA: -300,
+        NC: 200,
+      };
+      let seed = 987654321;
+      const rand = () => {
+        seed = (seed * 1664525 + 1013904223) % 4294967296;
+        return seed / 4294967296;
+      };
+      const randInt = (min, max) => Math.floor(rand() * (max - min + 1)) + min;
+      const pad2 = (value) => String(value).padStart(2, "0");
+      const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
+
+      for (let i = 0; i < 100; i += 1) {
+        const yearMade = randInt(1992, 2015);
+        const size = sizes[randInt(0, sizes.length - 1)];
+        const state = states[randInt(0, states.length - 1)];
+        const machineHours = randInt(300, 12000);
+        const saleYear = randInt(2009, 2013);
+        const saleMonth = randInt(1, 12);
+        const saleDay = randInt(1, daysInMonth(saleYear, saleMonth));
+        const saleDate = `${saleYear}-${pad2(saleMonth)}-${pad2(saleDay)}`;
+        const age = Math.max(0, saleYear - yearMade);
+        const noise = (rand() - 0.5) * 3600;
+        const price = 14000
+          + (yearMade - 1990) * 520
+          - machineHours * 0.35
+          - age * 280
+          + sizeOffsets[size]
+          + stateOffsets[state]
+          + noise;
+        const finalPrice = Math.max(2000, Math.round(price));
+
+        rows.push(`${finalPrice},${yearMade},${size},${state},${saleDate},${machineHours}`);
+      }
+
+      return rows.join("\n");
     }
 
     function parseSampleCsvText(text) {

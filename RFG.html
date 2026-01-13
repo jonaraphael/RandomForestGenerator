@@ -226,6 +226,54 @@
       border-bottom: 1px solid rgba(139,92,246,0.25);
     }
 
+    #secondaryMatrix{
+      position: absolute;
+      inset: 0;
+      overflow: auto;
+      border-radius: 12px;
+    }
+    table.cm{
+      border-collapse: collapse;
+      font-size: 12px;
+      width: max-content;
+      min-width: 100%;
+    }
+    table.cm th, table.cm td{
+      border-bottom: 1px solid rgba(234,240,255,0.09);
+      border-right: 1px solid rgba(234,240,255,0.09);
+      padding: 6px 8px;
+      text-align: right;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    table.cm th{
+      text-align: center;
+      background: rgba(15,24,51,0.94);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    table.cm th.stickyCol{
+      left: 0;
+      z-index: 3;
+    }
+    table.cm td.stickyCol{
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background: rgba(10,16,34,0.92);
+      text-align: left;
+      font-weight: 600;
+    }
+    td.cmCell{
+      font-variant-numeric: tabular-nums;
+      min-width: 48px;
+    }
+    td.cmDiag{
+      outline: 2px solid rgba(50,213,131,0.55);
+      outline-offset: -2px;
+    }
+
     .two{display:grid;grid-template-columns: 1fr 1fr;gap:12px}
     .three{display:grid;grid-template-columns: 1.2fr 0.8fr;gap:12px}
     @media(max-width:980px){.two,.three{grid-template-columns:1fr}}
@@ -678,8 +726,13 @@
                 <span class="pill" id="secondaryChartPill">—</span>
               </div>
             </div>
+            <div class="row hidden" id="classFocusRow" style="margin-bottom:8px;">
+              <select id="classFocus" style="width:260px;"></select>
+              <div class="muted2" id="classMetrics">—</div>
+            </div>
             <div class="chartBox">
               <canvas id="secondaryChart"></canvas>
+              <div id="secondaryMatrix" class="hidden"></div>
             </div>
             <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
           </div>
@@ -1915,6 +1968,18 @@
       return null;
     }
 
+    function clearSecondaryViz() {
+      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+      const m = $("secondaryMatrix");
+      if (m) m.innerHTML = "";
+      hide($("secondaryMatrix"));
+      show($("secondaryChart"));
+      hide($("classFocusRow"));
+      const sel = $("classFocus");
+      if (sel) sel.onchange = null;
+      if ($("classMetrics")) $("classMetrics").textContent = "—";
+    }
+
     function renderFIChart(pairs, titleLabel) {
       const top = pairs.slice(0, 20);
       const labels = top.map(x => x.name);
@@ -1940,6 +2005,8 @@
     }
 
     function renderRegressionScatter(yTrue, yPred) {
+      clearSecondaryViz();
+
       const n = yTrue.length;
       const maxPts = Math.min(2000, n);
       const rng = mulberry32(1337);
@@ -1993,48 +2060,91 @@
     }
 
     function renderConfusionMatrix(yTrue, yPred, invMap, maxClasses = 10) {
-      const numClasses = Object.keys(invMap || {}).length || 0;
-      const classes = Array.from({ length: numClasses }, (_, i) => i);
+      clearSecondaryViz();
+      hide($("secondaryChart"));
+      show($("secondaryMatrix"));
+      show($("classFocusRow"));
+
+      const labelOf = (c) => (invMap && invMap[c] !== undefined) ? String(invMap[c]) : String(c);
 
       const support = new Map();
       for (const t of yTrue) support.set(t, (support.get(t) || 0) + 1);
-      classes.sort((a,b)=>(support.get(b)||0)-(support.get(a)||0));
-      const top = classes.slice(0, Math.min(maxClasses, classes.length));
+      const classes = Array.from(support.keys()).sort((a, b) => (support.get(b) || 0) - (support.get(a) || 0));
+      const shown = classes.slice(0, Math.min(maxClasses, classes.length));
 
-      const labelOf = (c) => (invMap && invMap[c] !== undefined) ? String(invMap[c]) : String(c);
-      const labels = top.map(labelOf);
+      const idx = new Map(shown.map((c, i) => [c, i]));
+      const k = shown.length;
+      const mat = Array.from({ length: k }, () => new Array(k).fill(0));
+      const rowSum = new Array(k).fill(0);
 
-      const counts = top.map(() => new Map());
       for (let i = 0; i < yTrue.length; i++) {
-        const t = yTrue[i];
-        const p = yPred[i];
-        const j = top.indexOf(t);
-        if (j === -1) continue;
-        counts[j].set(p, (counts[j].get(p) || 0) + 1);
+        const ti = idx.get(yTrue[i]);
+        const pi = idx.get(yPred[i]);
+        if (ti === undefined || pi === undefined) continue;
+        mat[ti][pi] += 1;
+        rowSum[ti] += 1;
       }
 
-      const accRow = top.map((t, i) => {
-        const diag = counts[i].get(t) || 0;
-        const sup = support.get(t) || 1;
-        return diag / sup;
-      });
+      let maxFrac = 0;
+      for (let r = 0; r < k; r++) {
+        const denom = Math.max(1, rowSum[r]);
+        for (let c = 0; c < k; c++) maxFrac = Math.max(maxFrac, mat[r][c] / denom);
+      }
+      maxFrac = Math.max(1e-9, maxFrac);
 
-      const ctx = $("secondaryChart").getContext("2d");
-      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+      const head = [
+        `<th class="stickyCol">true \\\\ pred</th>`,
+        ...shown.map(c => `<th>${escapeHtml(labelOf(c))}</th>`),
+      ].join("");
 
-      APP.ui.charts.secondary = new Chart(ctx, {
-        type: "bar",
-        data: { labels, datasets: [{ label: "per-class accuracy (top classes)", data: accRow }] },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            x: { ticks: { color: "rgba(234,240,255,0.75)" }, grid: { display: false } },
-            y: { min: 0, max: 1, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } }
-          }
+      const rows = [];
+      for (let r = 0; r < k; r++) {
+        const trLabel = escapeHtml(labelOf(shown[r]));
+        const denom = Math.max(1, rowSum[r]);
+        const cells = [];
+        cells.push(`<td class="stickyCol">${trLabel}</td>`);
+        for (let c = 0; c < k; c++) {
+          const v = mat[r][c];
+          const frac = v / denom;
+          const a = 0.10 + 0.74 * Math.pow(frac / maxFrac, 0.85);
+          const isDiag = (r === c);
+          const cls = `cmCell${isDiag ? " cmDiag" : ""}`;
+          const title = `${labelOf(shown[r])} → ${labelOf(shown[c])}: ${v} (${(frac * 100).toFixed(1)}%)`;
+          cells.push(`<td class="${cls}" title="${escapeHtml(title)}" style="background: rgba(139,92,246,${a.toFixed(3)});">${v}</td>`);
         }
-      });
+        rows.push(`<tr>${cells.join("")}</tr>`);
+      }
+
+      $("secondaryMatrix").innerHTML = `<table class="cm"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
+
+      const sel = $("classFocus");
+      const cur = sel.value;
+      const opts = [`<option value="">(all classes)</option>`]
+        .concat(shown.map(c => `<option value="${escapeHtml(String(c))}">${escapeHtml(labelOf(c))}</option>`));
+      sel.innerHTML = opts.join("");
+      if (cur) sel.value = cur;
+
+      const updateMetrics = () => {
+        const v = sel.value;
+        if (!v) { $("classMetrics").textContent = "Select a class for precision/recall/micro-F1 (one-vs-rest)."; return; }
+        const clsId = Number(v);
+        let tp = 0, fp = 0, fn = 0, supportN = 0;
+        for (let i = 0; i < yTrue.length; i++) {
+          const t = yTrue[i], p = yPred[i];
+          if (t === clsId) { supportN++; if (p === clsId) tp++; else fn++; }
+          else { if (p === clsId) fp++; }
+        }
+        const prec = tp / Math.max(1, tp + fp);
+        const rec = tp / Math.max(1, tp + fn);
+        const f1 = (prec + rec) ? (2 * prec * rec) / (prec + rec) : 0;
+        $("classMetrics").innerHTML =
+          `Precision <span class="mono">${formatNum(prec, 4)}</span> · ` +
+          `Recall <span class="mono">${formatNum(rec, 4)}</span> · ` +
+          `Micro-F1 <span class="mono">${formatNum(f1, 4)}</span> · ` +
+          `Support <span class="mono">${supportN}</span>`;
+      };
+      sel.onchange = updateMetrics;
+      updateMetrics();
     }
 
     // ----------------------------
@@ -2640,10 +2750,10 @@
           );
         }
 
-        $("secondaryChartTitle").textContent = "Per-class accuracy (top classes)";
+        $("secondaryChartTitle").textContent = "Confusion matrix (top classes)";
         $("secondaryChartPill").textContent = `classes=${pl.target.numClasses}`;
-        $("secondaryChartHint").textContent = "This highlights which labels the model struggles with. For many classes, we show only the most frequent.";
-        renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 10);
+        $("secondaryChartHint").textContent = "Rows are true labels, columns are predicted. Cell shading is row-normalized; diagonal highlighted. For many classes, we show only the most frequent.";
+        renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 15);
       }
 
       const mode = $("importanceMode").value;

@@ -219,6 +219,12 @@
       font-weight:600;
     }
     tbody tr:nth-child(2n){background:rgba(255,255,255,0.015)}
+    tr.groupRow td{
+      background: rgba(139,92,246,0.10);
+      color: rgba(234,240,255,0.92);
+      font-weight: 650;
+      border-bottom: 1px solid rgba(139,92,246,0.25);
+    }
 
     .two{display:grid;grid-template-columns: 1fr 1fr;gap:12px}
     .three{display:grid;grid-template-columns: 1.2fr 0.8fr;gap:12px}
@@ -526,7 +532,7 @@
             <div class="callout" style="margin-bottom:10px;">
               <div style="font-weight:650;margin-bottom:6px;">Quick checks</div>
               <div class="muted2">
-                You can train immediately. If anything looks off, expand “Review columns” below to override types or exclude ID-like columns.
+                You can train immediately. If anything looks off, expand “Review columns” below to adjust typing (cont/cat/date) or exclude columns.
               </div>
             </div>
 
@@ -536,39 +542,40 @@
 
               <div class="two" style="margin-bottom:10px;">
                 <div class="field">
+                  <label for="maxCard">max_card (cat vs cont threshold)</label>
+                  <input id="maxCard" type="number" min="1" step="1" value="50" />
+                  <div class="muted2">If an integer column has ≤ max_card unique values, treat it as categorical.</div>
+                </div>
+                <div class="field">
                   <label for="colSearch">Search columns</label>
                   <input id="colSearch" type="text" placeholder="Type to filter…" />
                 </div>
-                <div class="field">
-                  <label for="showOnlyIssues">Filter</label>
-                  <select id="showOnlyIssues">
-                    <option value="all" selected>All columns</option>
-                    <option value="issues">Only needs review</option>
-                    <option value="excluded">Only excluded</option>
-                  </select>
-                </div>
+              </div>
+
+              <div class="field" style="margin-bottom:10px;">
+                <label for="showOnlyIssues">Filter</label>
+                <select id="showOnlyIssues">
+                  <option value="all" selected>All columns</option>
+                  <option value="idlike">Only ID-like</option>
+                  <option value="excluded">Only excluded</option>
+                </select>
               </div>
 
               <div class="scroll" style="max-height:420px;">
                 <table id="reviewColumnsTable">
                   <thead>
                     <tr>
-                      <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="name">Column <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="confidence">Confidence <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
+                      <th>Use</th>
+                      <th>Column</th>
+                      <th>Type</th>
+                      <th>Missing%</th>
+                      <th>Unique (sample)</th>
+                      <th>Flags</th>
+                      <th>Examples</th>
                     </tr>
                   </thead>
                   <tbody id="colConfigBody"></tbody>
                 </table>
-              </div>
-
-              <div class="muted2" style="margin-top:10px;">
-                “Confidence” is a heuristic based on sample parseability and cardinality. ID-like columns often look predictive but can harm robustness.
               </div>
             </details>
           </div>
@@ -775,7 +782,7 @@
         fileName: null,
         rows: [],
         columns: [],
-        colMeta: {}, // {col: {inferredType, confidence, missingFrac, uniqueSample, examples[], flags:{idLike,lowConfidence}, include:true}}
+        colMeta: {}, // {col: {inferredType, missingFrac, uniqueSample, examples[], flags:{idLike,idByName}, include:true}}
         targetCol: null
       },
       setup: {
@@ -785,7 +792,17 @@
         taskMode: "auto",
         targetTransform: "none",
         maxRows: 50000,
-        excluded: new Set()
+        maxCard: 50,
+        forceDate: "",
+        forceCat: "",
+        forceCont: "",
+        excludeCols: "",
+        excluded: new Set(),
+        forcedTypes: {
+          date: new Set(),
+          categorical: new Set(),
+          continuous: new Set(),
+        },
       },
       train: {
         preset: "balanced",
@@ -820,7 +837,6 @@
         parseSeq: 0,
         predPage: 0,
         predFilter: "",
-        colSort: { key: "name", dir: "asc" }
       }
     };
 
@@ -1110,28 +1126,6 @@
     }
 
     // ----------------------------
-    // Column sort helpers
-    // ----------------------------
-    function typeRank(t) {
-      if (t === "continuous") return 0;
-      if (t === "categorical") return 1;
-      if (t === "date") return 2;
-      return 3;
-    }
-
-    function flagsRank(m) {
-      let r = 0;
-      if (m?.flags?.idLike) r += 2;
-      if (m?.flags?.lowConfidence) r += 1;
-      return r;
-    }
-
-    function sortIndicatorText(isActive, dir) {
-      if (!isActive) return "";
-      return dir === "asc" ? "▲" : "▼";
-    }
-
-    // ----------------------------
     // Stepper
     // ----------------------------
     function renderStepper() {
@@ -1179,7 +1173,7 @@
     // ----------------------------
     // Inference + metadata
     // ----------------------------
-    function inferColumnType(col, rows) {
+    function inferColumnType(col, rows, { maxCard, forceType } = {}) {
       const maxN = Math.min(rows.length, 2000);
       let nonEmpty = 0, numeric = 0, integerish = 0, dateish = 0;
       const uniq = new Set();
@@ -1210,17 +1204,14 @@
       const fracDate = nonEmpty ? (dateish / nonEmpty) : 0;
       const fracInt = numeric ? (integerish / numeric) : 0;
 
-      let inferred = "categorical";
-      let confidence = 0.55;
-
-      if (fracDate >= 0.85 && fracNum < 0.40) { inferred = "date"; confidence = Math.min(0.98, 0.70 + 0.30 * fracDate); }
+      let inferred;
+      if (fracDate >= 0.85 && fracNum < 0.40) inferred = "date";
       else if (fracNum >= 0.92) {
-        if (fracInt >= 0.98 && uniqueSample <= 50) { inferred = "categorical"; confidence = 0.85; }
-        else if (uniqueSample <= 20 && fracInt >= 0.90) { inferred = "categorical"; confidence = 0.80; }
-        else { inferred = "continuous"; confidence = Math.min(0.98, 0.70 + 0.30 * fracNum); }
+        const maxCardValue = Math.max(1, Math.floor(Number(maxCard) || 50));
+        const isIntish = (fracInt >= 0.98);
+        inferred = (isIntish && uniqueSample <= maxCardValue) ? "categorical" : "continuous";
       } else {
         inferred = "categorical";
-        confidence = Math.max(0.55, 0.65 - 0.20 * (fracNum + fracDate));
       }
 
       const name = col.toLowerCase();
@@ -1229,47 +1220,20 @@
 
       const idLike = idByName || (inferred !== "date" && fracInt >= 0.95 && uniqueRatio >= 0.95 && uniqueSample >= 50);
 
+      const forced = forceType || null;
+      if (forced === "date" || forced === "categorical" || forced === "continuous") inferred = forced;
+
       return {
         inferredType: inferred,
-        confidence,
         missingFrac,
         uniqueSample,
         examples,
         flags: {
           idLike,
-          lowConfidence: confidence < 0.70
+          idByName
         },
         include: true
       };
-    }
-
-    function confidenceLabel(c) {
-      if (c >= 0.85) return { txt: "High", cls: "pill good" };
-      if (c >= 0.70) return { txt: "Med", cls: "pill warn" };
-      return { txt: "Low", cls: "pill bad" };
-    }
-
-    // ----------------------------
-    // Column sort wire-up
-    // ----------------------------
-    function wireReviewSortHeaders() {
-      const table = $("reviewColumnsTable");
-      if (!table) return;
-
-      table.querySelectorAll("th.sortable[data-sort]").forEach(th => {
-        th.addEventListener("click", () => {
-          const key = th.getAttribute("data-sort");
-          if (!key) return;
-
-          if (APP.ui.colSort.key === key) {
-            APP.ui.colSort.dir = (APP.ui.colSort.dir === "asc") ? "desc" : "asc";
-          } else {
-            APP.ui.colSort.key = key;
-            APP.ui.colSort.dir = "asc";
-          }
-          renderColumnTable();
-        });
-      });
     }
 
     // ----------------------------
@@ -1292,16 +1256,172 @@
     // ----------------------------
     // Setup rendering
     // ----------------------------
-    function computeNeedsReview() {
+    function serializeSet(set) {
+      return Array.from(set).sort((a, b) => a.localeCompare(b)).join(",");
+    }
+
+    function syncHiddenTypingLists() {
+      APP.setup.excludeCols = serializeSet(APP.setup.excluded);
+      APP.setup.forceDate = serializeSet(APP.setup.forcedTypes.date);
+      APP.setup.forceCat = serializeSet(APP.setup.forcedTypes.categorical);
+      APP.setup.forceCont = serializeSet(APP.setup.forcedTypes.continuous);
+    }
+
+    function forcedTypeForColumn(col) {
+      if (APP.setup.forcedTypes.date.has(col)) return "date";
+      if (APP.setup.forcedTypes.categorical.has(col)) return "categorical";
+      if (APP.setup.forcedTypes.continuous.has(col)) return "continuous";
+      return null;
+    }
+
+    function recomputeColumnMeta() {
+      APP.setup.maxCard = Math.max(1, Math.floor(parseNum($("maxCard")?.value) || 50));
+
+      const meta = {};
+      for (const c of APP.raw.columns) {
+        const forced = forcedTypeForColumn(c);
+        const auto = inferColumnType(c, APP.raw.rows, { maxCard: APP.setup.maxCard, forceType: null });
+        const cur = inferColumnType(c, APP.raw.rows, { maxCard: APP.setup.maxCard, forceType: forced });
+        meta[c] = { ...cur, autoType: auto.inferredType };
+        meta[c].include = !APP.setup.excluded.has(c);
+      }
+      APP.raw.colMeta = meta;
+
+      const targetCol = APP.raw.targetCol;
+      if (targetCol && APP.raw.colMeta[targetCol]) APP.raw.colMeta[targetCol].include = true;
+    }
+
+    function computeTypeCounts() {
       const meta = APP.raw.colMeta;
-      let n = 0;
+      const counts = { date: 0, categorical: 0, continuous: 0, excluded: 0 };
       for (const c of APP.raw.columns) {
         const m = meta[c];
         if (!m) continue;
-        if (!m.include) continue;
-        if (m.flags.lowConfidence) n++;
+        if (!m.include) { counts.excluded++; continue; }
+        if (m.inferredType === "date") counts.date++;
+        else if (m.inferredType === "continuous") counts.continuous++;
+        else counts.categorical++;
       }
-      return n;
+      return { counts, maxCard: APP.setup.maxCard };
+    }
+
+    function renderColumnTable() {
+      const meta = APP.raw.colMeta;
+      const target = APP.raw.targetCol;
+      const q = normStr($("colSearch")?.value).toLowerCase();
+      const filterMode = $("showOnlyIssues")?.value || "all";
+
+      const groups = [
+        { key: "continuous", title: "Continuous" },
+        { key: "categorical", title: "Categorical" },
+        { key: "date", title: "Date" },
+        { key: "excluded", title: "Excluded" },
+      ];
+
+      const rows = [];
+
+      for (const g of groups) {
+        const colsInGroup = APP.raw.columns.filter(col => {
+          if (q && !col.toLowerCase().includes(q)) return false;
+          const m = meta[col];
+          if (!m) return false;
+
+          const groupKey = m.include ? m.inferredType : "excluded";
+          if (groupKey !== g.key) return false;
+
+          if (filterMode === "idlike") return Boolean(m.flags?.idLike);
+          if (filterMode === "excluded") return !m.include;
+          return true;
+        });
+
+        if (!colsInGroup.length) continue;
+
+        rows.push(`<tr class="groupRow"><td colspan="7">${escapeHtml(g.title)} <span class="muted2">(${colsInGroup.length})</span></td></tr>`);
+
+        for (const col of colsInGroup) {
+          const m = meta[col];
+          const missPct = (m.missingFrac * 100);
+          const forced = forcedTypeForColumn(col);
+
+          const includeDisabled = (target && col === target) ? "disabled" : "";
+          const includeChecked = (m.include || (target && col === target)) ? "checked" : "";
+          const includeBox = `<input type="checkbox" data-include="${escapeHtml(col)}" ${includeChecked} ${includeDisabled} />`;
+
+          const typeSelect = `
+            <select data-coltype="${escapeHtml(col)}" style="width:170px;">
+              <option value="categorical" ${m.inferredType==="categorical"?"selected":""}>categorical</option>
+              <option value="continuous" ${m.inferredType==="continuous"?"selected":""}>continuous</option>
+              <option value="date" ${m.inferredType==="date"?"selected":""}>date</option>
+            </select>
+            ${forced ? `<div class="muted2">auto=${escapeHtml(m.autoType || "—")}</div>` : ""}
+          `;
+
+          const flags = [];
+          if (m.flags?.idLike) flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          if (forced) flags.push(`<span class="pill" title="Manually overridden">Forced</span>`);
+          const flagsHtml = flags.length ? flags.join(" ") : `<span class="muted2">—</span>`;
+
+          const examplesFull = (m.examples || [])
+            .slice(0, 3)
+            .map(x => truncate(x, 80))
+            .join(", ");
+          const examples = truncate(examplesFull, 200);
+
+          rows.push(`
+            <tr>
+              <td>${includeBox}</td>
+              <td class="mono">${escapeHtml(col)}</td>
+              <td>${typeSelect}</td>
+              <td>${escapeHtml(missPct.toFixed(1) + "%")}</td>
+              <td>${escapeHtml(String(m.uniqueSample))}</td>
+              <td>${flagsHtml}</td>
+              <td title="${escapeHtml(examples)}">${escapeHtml(examples)}</td>
+            </tr>
+          `);
+        }
+      }
+
+      $("colConfigBody").innerHTML = rows.join("");
+
+      $("colConfigBody").querySelectorAll("input[type=checkbox][data-include]").forEach(cb => {
+        cb.addEventListener("change", () => {
+          const col = cb.getAttribute("data-include");
+          const targetCol = APP.raw.targetCol;
+          if (targetCol && col === targetCol) return;
+          if (cb.checked) APP.setup.excluded.delete(col);
+          else APP.setup.excluded.add(col);
+          syncHiddenTypingLists();
+          recomputeColumnMeta();
+          refreshSplitDateCol();
+          syncSetupUI();
+          renderColumnTable();
+          syncButtons();
+        });
+      });
+
+      $("colConfigBody").querySelectorAll("select[data-coltype]").forEach(sel => {
+        sel.addEventListener("change", () => {
+          const col = sel.getAttribute("data-coltype");
+          const picked = sel.value;
+          APP.setup.forcedTypes.date.delete(col);
+          APP.setup.forcedTypes.categorical.delete(col);
+          APP.setup.forcedTypes.continuous.delete(col);
+
+          const autoType = meta[col]?.autoType;
+          if (picked !== autoType) {
+            if (picked === "date") APP.setup.forcedTypes.date.add(col);
+            else if (picked === "categorical") APP.setup.forcedTypes.categorical.add(col);
+            else if (picked === "continuous") APP.setup.forcedTypes.continuous.add(col);
+          }
+
+          syncHiddenTypingLists();
+          recomputeColumnMeta();
+          refreshSplitDateCol();
+          syncSetupUI();
+          renderColumnTable();
+          syncButtons();
+        });
+      });
     }
 
     function listDateColumns() {
@@ -1337,8 +1457,8 @@
       $("rowsPill").textContent = `Rows: ${APP.raw.rows.length}`;
       $("colsPill").textContent = `Columns: ${APP.raw.columns.length}`;
 
-      const needs = computeNeedsReview();
-      $("reviewPill").textContent = `Needs review: ${needs}`;
+      const { counts, maxCard } = computeTypeCounts();
+      $("reviewPill").textContent = `Typing: cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date} · max_card=${maxCard}`;
 
       const hasTarget = !!APP.raw.targetCol;
       $("continueToTrainBtn").disabled = !hasTarget;
@@ -1374,7 +1494,7 @@
 
         const idLike = APP.raw.columns.filter(cc => APP.raw.colMeta[cc]?.include && APP.raw.colMeta[cc]?.flags?.idLike);
         const idHint = idLike.length
-          ? `<div class="muted2" style="margin-top:6px;">We flagged ${idLike.length} ID-like column(s). Consider excluding them in “Review columns” if you care about robustness.</div>`
+          ? `<div class="muted2" style="margin-top:6px;">We flagged ${idLike.length} ID-like column(s). Consider adding them to <span class="mono">exclude_cols</span> if you care about robustness.</div>`
           : ``;
 
         c.className = wantsTime ? "callout good" : "callout";
@@ -1390,163 +1510,6 @@
       $("targetSelect").innerHTML = `<option value="" disabled ${APP.raw.targetCol ? "" : "selected"}>(select a column)</option>` + options;
 
       if (APP.raw.targetCol) $("targetSelect").value = APP.raw.targetCol;
-    }
-
-    function renderColumnTable() {
-      const meta = APP.raw.colMeta;
-      const target = APP.raw.targetCol;
-
-      document.querySelectorAll("#reviewColumnsTable th.sortable[data-sort]").forEach(th => {
-        const k = th.getAttribute("data-sort");
-        const ind = th.querySelector(".sort-indicator");
-        if (!ind) return;
-        ind.textContent = sortIndicatorText(k === APP.ui.colSort.key, APP.ui.colSort.dir);
-      });
-
-      const q = normStr($("colSearch").value).toLowerCase();
-      const filterMode = $("showOnlyIssues").value;
-
-      const sortKey = APP.ui.colSort?.key || "name";
-      const sortDir = APP.ui.colSort?.dir || "asc";
-      const dirMul = (sortDir === "asc") ? 1 : -1;
-
-      const colsSorted = APP.raw.columns.slice().sort((a, b) => {
-        const ma = meta[a], mb = meta[b];
-
-        if (APP.raw.targetCol) {
-          if (a === APP.raw.targetCol && b !== APP.raw.targetCol) return -1;
-          if (b === APP.raw.targetCol && a !== APP.raw.targetCol) return 1;
-        }
-
-        let va, vb;
-        switch (sortKey) {
-          case "include":
-            va = (ma?.include ? 1 : 0);
-            vb = (mb?.include ? 1 : 0);
-            break;
-          case "name":
-            va = a.toLowerCase();
-            vb = b.toLowerCase();
-            break;
-          case "type":
-            va = typeRank(ma?.inferredType);
-            vb = typeRank(mb?.inferredType);
-            break;
-          case "confidence":
-            va = ma?.confidence ?? 0;
-            vb = mb?.confidence ?? 0;
-            break;
-          case "missing":
-            va = ma?.missingFrac ?? 0;
-            vb = mb?.missingFrac ?? 0;
-            break;
-          case "unique":
-            va = ma?.uniqueSample ?? 0;
-            vb = mb?.uniqueSample ?? 0;
-            break;
-          case "flags":
-            va = flagsRank(ma);
-            vb = flagsRank(mb);
-            break;
-          case "examples":
-            va = (ma?.examples?.[0] ?? "").toLowerCase();
-            vb = (mb?.examples?.[0] ?? "").toLowerCase();
-            break;
-          default:
-            va = a.toLowerCase();
-            vb = b.toLowerCase();
-        }
-
-        if (typeof va === "number" && typeof vb === "number") {
-          if (va === vb) return 0;
-          return (va < vb ? -1 : 1) * dirMul;
-        } else {
-          va = String(va);
-          vb = String(vb);
-          if (va === vb) return 0;
-          return (va < vb ? -1 : 1) * dirMul;
-        }
-      });
-
-      const rows = colsSorted
-        .filter(c => {
-          if (!q) return true;
-          return c.toLowerCase().includes(q);
-        })
-        .filter(c => {
-          const m = meta[c];
-          if (!m) return true;
-          if (filterMode === "issues") return m.flags.lowConfidence || m.flags.idLike;
-          if (filterMode === "excluded") return !m.include;
-          return true;
-        })
-        .map(col => {
-          const m = meta[col];
-          const missPct = (m.missingFrac * 100);
-          const conf = confidenceLabel(m.confidence);
-
-          const typeSelect = `
-            <select data-coltype="${escapeHtml(col)}" style="width:140px;">
-              <option value="categorical" ${m.inferredType==="categorical"?"selected":""}>categorical</option>
-              <option value="continuous" ${m.inferredType==="continuous"?"selected":""}>continuous</option>
-              <option value="date" ${m.inferredType==="date"?"selected":""}>date</option>
-            </select>
-          `;
-
-          const flags = [];
-          if (m.flags.idLike) flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
-          if (m.flags.lowConfidence) flags.push(`<span class="pill bad" title="Heuristic type inference is uncertain">Review</span>`);
-          const flagsHtml = flags.length ? flags.join(" ") : `<span class="muted2">—</span>`;
-
-          const includeDisabled = (target && col === target) ? "disabled" : "";
-          const includeChecked = (m.include || (target && col === target)) ? "checked" : "";
-          const includeBox = `<input type="checkbox" data-include="${escapeHtml(col)}" ${includeChecked} ${includeDisabled} />`;
-
-          const examplesFull = (m.examples || [])
-            .slice(0, 3)
-            .map(x => truncate(x, 80))
-            .join(", ");
-          const examples = truncate(examplesFull, 200);
-
-          return `
-            <tr>
-              <td>${includeBox}</td>
-              <td class="mono">${escapeHtml(col)}</td>
-              <td>${typeSelect}</td>
-              <td><span class="${conf.cls}">${conf.txt}</span></td>
-              <td>${escapeHtml(missPct.toFixed(1) + "%")}</td>
-              <td>${escapeHtml(String(m.uniqueSample))}</td>
-              <td>${flagsHtml}</td>
-              <td title="${escapeHtml(examples)}">${escapeHtml(examples)}</td>
-            </tr>
-          `;
-        })
-        .join("");
-
-      $("colConfigBody").innerHTML = rows;
-
-      $("colConfigBody").querySelectorAll("input[type=checkbox][data-include]").forEach(cb => {
-        cb.addEventListener("change", () => {
-          const col = cb.getAttribute("data-include");
-          const targetCol = APP.raw.targetCol;
-          if (targetCol && col === targetCol) return;
-          APP.raw.colMeta[col].include = cb.checked;
-          syncSetupUI();
-          refreshSplitDateCol();
-        });
-      });
-
-      $("colConfigBody").querySelectorAll("select[data-coltype]").forEach(sel => {
-        sel.addEventListener("change", () => {
-          const col = sel.getAttribute("data-coltype");
-          APP.raw.colMeta[col].inferredType = sel.value;
-          APP.raw.colMeta[col].confidence = Math.max(APP.raw.colMeta[col].confidence, 0.90);
-          APP.raw.colMeta[col].flags.lowConfidence = false;
-          syncSetupUI();
-          refreshSplitDateCol();
-          renderColumnTable();
-        });
-      });
     }
 
     function refreshSplitDateCol() {
@@ -2698,6 +2661,13 @@
         originalColumns: pipeline.originalColumns,
         includedColumns: pipeline.includedColumns,
         selectedTypes: Object.fromEntries(Object.entries(APP.raw.colMeta).map(([k, v]) => [k, v.inferredType])),
+        typing: {
+          maxCard: APP.setup.maxCard,
+          excludeCols: APP.setup.excludeCols,
+          forceDate: APP.setup.forceDate,
+          forceCat: APP.setup.forceCat,
+          forceCont: APP.setup.forceCont,
+        },
         targetCol: pipeline.targetCol,
         task: pipeline.task,
         targetTransform: pipeline.targetTransform,
@@ -2866,7 +2836,26 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.ui.parseSeq = (APP.ui.parseSeq || 0) + 1;
       APP.step = 0;
       APP.raw = { fileName: null, rows: [], columns: [], colMeta: {}, targetCol: null };
-      APP.setup = { splitMode: "auto", splitDateCol: null, testFrac: 0.1, taskMode: "auto", targetTransform: "none", maxRows: 50000, excluded: new Set() };
+      APP.setup = {
+        splitMode: "auto",
+        splitDateCol: null,
+        testFrac: 0.1,
+        taskMode: "auto",
+        targetTransform: "none",
+        maxRows: 50000,
+        maxCard: 50,
+        forceDate: "",
+        forceCat: "",
+        forceCont: "",
+        excludeCols: "",
+        excluded: new Set(),
+        forcedTypes: {
+          date: new Set(),
+          categorical: new Set(),
+          continuous: new Set(),
+        },
+      };
+      syncHiddenTypingLists();
       APP.train = {
         preset: "balanced",
         rfOptions: null,
@@ -2886,7 +2875,6 @@ function invertTargetIfNeeded(yPred, artifact){
       };
       APP.ui.predPage = 0;
       APP.ui.predFilter = "";
-      APP.ui.colSort = { key: "name", dir: "asc" };
 
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
@@ -2897,18 +2885,18 @@ function invertTargetIfNeeded(yPred, artifact){
       hide($("uploadSummary"));
       $("uploadStatus").innerHTML = "";
       $("previewTable").innerHTML = "";
-      $("colConfigBody").innerHTML = "";
       $("predTable").innerHTML = "";
       $("resultsCallouts").innerHTML = "";
 
       $("testFrac").value = "0.1";
       $("seed").value = "42";
       $("maxRows").value = "50000";
+      $("maxCard").value = "50";
+      $("colSearch").value = "";
+      $("showOnlyIssues").value = "all";
       $("taskMode").value = "auto";
       $("targetTransform").value = "none";
       $("splitMode").value = "auto";
-      $("colSearch").value = "";
-      $("showOnlyIssues").value = "all";
       $("predFilter").value = "";
       $("pageSize").value = "50";
       $("importanceMode").value = "base";
@@ -2926,6 +2914,7 @@ function invertTargetIfNeeded(yPred, artifact){
         taskMode: $("taskMode").value,
         targetTransform: $("targetTransform").value,
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
+        maxCard: Math.max(1, Math.floor(parseNum($("maxCard").value) || 50)),
         seed: $("seed").value,
         preset: APP.train.preset || "balanced",
       };
@@ -2937,12 +2926,19 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.setup.taskMode = prefs.taskMode;
       APP.setup.targetTransform = prefs.targetTransform;
       APP.setup.maxRows = Math.max(0, prefs.maxRows);
+      APP.setup.maxCard = prefs.maxCard;
+      APP.setup.excluded = new Set();
+      APP.setup.forcedTypes = { date: new Set(), categorical: new Set(), continuous: new Set() };
+      syncHiddenTypingLists();
 
       $("splitMode").value = prefs.splitMode;
       $("testFrac").value = String(APP.setup.testFrac);
       $("taskMode").value = prefs.taskMode;
       $("targetTransform").value = prefs.targetTransform;
       $("maxRows").value = String(APP.setup.maxRows);
+      $("maxCard").value = String(APP.setup.maxCard);
+      $("colSearch").value = "";
+      $("showOnlyIssues").value = "all";
       $("seed").value = prefs.seed;
 
       APP.train.preset = prefs.preset;
@@ -2959,9 +2955,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.raw.rows = rows;
       APP.raw.columns = cols;
 
-      const meta = {};
-      for (const c of cols) meta[c] = inferColumnType(c, rows);
-      APP.raw.colMeta = meta;
+      recomputeColumnMeta();
 
       $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
       $("dsShapePill").textContent = `${rows.length} rows · ${cols.length} cols`;
@@ -2975,9 +2969,9 @@ function invertTargetIfNeeded(yPred, artifact){
 
       APP.raw.targetCol = null;
       renderTargetSelect();
-      renderColumnTable();
       refreshSplitDateCol();
       syncSetupUI();
+      renderColumnTable();
       syncButtons();
     }
 
@@ -3150,9 +3144,9 @@ function invertTargetIfNeeded(yPred, artifact){
 
     $("continueToSetupBtn").addEventListener("click", () => {
       renderTargetSelect();
-      renderColumnTable();
       refreshSplitDateCol();
       syncSetupUI();
+      renderColumnTable();
       gotoStep(1);
     });
 
@@ -3165,9 +3159,10 @@ function invertTargetIfNeeded(yPred, artifact){
 
     $("targetSelect").addEventListener("change", () => {
       APP.raw.targetCol = $("targetSelect").value;
-      if (APP.raw.targetCol && APP.raw.colMeta[APP.raw.targetCol]) APP.raw.colMeta[APP.raw.targetCol].include = true;
-      renderColumnTable();
+      recomputeColumnMeta();
+      refreshSplitDateCol();
       syncSetupUI();
+      renderColumnTable();
       syncButtons();
     });
 
@@ -3201,6 +3196,19 @@ function invertTargetIfNeeded(yPred, artifact){
       syncSetupUI();
     });
 
+    let typingDebounce = null;
+    const scheduleTypingRefresh = () => {
+      if (!APP.raw.columns.length) return;
+      if (typingDebounce) clearTimeout(typingDebounce);
+      typingDebounce = setTimeout(() => {
+        recomputeColumnMeta();
+        refreshSplitDateCol();
+        syncSetupUI();
+        renderColumnTable();
+        syncButtons();
+      }, 80);
+    };
+    $("maxCard").addEventListener("input", scheduleTypingRefresh);
     $("colSearch").addEventListener("input", () => renderColumnTable());
     $("showOnlyIssues").addEventListener("change", () => renderColumnTable());
 
@@ -3274,7 +3282,6 @@ Compatibility
     // ----------------------------
     renderStepper();
     renderPresets();
-    wireReviewSortHeaders();
 
     hardReset();
 

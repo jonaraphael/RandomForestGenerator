@@ -120,6 +120,7 @@
       box-shadow: var(--shadow);
       border-radius:var(--radius);
       padding:14px;
+      min-width: 0;
     }
 
     .card h2{margin:0 0 10px;font-size:14px;color:rgba(234,240,255,0.92);letter-spacing:0.15px}
@@ -197,8 +198,8 @@
       -webkit-overflow-scrolling: touch;
     }
     .scroll table {
-        width: 100%;
-        min-width: 100%;
+      width: max-content;
+      min-width: 100%;
     }
     .scroll th, .scroll td{
       white-space: nowrap;
@@ -350,12 +351,6 @@
 
     /* Make the preview wrapper the horizontal scroll container */
     #panelUpload .scroll { overflow-x: auto; overflow-y: auto; }
-
-    /* IMPORTANT: only the preview table should be allowed to become wider than its container */
-    #panelUpload .scroll table {
-    width: max-content;
-    min-width: 100%;
-    }
 
 
   </style>

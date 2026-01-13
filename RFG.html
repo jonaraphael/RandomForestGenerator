@@ -280,25 +280,6 @@
     details > summary::-webkit-details-marker{display:none}
     details .muted{margin-top:8px}
 
-    .presetRow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-    @media(max-width:980px){.presetRow{grid-template-columns:1fr}}
-    .preset{
-      border:1px solid var(--border2);
-      border-radius:14px;
-      padding:12px;
-      background:rgba(255,255,255,0.02);
-      cursor:pointer;
-      transition:120ms ease;
-    }
-    .preset:hover{transform:translateY(-1px);border-color:rgba(234,240,255,0.16)}
-    .preset.active{
-      border-color:rgba(139,92,246,0.65);
-      background:rgba(139,92,246,0.10);
-    }
-    .preset .title{display:flex;justify-content:space-between;align-items:center;gap:10px}
-    .preset .name{font-weight:650}
-    .preset .desc{margin-top:8px;color:var(--muted);font-size:12px;line-height:1.35}
-
     .spinner{
       width:14px;height:14px;border-radius:50%;
       border:2px solid rgba(234,240,255,0.18);
@@ -536,8 +517,8 @@
               </div>
             </div>
 
-            <details id="reviewDetails">
-              <summary>Review columns (advanced)</summary>
+            <details id="reviewDetails" open>
+              <summary>Review columns</summary>
               <div class="hr"></div>
 
               <div class="two" style="margin-bottom:10px;">
@@ -587,13 +568,13 @@
         <h2>Train</h2>
 
         <div class="muted" style="margin-bottom:10px;">
-          Choose a training preset. You can fine-tune settings in “Advanced”.
+          Defaults are tuned for a solid baseline. Adjust if you want faster iteration or more thorough training.
         </div>
 
-        <div class="presetRow" id="presetRow"></div>
+        <div class="row" id="trainChips" style="margin-bottom:10px;"></div>
 
-        <details id="advancedTrainDetails" style="margin-top:12px;">
-          <summary>Advanced</summary>
+        <details id="advancedTrainDetails" style="margin-top:12px;" open>
+          <summary>Settings</summary>
           <div class="hr"></div>
 
           <div class="two">
@@ -805,7 +786,6 @@
         },
       },
       train: {
-        preset: "balanced",
         rfOptions: null,
         model: null,
         pipeline: null,
@@ -924,9 +904,18 @@
       return (n%2) ? a[m] : (a[m-1] + a[m]) / 2;
     }
 
+    function isoWeekNumber(d) {
+      const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNum = dt.getUTCDay() || 7;
+      dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+      return Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+    }
+
     function dateParts(d) {
       const year = d.getFullYear();
       const month = d.getMonth() + 1;
+      const week = isoWeekNumber(d);
       const day = d.getDate();
       const dow = d.getDay();
       const start = new Date(d.getFullYear(), 0, 1);
@@ -944,7 +933,7 @@
       const isYearEnd = (month === 12 && day === 31);
 
       return {
-        year, month, day,
+        year, month, week, day,
         dayofweek: dow,
         dayofyear: dayOfYear,
         is_month_end: isMonthEnd ? 1 : 0,
@@ -1075,7 +1064,7 @@
       try { APP.ui.training.abortController?.abort(); } catch {}
       $("stopBtn").disabled = true;
       $("trainStatus").innerHTML =
-        `<span class="spinner"></span> Stopping… <span class="muted2">Will stop after the current tree finishes.</span>`;
+        `<span class="spinner"></span> Stopping… <span class="muted2">Will stop after the current tree finishes, then score a partial model.</span>`;
     }
 
     function releaseAllResources() {
@@ -1279,8 +1268,15 @@
 
       const meta = {};
       for (const c of APP.raw.columns) {
-        const forced = forcedTypeForColumn(c);
         const auto = inferColumnType(c, APP.raw.rows, { maxCard: APP.setup.maxCard, forceType: null });
+        let forced = forcedTypeForColumn(c);
+        if (forced && forced === auto.inferredType) {
+          if (forced === "date") APP.setup.forcedTypes.date.delete(c);
+          else if (forced === "categorical") APP.setup.forcedTypes.categorical.delete(c);
+          else if (forced === "continuous") APP.setup.forcedTypes.continuous.delete(c);
+          forced = null;
+        }
+
         const cur = inferColumnType(c, APP.raw.rows, { maxCard: APP.setup.maxCard, forceType: forced });
         meta[c] = { ...cur, autoType: auto.inferredType };
         meta[c].include = !APP.setup.excluded.has(c);
@@ -1289,6 +1285,8 @@
 
       const targetCol = APP.raw.targetCol;
       if (targetCol && APP.raw.colMeta[targetCol]) APP.raw.colMeta[targetCol].include = true;
+
+      syncHiddenTypingLists();
     }
 
     function computeTypeCounts() {
@@ -1512,6 +1510,48 @@
       if (APP.raw.targetCol) $("targetSelect").value = APP.raw.targetCol;
     }
 
+    function renderTrainChips() {
+      const el = $("trainChips");
+      if (!el) return;
+
+      const chips = [];
+      const add = (label, value) => {
+        if (value === null || value === undefined || value === "") return;
+        chips.push(`<span class="pill">${escapeHtml(label)}: <span class="mono">${escapeHtml(String(value))}</span></span>`);
+      };
+
+      if (APP.raw.fileName) add("File", APP.raw.fileName);
+      if (APP.raw.rows.length && APP.raw.columns.length) add("Data", `${APP.raw.rows.length} rows · ${APP.raw.columns.length} cols`);
+
+      if (APP.raw.targetCol) add("Target", APP.raw.targetCol);
+
+      if (APP.raw.targetCol) {
+        const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
+        add("Task", task);
+      }
+
+      const splitMode = effectiveSplitMode();
+      if (splitMode === "time") add("Split", `time (${APP.setup.splitDateCol || "—"})`);
+      else add("Split", "random");
+      add("Test", `${Math.round(APP.setup.testFrac * 100)}%`);
+
+      add("Max rows", String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows);
+
+      const { counts, maxCard } = computeTypeCounts();
+      add("Typing", `cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date}`);
+      add("max_card", maxCard);
+
+      const excludedCount = APP.setup.excluded?.size || 0;
+      const forcedCount =
+        (APP.setup.forcedTypes?.date?.size || 0) +
+        (APP.setup.forcedTypes?.categorical?.size || 0) +
+        (APP.setup.forcedTypes?.continuous?.size || 0);
+      if (excludedCount) add("Excluded", excludedCount);
+      if (forcedCount) add("Forced", forcedCount);
+
+      el.innerHTML = chips.length ? chips.join(" ") : `<span class="muted2">Pick a target to preview training settings.</span>`;
+    }
+
     function refreshSplitDateCol() {
       const dateCols = APP.raw.columns.filter(c => APP.raw.colMeta[c]?.include && APP.raw.colMeta[c]?.inferredType === "date");
       const current = APP.setup.splitDateCol;
@@ -1622,6 +1662,7 @@
 
         feats.push(p.year);
         feats.push(p.month);
+        feats.push(p.week);
         feats.push(p.day);
         feats.push(p.dayofweek);
         feats.push(p.dayofyear);
@@ -1661,7 +1702,7 @@
 
       // derived feature schema
       const DATE_PARTS = [
-        "year","month","day","dayofweek","dayofyear",
+        "year","month","week","day","dayofweek","dayofyear",
         "is_month_end","is_month_start","is_quarter_end","is_quarter_start","is_year_end","is_year_start",
         "elapsed"
       ];
@@ -1761,7 +1802,7 @@
       }
 
       const pipeline = {
-        schemaVersion: "1.2",
+        schemaVersion: "1.3",
         createdAt: new Date().toISOString(),
         fileName: APP.raw.fileName,
         originalColumns: [...columns],
@@ -1769,6 +1810,7 @@
         targetCol,
         task,
         targetTransform,
+        procs: ["add_datepart", "FillMissing", "Categorify"],
         preprocess: {
           continuous: { cols: [...contCols], median: { ...contMedian } },
           categorical: { cols: [...catCols], mapping: JSON.parse(JSON.stringify(catMapping)), missingToken: "#na#", unknownId: 0 },
@@ -2108,48 +2150,6 @@
     }
 
     // ----------------------------
-    // Presets
-    // ----------------------------
-    const PRESETS = {
-      fast:     { name: "Fast", desc: "Quick baseline for iteration.", nEstimators: 20,  maxRows: 20000, maxFeatures: "0.999", replacement: false },
-      balanced: { name: "Balanced", desc: "Recommended default.",        nEstimators: 100, maxRows: 50000, maxFeatures: "0.999", replacement: false },
-      thorough: { name: "Thorough", desc: "More trees, more accuracy.",   nEstimators: 500, maxRows: 0,     maxFeatures: "0.999", replacement: false },
-    };
-
-    function renderPresets() {
-      const row = $("presetRow");
-      row.innerHTML = Object.entries(PRESETS).map(([key, p]) => {
-        const active = (APP.train.preset === key) ? "preset active" : "preset";
-        return `
-          <div class="${active}" data-preset="${escapeHtml(key)}">
-            <div class="title">
-              <div class="name">${escapeHtml(p.name)}</div>
-              <span class="pill">${escapeHtml(key === "balanced" ? "recommended" : "preset")}</span>
-            </div>
-            <div class="desc">${escapeHtml(p.desc)}</div>
-            <div class="muted2" style="margin-top:10px;">
-              Trees: <span class="mono">${p.nEstimators}</span> · Max rows: <span class="mono">${p.maxRows || "all"}</span> · maxFeatures: <span class="mono">${p.maxFeatures}</span>
-            </div>
-          </div>
-        `;
-      }).join("");
-
-      row.querySelectorAll("[data-preset]").forEach(el => {
-        el.addEventListener("click", () => {
-          APP.train.preset = el.getAttribute("data-preset");
-          const p = PRESETS[APP.train.preset];
-
-          $("nEstimators").value = String(p.nEstimators);
-          $("maxRows").value = String(p.maxRows);
-          $("maxFeatures").value = String(p.maxFeatures);
-          $("replacement").value = p.replacement ? "true" : "false";
-
-          renderPresets();
-        });
-      });
-    }
-
-    // ----------------------------
     // Training
     // ----------------------------
     function trainingStatusHtml(task, completedUnits, totalUnits, startMs) {
@@ -2259,11 +2259,10 @@
           all[idxs[i]].push(preds[i]);
         }
       }
-      return all.map((preds, i) => ({
-        true: y[i],
-        all: preds,
-        predicted: selectionFn(preds),
-      }));
+      return all.map((preds, i) => {
+        if (!preds.length) return null;
+        return { true: y[i], all: preds, predicted: selectionFn(preds) };
+      });
     }
 
     async function trainForestWithProgress(model, X, y, { onProgress, signal }) {
@@ -2311,12 +2310,9 @@
       const oobEntries = includeOob ? new Array(nEstimators) : null;
       const yieldEvery = Math.max(1, Math.floor(nEstimators / 100));
 
+      let trainedEstimators = 0;
       for (let t = 0; t < nEstimators; t++) {
-        if (signal?.aborted) {
-          const err = new Error("Training aborted");
-          err.name = "AbortError";
-          throw err;
-        }
+        if (signal?.aborted) break;
 
         const bag = model.useSampleBagging
           ? sampleWithBagging(Xm, ym, seed, includeOob)
@@ -2335,16 +2331,28 @@
           oobEntries[t] = { index: bag.ioob, predicted: model.estimators[t].predict(XoobSub) };
         }
 
-        onProgress(t + 1, nEstimators);
+        trainedEstimators = t + 1;
+        onProgress(trainedEstimators, nEstimators);
 
         if ((t + 1) < nEstimators && ((t + 1) % yieldEvery === 0)) {
           await new Promise(r => setTimeout(r, 0));
         }
       }
 
-      if (includeOob && oobEntries) {
-        model.oobResults = computeOobResults(oobEntries, ym, model.selection.bind(model));
+      if (trainedEstimators !== nEstimators) {
+        model.estimators = model.estimators.slice(0, trainedEstimators);
+        model.indexes = model.indexes.slice(0, trainedEstimators);
+        model.nEstimators = trainedEstimators;
       }
+
+      if (includeOob && oobEntries) {
+        const used = oobEntries.slice(0, trainedEstimators);
+        const oob = computeOobResults(used, ym, model.selection.bind(model));
+        const complete = oob.length && oob.every(x => x && x.predicted !== null && x.predicted !== undefined);
+        if (complete) model.oobResults = oob;
+      }
+
+      return { trainedEstimators, stoppedEarly: trainedEstimators !== nEstimators };
     }
 
     async function trainModel() {
@@ -2407,9 +2415,10 @@
       await new Promise(r => setTimeout(r, 0));
 
       let model;
+      let trainInfo;
       try {
         model = (task === "regression") ? new RandomForestRegression(rfOptions) : new RandomForestClassifier(rfOptions);
-        await trainForestWithProgress(model, Xtrain, ytrain, {
+        trainInfo = await trainForestWithProgress(model, Xtrain, ytrain, {
           onProgress: (completedUnits, totalUnits) => {
             APP.ui.training.completedUnits = completedUnits;
             APP.ui.training.totalUnits = totalUnits;
@@ -2429,16 +2438,26 @@
         return;
       }
 
+      if (!trainInfo?.trainedEstimators) {
+        $("trainStatus").innerHTML = `<span class="pill warn">Stopped</span> <span class="muted2">No trees were trained.</span>`;
+        APP.ui.training.abortController = null;
+        APP.ui.training.stopRequested = false;
+        setTrainingUi(false);
+        return;
+      }
+
+      if (trainInfo?.stoppedEarly) {
+        $("trainStatus").innerHTML =
+          `<span class="spinner"></span> Training stopped early ` +
+          `<span class="muted2">(trees <span class="mono">${trainInfo.trainedEstimators}</span>/<span class="mono">${nEstimators}</span>). Scoring…</span>`;
+        await new Promise(r => setTimeout(r, 0));
+      }
+
       $("trainStatus").innerHTML = `<span class="spinner"></span> Scoring test split…`;
       await new Promise(r => setTimeout(r, 0));
 
       let ypred;
       try {
-        if (abortController.signal.aborted) {
-          const err = new Error("Training aborted");
-          err.name = "AbortError";
-          throw err;
-        }
         ypred = model.predict(Xtest);
       } catch (e) {
         if (isAbortError(e) || APP.ui.training.stopRequested) {
@@ -2446,14 +2465,6 @@
         } else {
           $("trainStatus").innerHTML = `<span class="pill bad">Predict failed</span> <span class="mono">${escapeHtml(e?.message || String(e))}</span>`;
         }
-        APP.ui.training.abortController = null;
-        APP.ui.training.stopRequested = false;
-        setTrainingUi(false);
-        return;
-      }
-
-      if (abortController.signal.aborted || APP.ui.training.stopRequested) {
-        $("trainStatus").innerHTML = `<span class="pill warn">Stopped</span> <span class="muted2">Training aborted.</span>`;
         APP.ui.training.abortController = null;
         APP.ui.training.stopRequested = false;
         setTrainingUi(false);
@@ -2716,7 +2727,15 @@ function parseDate(v){
   return d;
 }
 function dateParts(d){
-  const year=d.getFullYear(), month=d.getMonth()+1, day=d.getDate(), dow=d.getDay();
+  function isoWeekNumber(d){
+    const dt=new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum=dt.getUTCDay()||7;
+    dt.setUTCDate(dt.getUTCDate()+4-dayNum);
+    const yearStart=new Date(Date.UTC(dt.getUTCFullYear(),0,1));
+    return Math.ceil((((dt-yearStart)/86400000)+1)/7);
+  }
+
+  const year=d.getFullYear(), month=d.getMonth()+1, week=isoWeekNumber(d), day=d.getDate(), dow=d.getDay();
   const start=new Date(d.getFullYear(),0,1);
   const dayOfYear=Math.floor((d-start)/86400000)+1;
 
@@ -2731,7 +2750,7 @@ function dateParts(d){
   const isYearEnd=(month===12&&day===31);
 
   return {
-    year,month,day,dayofweek:dow,dayofyear:dayOfYear,
+    year,month,week,day,dayofweek:dow,dayofyear:dayOfYear,
     is_month_end:isMonthEnd?1:0, is_month_start:isMonthStart?1:0,
     is_quarter_end:isQuarterEnd?1:0, is_quarter_start:isQuarterStart?1:0,
     is_year_end:isYearEnd?1:0, is_year_start:isYearStart?1:0,
@@ -2765,7 +2784,7 @@ function transformRow(row, artifact){
     const dt=miss ? new Date(artifact.preprocess.date.medianElapsed[c]) : d;
     const p=dateParts(dt);
 
-    feats.push(p.year); feats.push(p.month); feats.push(p.day);
+    feats.push(p.year); feats.push(p.month); feats.push(p.week); feats.push(p.day);
     feats.push(p.dayofweek); feats.push(p.dayofyear);
     feats.push(p.is_month_end); feats.push(p.is_month_start);
     feats.push(p.is_quarter_end); feats.push(p.is_quarter_start);
@@ -2825,6 +2844,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("continueToTrainBtn").disabled = !APP.raw.targetCol;
       setTrainingUi(APP.ui.training.isTraining);
       updateExportUI();
+      renderTrainChips();
     }
 
     function hardReset() {
@@ -2857,7 +2877,6 @@ function invertTargetIfNeeded(yPred, artifact){
       };
       syncHiddenTypingLists();
       APP.train = {
-        preset: "balanced",
         rfOptions: null,
         model: null,
         pipeline: null,
@@ -2894,15 +2913,15 @@ function invertTargetIfNeeded(yPred, artifact){
       $("maxCard").value = "50";
       $("colSearch").value = "";
       $("showOnlyIssues").value = "all";
+      $("nEstimators").value = "200";
+      $("maxFeatures").value = "1.0";
+      $("replacement").value = "false";
       $("taskMode").value = "auto";
       $("targetTransform").value = "none";
       $("splitMode").value = "auto";
       $("predFilter").value = "";
       $("pageSize").value = "50";
       $("importanceMode").value = "base";
-
-      APP.train.preset = "balanced";
-      renderPresets();
 
       gotoStep(0);
     }
@@ -2915,8 +2934,10 @@ function invertTargetIfNeeded(yPred, artifact){
         targetTransform: $("targetTransform").value,
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
         maxCard: Math.max(1, Math.floor(parseNum($("maxCard").value) || 50)),
+        nEstimators: Math.max(10, Math.floor(parseNum($("nEstimators").value) || 200)),
+        maxFeatures: $("maxFeatures").value || "1.0",
+        replacement: $("replacement").value || "false",
         seed: $("seed").value,
-        preset: APP.train.preset || "balanced",
       };
 
       hardReset();
@@ -2939,10 +2960,10 @@ function invertTargetIfNeeded(yPred, artifact){
       $("maxCard").value = String(APP.setup.maxCard);
       $("colSearch").value = "";
       $("showOnlyIssues").value = "all";
+      $("nEstimators").value = String(prefs.nEstimators);
+      $("maxFeatures").value = String(prefs.maxFeatures);
+      $("replacement").value = String(prefs.replacement);
       $("seed").value = prefs.seed;
-
-      APP.train.preset = prefs.preset;
-      renderPresets();
     }
 
     function handleParsed(rows, cols, fileName) {
@@ -3281,15 +3302,9 @@ Compatibility
     // Init
     // ----------------------------
     renderStepper();
-    renderPresets();
 
     hardReset();
 
-    const p = PRESETS[APP.train.preset];
-    $("nEstimators").value = String(p.nEstimators);
-    $("maxRows").value = String(p.maxRows);
-    $("maxFeatures").value = String(p.maxFeatures);
-    $("replacement").value = p.replacement ? "true" : "false";
     syncButtons();
   </script>
 </body>

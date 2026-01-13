@@ -2491,19 +2491,58 @@ function invertTargetIfNeeded(yPred, artifact){
     }
 
     function sampleCsvText() {
-      return [
-        "price,year_made,product_size,state,sale_date,machine_hours",
-        "12000,2008,Medium,CA,2011-01-13,4200",
-        "5400,1999,Small,TX,2010-07-02,8100",
-        "22000,2012,Large,WA,2011-11-20,1200",
-        "18000,2006,Medium,CA,2011-09-12,3900",
-        "2500,1995,Compact,NY,2009-03-05,11000",
-        "31000,2013,Large,FL,2012-04-18,800",
-        "9800,2004,Small,TX,2010-12-09,5600",
-        "7600,2001,Small,WA,2011-06-21,6400",
-        "15500,2007,Medium,NY,2011-10-30,4100",
-        "45000,2014,Large,CA,2012-05-09,300",
-      ].join("\n");
+      const rng = mulberry32(91173);
+      const secret = mulberry32(63821);
+
+      const productSizes = ["Compact", "Small", "Medium", "Large"];
+      const states = ["CA", "TX", "WA", "NY", "FL", "IL", "CO", "GA"];
+
+      const basePrice = 18000 + Math.round(secret() * 9000);
+      const wYear = 650 + Math.round(secret() * 450);
+      const wHours = -(1.4 + secret() * 1.3);
+      const wSaleYear = 250 + Math.round(secret() * 250);
+      const noiseScale = 900 + Math.round(secret() * 900);
+
+      const sizeOffsets = productSizes
+        .map(() => (secret() * 2 - 1))
+        .sort((a, b) => a - b)
+        .map((v) => Math.round(v * 4500));
+
+      const lines = ["price,year_made,product_size,state,sale_date,machine_hours"];
+
+      for (let i = 0; i < 100; i++) {
+        const saleYear = 2010 + Math.floor(rng() * 5);
+        const saleMonth = 1 + Math.floor(rng() * 12);
+        const saleDay = 1 + Math.floor(rng() * 28);
+        const saleDate = `${saleYear}-${String(saleMonth).padStart(2, "0")}-${String(saleDay).padStart(2, "0")}`;
+
+        const yearMade = 1990 + Math.floor(rng() * (saleYear - 1989));
+        const machineHours = Math.round(200 + rng() * 11800);
+        const productSize = productSizes[Math.floor(rng() * productSizes.length)];
+        const state = states[Math.floor(rng() * states.length)];
+
+        const centeredYear = yearMade - 2002;
+        const centeredHours = machineHours - 6000;
+        const centeredSaleYear = saleYear - 2012;
+        const sizeOffset = sizeOffsets[productSizes.indexOf(productSize)];
+
+        const u1 = Math.max(1e-12, rng());
+        const u2 = Math.max(1e-12, rng());
+        const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+
+        const priceRaw =
+          basePrice +
+          wYear * centeredYear +
+          wHours * centeredHours +
+          wSaleYear * centeredSaleYear +
+          sizeOffset +
+          z * noiseScale;
+
+        const price = Math.max(500, Math.round(priceRaw / 10) * 10);
+        lines.push(`${price},${yearMade},${productSize},${state},${saleDate},${machineHours}`);
+      }
+
+      return lines.join("\n");
     }
 
     function parseSampleCsvText(text) {

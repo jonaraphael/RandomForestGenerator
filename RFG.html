@@ -274,8 +274,8 @@
       outline-offset: -2px;
     }
 
-    .two{display:grid;grid-template-columns: 1fr 1fr;gap:12px}
-    .three{display:grid;grid-template-columns: 1.2fr 0.8fr;gap:12px}
+    .two{display:grid;grid-template-columns: 1fr 1fr;gap:12px;align-items:start}
+    .three{display:grid;grid-template-columns: 1.2fr 0.8fr;gap:12px;align-items:start}
     @media(max-width:980px){.two,.three{grid-template-columns:1fr}}
 
     .field{display:grid;gap:6px}
@@ -484,13 +484,21 @@
 
         <div class="three">
           <div>
-            <div class="field">
-              <label for="targetSelect">What do you want to predict?</label>
-              <select id="targetSelect"></select>
+            <div class="two">
+              <div class="field">
+                <label for="targetSelect">What do you want to predict?</label>
+                <select id="targetSelect"></select>
+              </div>
+              <div class="field">
+                <label for="taskMode">Predict mode</label>
+                <select id="taskMode">
+                  <option value="regression">Regression</option>
+                  <option value="classification">Classification</option>
+                </select>
+              </div>
             </div>
 
             <div class="row" style="margin-top:10px;">
-              <span class="pill" id="taskPill">Task: —</span>
               <span class="pill" id="rowsPill">Rows: —</span>
               <span class="pill" id="colsPill">Columns: —</span>
               <span class="pill" id="reviewPill">Needs review: —</span>
@@ -500,37 +508,26 @@
 
             <div class="two">
               <div class="field">
-                <label>Train/test split</label>
-                <select id="splitMode">
-                  <option value="auto" selected>Auto (recommended)</option>
-                  <option value="time">Time-based (if you have dates)</option>
-                  <option value="random">Random</option>
-                </select>
+                <label for="maxRows">Max rows (0 = all)</label>
+                <input id="maxRows" type="number" min="0" step="1000" value="50000" />
+                <div class="muted2">Useful for quick iteration on huge CSVs. For time splits, we take the last N rows (file order).</div>
               </div>
 
               <div class="field">
                 <label for="testFrac">Test fraction</label>
                 <input id="testFrac" type="number" value="0.1" />
+                <div class="muted2">What fraction [0-1] of the data to use for testing.</div>
               </div>
             </div>
 
             <div class="two" style="margin-top:10px;">
               <div class="field">
-                <label for="splitDateCol">Time column (for time-based split)</label>
-                <select id="splitDateCol" disabled></select>
-              </div>
-
-              <div class="field">
-                <label for="taskMode">Task mode</label>
-                <select id="taskMode">
-                  <option value="auto" selected>Auto</option>
-                  <option value="regression">Regression</option>
-                  <option value="classification">Classification</option>
+                <label>Split strategy</label>
+                <select id="splitStrategy">
+                  <option value="random" selected>Random</option>
                 </select>
               </div>
-            </div>
 
-            <div class="two" style="margin-top:10px;">
               <div class="field">
                 <label for="targetTransform">Target transform</label>
                 <select id="targetTransform">
@@ -539,12 +536,26 @@
                 </select>
                 <div class="muted2">If enabled, we train on transformed targets and invert predictions back.</div>
               </div>
+            </div>
+
+            <div id="timeSplitSettings" class="two hidden" style="margin-top:10px;">
+              <div class="field">
+                <label for="splitDateCol">Time column</label>
+                <select id="splitDateCol"></select>
+              </div>
 
               <div class="field">
-                <label for="maxRows">Max rows (0 = all)</label>
-                <input id="maxRows" type="number" min="0" step="1000" value="50000" />
-                <div class="muted2">Useful for quick iteration on huge CSVs. For time splits, we take the last N rows (file order).</div>
+                <label for="splitMethod">Validation rule</label>
+                <select id="splitMethod">
+                  <option value="cutoff" selected>Cutoff date (recommended)</option>
+                  <option value="fraction">Test fraction</option>
+                </select>
               </div>
+            </div>
+
+            <div class="field hidden" id="cutoffField" style="margin-top:10px;">
+              <label for="cutoffDate">Cutoff date (train &lt; cutoff, valid ≥ cutoff)</label>
+              <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
             </div>
 
             <div class="hr"></div>
@@ -558,49 +569,29 @@
           </div>
 
           <div>
-            <div class="callout" style="margin-bottom:10px;">
-              <div style="font-weight:650;margin-bottom:6px;">Quick checks</div>
-              <div class="muted2">
-                You can train immediately. If anything looks off, expand “Review columns” below to adjust typing (cont/cat/date) or exclude columns.
-              </div>
-            </div>
-
             <details id="reviewDetails" open>
               <summary>Review columns</summary>
               <div class="hr"></div>
 
-              <div class="two" style="margin-bottom:10px;">
+              <div style="margin-bottom:10px;">
                 <div class="field">
                   <label for="maxCard">max_card (cat vs cont threshold)</label>
                   <input id="maxCard" type="number" min="1" step="1" value="50" />
                   <div class="muted2">If an integer column has ≤ max_card unique values, treat it as categorical.</div>
                 </div>
-                <div class="field">
-                  <label for="colSearch">Search columns</label>
-                  <input id="colSearch" type="text" placeholder="Type to filter…" />
-                </div>
-              </div>
-
-              <div class="field" style="margin-bottom:10px;">
-                <label for="showOnlyIssues">Filter</label>
-                <select id="showOnlyIssues">
-                  <option value="all" selected>All columns</option>
-                  <option value="idlike">Only ID-like</option>
-                  <option value="excluded">Only excluded</option>
-                </select>
               </div>
 
               <div class="scroll" style="max-height:420px;">
                 <table id="reviewColumnsTable">
                   <thead>
                     <tr>
-                      <th>Use</th>
-                      <th>Column</th>
-                      <th>Type</th>
-                      <th>Missing%</th>
-                      <th>Unique (sample)</th>
-                      <th>Flags</th>
-                      <th>Examples</th>
+                      <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="name">Column <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
                     </tr>
                   </thead>
                   <tbody id="colConfigBody"></tbody>
@@ -820,8 +811,10 @@
         targetCol: null
       },
       setup: {
-        splitMode: "auto",
         splitDateCol: null,
+        splitMethod: "cutoff",
+        cutoffDate: "",
+        splitStrategy: "random",
         testFrac: 0.1,
         taskMode: "auto",
         targetTransform: "none",
@@ -870,6 +863,7 @@
         parseSeq: 0,
         predPage: 0,
         predFilter: "",
+        colSort: { key: "name", dir: "asc" },
       }
     };
 
@@ -1359,8 +1353,6 @@
     function renderColumnTable() {
       const meta = APP.raw.colMeta;
       const target = APP.raw.targetCol;
-      const q = normStr($("colSearch")?.value).toLowerCase();
-      const filterMode = $("showOnlyIssues")?.value || "all";
 
       const groups = [
         { key: "continuous", title: "Continuous" },
@@ -1369,23 +1361,58 @@
         { key: "excluded", title: "Excluded" },
       ];
 
+      const sortKey = APP.ui.colSort?.key || "name";
+      const sortDir = APP.ui.colSort?.dir || "asc";
+      const dirMul = (sortDir === "asc") ? 1 : -1;
+      const labelOfType = (t) => (t === "continuous") ? "2_cont" : (t === "categorical") ? "1_cat" : (t === "date") ? "3_date" : "9_other";
+
+      const sortVal = (col) => {
+        const m = meta[col];
+        if (!m) return "";
+        switch (sortKey) {
+          case "include": return m.include ? 1 : 0;
+          case "name": return col.toLowerCase();
+          case "type": return labelOfType(m.inferredType);
+          case "missing": return m.missingFrac ?? 0;
+          case "unique": return m.uniqueSample ?? 0;
+          case "flags": return (m.flags?.idLike ? 1 : 0);
+          case "examples": return (m.examples?.[0] ?? "").toLowerCase();
+          default: return col.toLowerCase();
+        }
+      };
+
+      document.querySelectorAll("#reviewColumnsTable th.sortable[data-sort]").forEach(th => {
+        const k = th.getAttribute("data-sort");
+        const ind = th.querySelector(".sort-indicator");
+        if (!ind) return;
+        ind.textContent = (k === sortKey) ? (sortDir === "asc" ? "▲" : "▼") : "";
+      });
+
       const rows = [];
 
       for (const g of groups) {
         const colsInGroup = APP.raw.columns.filter(col => {
-          if (q && !col.toLowerCase().includes(q)) return false;
           const m = meta[col];
           if (!m) return false;
 
           const groupKey = m.include ? m.inferredType : "excluded";
           if (groupKey !== g.key) return false;
-
-          if (filterMode === "idlike") return Boolean(m.flags?.idLike);
-          if (filterMode === "excluded") return !m.include;
           return true;
         });
 
         if (!colsInGroup.length) continue;
+
+        colsInGroup.sort((a, b) => {
+          const va = sortVal(a);
+          const vb = sortVal(b);
+          if (typeof va === "number" && typeof vb === "number") {
+            if (va === vb) return a.toLowerCase().localeCompare(b.toLowerCase());
+            return (va < vb ? -1 : 1) * dirMul;
+          }
+          const sa = String(va), sb = String(vb);
+          if (sa === sb) return a.toLowerCase().localeCompare(b.toLowerCase());
+          return (sa < sb ? -1 : 1) * dirMul;
+        });
 
         rows.push(`<tr class="groupRow"><td colspan="7">${escapeHtml(g.title)} <span class="muted2">(${colsInGroup.length})</span></td></tr>`);
 
@@ -1504,6 +1531,14 @@
       return "classification";
     }
 
+    function defaultTaskModeForTarget(rows, targetCol, meta) {
+      const t = meta[targetCol]?.inferredType;
+      if (t === "continuous") return "regression";
+      if (t === "categorical") return "classification";
+      if (t === "date") return "regression";
+      return decideTaskFromTarget(rows, targetCol, null, meta);
+    }
+
     function syncSetupUI() {
       $("rowsPill").textContent = `Rows: ${APP.raw.rows.length}`;
       $("colsPill").textContent = `Columns: ${APP.raw.columns.length}`;
@@ -1515,10 +1550,24 @@
       $("continueToTrainBtn").disabled = !hasTarget;
 
       const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
-      $("taskPill").textContent = `Task: ${task || "—"}`;
 
       const dateCols = listDateColumns();
-      const splitMode = $("splitMode").value;
+      const splitMode = effectiveSplitMode();
+      const splitMethod = $("splitMethod").value || "cutoff";
+      const cutoff = $("cutoffDate").value || "";
+      APP.setup.splitMethod = splitMethod;
+      APP.setup.cutoffDate = cutoff;
+      const hasDates = dateCols.length > 0;
+      const splitSel = $("splitStrategy");
+      if (splitSel) {
+        const cur = splitSel.value || "random";
+        const options = [`<option value="random">Random</option>`]
+          .concat(hasDates ? [`<option value="time">Time-based</option>`] : []);
+        splitSel.innerHTML = options.join("");
+        splitSel.value = (cur === "time" && hasDates) ? "time" : "random";
+        splitSel.disabled = !hasDates;
+      }
+      APP.setup.splitStrategy = $("splitStrategy")?.value || "random";
 
       $("splitDateCol").innerHTML = dateCols.length
         ? dateCols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")
@@ -1527,10 +1576,10 @@
       if (!APP.setup.splitDateCol && dateCols.length) APP.setup.splitDateCol = dateCols[0];
       if (APP.setup.splitDateCol && dateCols.includes(APP.setup.splitDateCol)) $("splitDateCol").value = APP.setup.splitDateCol;
 
-      const autoAllowsTime = dateCols.length > 0;
-      const wantsTime = (splitMode === "time") || (splitMode === "auto" && autoAllowsTime);
-
-      $("splitDateCol").disabled = !wantsTime;
+      $("timeSplitSettings").classList.toggle("hidden", !(hasDates && splitMode === "time"));
+      $("cutoffField").classList.toggle("hidden", !(splitMode === "time" && splitMethod === "cutoff"));
+      $("cutoffDate").disabled = !(splitMode === "time" && splitMethod === "cutoff");
+      $("testFrac").disabled = !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
 
       const c = $("setupCallout");
       if (!hasTarget) {
@@ -1539,16 +1588,18 @@
                        <div class="muted2">Once selected, we’ll recommend a split strategy and a model task.</div>`;
         show(c);
       } else {
-        const splitText = wantsTime
-          ? `Time-based split using <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span>.`
+        const splitText = (splitMode === "time")
+          ? (splitMethod === "cutoff" && cutoff
+            ? `Time-based split: train &lt; <span class="mono">${escapeHtml(cutoff)}</span>, valid ≥ cutoff (column <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span>).`
+            : `Time-based split using <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span> (fraction fallback).`)
           : `Random split.`;
 
         const idLike = APP.raw.columns.filter(cc => APP.raw.colMeta[cc]?.include && APP.raw.colMeta[cc]?.flags?.idLike);
         const idHint = idLike.length
-          ? `<div class="muted2" style="margin-top:6px;">We flagged ${idLike.length} ID-like column(s). Consider adding them to <span class="mono">exclude_cols</span> if you care about robustness.</div>`
+          ? `<div class="muted2" style="margin-top:6px;">We flagged ${idLike.length} ID-like column(s). Consider excluding them in “Review columns” if you care about robustness.</div>`
           : ``;
 
-        c.className = wantsTime ? "callout good" : "callout";
+        c.className = (splitMode === "time") ? "callout good" : "callout";
         c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Ready</div>
                        <div class="muted2">${splitText} You can train immediately.</div>${idHint}`;
         show(c);
@@ -1584,9 +1635,14 @@
       }
 
       const splitMode = effectiveSplitMode();
-      if (splitMode === "time") add("Split", `time (${APP.setup.splitDateCol || "—"})`);
+      if (splitMode === "time") {
+        const method = $("splitMethod")?.value || "cutoff";
+        const cutoff = $("cutoffDate")?.value || "";
+        const details = (method === "cutoff" && cutoff) ? `cutoff ${cutoff}` : `test ${Math.round(APP.setup.testFrac * 100)}%`;
+        add("Split", `time (${APP.setup.splitDateCol || "—"}) · ${details}`);
+      }
       else add("Split", "random");
-      add("Test", `${Math.round(APP.setup.testFrac * 100)}%`);
+      if (splitMode === "random") add("Test", `${Math.round(APP.setup.testFrac * 100)}%`);
 
       add("Max rows", String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows);
 
@@ -1801,7 +1857,24 @@
 
       // Split BEFORE fitting preprocessors to avoid leakage
       let split;
-      if (splitMode === "time" && splitDateCol) split = splitTimeBased(rowRefs, splitDateCol, testFrac);
+      if (splitMode === "time" && splitDateCol) {
+        const method = $("splitMethod").value || "cutoff";
+        const cutoffStr = $("cutoffDate").value || "";
+        let cutoffMs = null;
+        if (method === "cutoff" && cutoffStr) {
+          const d = new Date(`${cutoffStr}T00:00:00`);
+          cutoffMs = Number.isFinite(d.getTime()) ? d.getTime() : null;
+        }
+
+        if (method === "cutoff" && cutoffMs !== null) {
+          split = splitTimeBasedCutoff(rowRefs, splitDateCol, cutoffMs);
+          if (!split.trainIdx.length || !split.testIdx.length) {
+            split = splitTimeBased(rowRefs, splitDateCol, testFrac);
+          }
+        } else {
+          split = splitTimeBased(rowRefs, splitDateCol, testFrac);
+        }
+      }
       else split = splitRandom(rowRefs.length, testFrac, seed);
 
       const trainRows = split.trainIdx.map(i => rowRefs[i]);
@@ -1873,7 +1946,14 @@
         derivedFeatureBase: [...baseForDerived],
         target: { col: targetCol, mapping: targetMapping, numClasses: numTargetClasses },
         library: { name: "ml-random-forest", version: "2.1.0" },
-        fittedOn: { splitMode, splitDateCol: splitDateCol || null, nTrain: trainRows.length, nTest: testRows.length }
+        fittedOn: {
+          splitMode,
+          splitDateCol: splitDateCol || null,
+          splitMethod: (splitMode === "time") ? ($("splitMethod").value || "cutoff") : "fraction",
+          cutoffDate: (splitMode === "time") ? ($("cutoffDate").value || "") : "",
+          nTrain: trainRows.length,
+          nTest: testRows.length
+        }
       };
 
       // Transform TRAIN
@@ -1952,12 +2032,22 @@
       return { trainIdx: train, testIdx: test };
     }
 
+    function splitTimeBasedCutoff(rowRefs, dateCol, cutoffMs) {
+      const trainIdx = [];
+      const testIdx = [];
+      for (let i = 0; i < rowRefs.length; i++) {
+        const d = parseDate(rowRefs[i][dateCol]);
+        const t = d ? d.getTime() : Number.NEGATIVE_INFINITY;
+        if (t < cutoffMs) trainIdx.push(i);
+        else testIdx.push(i);
+      }
+      return { trainIdx, testIdx };
+    }
+
     function effectiveSplitMode() {
-      const chosen = $("splitMode").value;
-      if (chosen === "random") return "random";
-      if (chosen === "time") return "time";
       const dateCols = APP.raw.columns.filter(c => APP.raw.colMeta[c]?.include && APP.raw.colMeta[c]?.inferredType === "date");
-      return dateCols.length ? "time" : "random";
+      const strategy = $("splitStrategy")?.value || "random";
+      return (dateCols.length && strategy === "time") ? "time" : "random";
     }
 
     // ----------------------------
@@ -2967,8 +3057,10 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.step = 0;
       APP.raw = { fileName: null, rows: [], columns: [], colMeta: {}, targetCol: null };
       APP.setup = {
-        splitMode: "auto",
         splitDateCol: null,
+        splitMethod: "cutoff",
+        cutoffDate: "",
+        splitStrategy: "random",
         testFrac: 0.1,
         taskMode: "auto",
         targetTransform: "none",
@@ -3018,17 +3110,17 @@ function invertTargetIfNeeded(yPred, artifact){
       $("resultsCallouts").innerHTML = "";
 
       $("testFrac").value = "0.1";
+      $("cutoffDate").value = "";
       $("seed").value = "42";
       $("maxRows").value = "50000";
       $("maxCard").value = "50";
-      $("colSearch").value = "";
-      $("showOnlyIssues").value = "all";
       $("nEstimators").value = "200";
       $("maxFeatures").value = "1.0";
       $("replacement").value = "false";
-      $("taskMode").value = "auto";
+      $("taskMode").value = "classification";
       $("targetTransform").value = "none";
-      $("splitMode").value = "auto";
+      $("splitMethod").value = "cutoff";
+      $("splitStrategy").value = "random";
       $("predFilter").value = "";
       $("pageSize").value = "50";
       $("importanceMode").value = "base";
@@ -3038,8 +3130,10 @@ function invertTargetIfNeeded(yPred, artifact){
 
     function resetForNewFile() {
       const prefs = {
-        splitMode: $("splitMode").value,
         testFrac: parseNum($("testFrac").value) || 0.1,
+        splitMethod: $("splitMethod").value || "cutoff",
+        cutoffDate: $("cutoffDate").value || "",
+        splitStrategy: $("splitStrategy").value || "random",
         taskMode: $("taskMode").value,
         targetTransform: $("targetTransform").value,
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
@@ -3052,8 +3146,10 @@ function invertTargetIfNeeded(yPred, artifact){
 
       hardReset();
 
-      APP.setup.splitMode = prefs.splitMode;
       APP.setup.testFrac = Math.min(0.5, Math.max(0.05, prefs.testFrac));
+      APP.setup.splitMethod = prefs.splitMethod;
+      APP.setup.cutoffDate = prefs.cutoffDate;
+      APP.setup.splitStrategy = prefs.splitStrategy;
       APP.setup.taskMode = prefs.taskMode;
       APP.setup.targetTransform = prefs.targetTransform;
       APP.setup.maxRows = Math.max(0, prefs.maxRows);
@@ -3062,14 +3158,14 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.setup.forcedTypes = { date: new Set(), categorical: new Set(), continuous: new Set() };
       syncHiddenTypingLists();
 
-      $("splitMode").value = prefs.splitMode;
       $("testFrac").value = String(APP.setup.testFrac);
+      $("splitMethod").value = APP.setup.splitMethod;
+      $("cutoffDate").value = APP.setup.cutoffDate;
+      $("splitStrategy").value = APP.setup.splitStrategy;
       $("taskMode").value = prefs.taskMode;
       $("targetTransform").value = prefs.targetTransform;
       $("maxRows").value = String(APP.setup.maxRows);
       $("maxCard").value = String(APP.setup.maxCard);
-      $("colSearch").value = "";
-      $("showOnlyIssues").value = "all";
       $("nEstimators").value = String(prefs.nEstimators);
       $("maxFeatures").value = String(prefs.maxFeatures);
       $("replacement").value = String(prefs.replacement);
@@ -3291,6 +3387,10 @@ function invertTargetIfNeeded(yPred, artifact){
     $("targetSelect").addEventListener("change", () => {
       APP.raw.targetCol = $("targetSelect").value;
       recomputeColumnMeta();
+      if (APP.raw.targetCol) {
+        APP.setup.taskMode = defaultTaskModeForTarget(APP.raw.rows, APP.raw.targetCol, APP.raw.colMeta);
+        $("taskMode").value = APP.setup.taskMode;
+      }
       refreshSplitDateCol();
       syncSetupUI();
       renderColumnTable();
@@ -3300,6 +3400,7 @@ function invertTargetIfNeeded(yPred, artifact){
     $("taskMode").addEventListener("change", () => {
       APP.setup.taskMode = $("taskMode").value;
       syncSetupUI();
+      renderTrainChips();
     });
 
     $("targetTransform").addEventListener("change", () => {
@@ -3312,19 +3413,34 @@ function invertTargetIfNeeded(yPred, artifact){
       syncSetupUI();
     });
 
-    $("splitMode").addEventListener("change", () => {
-      APP.setup.splitMode = $("splitMode").value;
+    $("splitStrategy").addEventListener("change", () => {
+      APP.setup.splitStrategy = $("splitStrategy").value || "random";
       syncSetupUI();
+      renderTrainChips();
     });
 
     $("splitDateCol").addEventListener("change", () => {
       APP.setup.splitDateCol = $("splitDateCol").value;
       syncSetupUI();
+      renderTrainChips();
+    });
+
+    $("splitMethod").addEventListener("change", () => {
+      APP.setup.splitMethod = $("splitMethod").value;
+      syncSetupUI();
+      renderTrainChips();
+    });
+
+    $("cutoffDate").addEventListener("change", () => {
+      APP.setup.cutoffDate = $("cutoffDate").value || "";
+      syncSetupUI();
+      renderTrainChips();
     });
 
     $("testFrac").addEventListener("change", () => {
       APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
       syncSetupUI();
+      renderTrainChips();
     });
 
     let typingDebounce = null;
@@ -3340,8 +3456,15 @@ function invertTargetIfNeeded(yPred, artifact){
       }, 80);
     };
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
-    $("colSearch").addEventListener("input", () => renderColumnTable());
-    $("showOnlyIssues").addEventListener("change", () => renderColumnTable());
+    $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.getAttribute("data-sort");
+        if (!key) return;
+        if (APP.ui.colSort.key === key) APP.ui.colSort.dir = (APP.ui.colSort.dir === "asc") ? "desc" : "asc";
+        else { APP.ui.colSort.key = key; APP.ui.colSort.dir = "asc"; }
+        renderColumnTable();
+      });
+    });
 
     $("trainBtn").addEventListener("click", trainModel);
     $("stopBtn").addEventListener("click", requestStopTraining);

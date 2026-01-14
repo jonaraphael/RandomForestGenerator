@@ -639,7 +639,7 @@
           <div class="two" style="margin-top:10px;">
             <div class="field">
               <label for="nEstimators">Trees</label>
-              <input id="nEstimators" type="number" min="10" step="10" value="200" />
+              <input id="nEstimators" type="number" min="10" step="10" value="100" />
             </div>
             <div class="field">
               <label for="maxFeatures">maxFeatures</label>
@@ -3574,7 +3574,7 @@
 
       const seed = Math.floor(parseNum($("seed").value) || 42);
       const replacement = ($("replacement").value === "true");
-      const nEstimators = Math.max(10, Math.floor(parseNum($("nEstimators").value) || 200));
+      const nEstimators = Math.max(10, Math.floor(parseNum($("nEstimators").value) || 100));
 
       const splitMode = effectiveSplitMode();
       const splitDateCol = (splitMode === "time") ? APP.setup.splitDateCol : null;
@@ -4328,7 +4328,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("seed").value = "42";
       $("maxRows").value = "50000";
       $("maxCard").value = "50";
-      $("nEstimators").value = "200";
+      $("nEstimators").value = "100";
       $("maxFeatures").value = "1.0";
       $("replacement").value = "false";
       $("taskMode").value = "classification";
@@ -4356,7 +4356,7 @@ function invertTargetIfNeeded(yPred, artifact){
         targetTransform: $("targetTransform").value,
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
         maxCard: Math.max(1, Math.floor(parseNum($("maxCard").value) || 50)),
-        nEstimators: Math.max(10, Math.floor(parseNum($("nEstimators").value) || 200)),
+        nEstimators: Math.max(10, Math.floor(parseNum($("nEstimators").value) || 100)),
         maxFeatures: $("maxFeatures").value || "1.0",
         replacement: $("replacement").value || "false",
         seed: $("seed").value,

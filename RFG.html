@@ -933,7 +933,7 @@
   <script type="module">
     import { RandomForestRegression, RandomForestClassifier } from "https://esm.sh/ml-random-forest@2.1.0";
     import { DecisionTreeClassifier, DecisionTreeRegression } from "https://esm.sh/ml-cart@^2.1.1?target=es2022";
-    import { Matrix, MatrixColumnSelectionView } from "https://esm.sh/ml-matrix@^6.8.2?target=es2022";
+    import { Matrix, MatrixColumnSelectionView, MatrixRowSelectionView } from "https://esm.sh/ml-matrix@^6.8.2?target=es2022";
     import { MersenneTwister19937, integer } from "https://esm.sh/random-js@^2.1.0?target=es2022";
 
     // ----------------------------
@@ -3485,37 +3485,36 @@
       const engine = rngFromSeed(seed);
       const pickRow = integer(0, X.rows - 1);
 
-      const rows = new Array(X.rows);
+      const bagIdx = new Array(X.rows);
       const ys = new Array(X.rows);
-      const seen = includeOob ? new Array(X.rows).fill(0) : null;
+      const seen = includeOob ? new Uint8Array(X.rows) : null;
       let unseenCount = includeOob ? X.rows : 0;
 
       for (let i = 0; i < X.rows; i++) {
         const idx = pickRow(engine);
-        rows[i] = X.getRow(idx);
+        bagIdx[i] = idx;
         ys[i] = y[idx];
-        if (includeOob) {
-          if (seen[idx]++ === 0) unseenCount--;
+        if (includeOob && seen[idx] === 0) {
+          seen[idx] = 1;
+          unseenCount--;
         }
       }
+
+      const Xbag = new MatrixRowSelectionView(X, bagIdx);
 
       let Xoob = null;
       let ioob = [];
       if (includeOob) {
-        const oobRows = new Array(unseenCount);
         const oobIdx = new Array(unseenCount);
         let p = unseenCount;
         for (let i = X.rows - 1; i >= 0 && p > 0; --i) {
-          if (seen[i] === 0) {
-            oobRows[--p] = X.getRow(i);
-            oobIdx[p] = i;
-          }
+          if (seen[i] === 0) oobIdx[--p] = i;
         }
-        Xoob = new Matrix(oobRows);
+        if (oobIdx.length) Xoob = new MatrixRowSelectionView(X, oobIdx);
         ioob = oobIdx;
       }
 
-      return { X: new Matrix(rows), y: ys, Xoob, ioob, seed: engine.next() };
+      return { X: Xbag, y: ys, Xoob, ioob, seed: engine.next() };
     }
 
     function selectRandomFeatures(X, n, replacement, seed) {
@@ -3523,27 +3522,25 @@
 
       const engine = rngFromSeed(seed);
       const pickCol = integer(0, X.columns - 1);
-      const Xsub = new Matrix(X.rows, n);
 
       let usedIndex;
       if (replacement) {
         usedIndex = new Array(n);
         for (let i = 0; i < n; i++) {
-          const c = pickCol(engine);
-          usedIndex[i] = c;
-          Xsub.setColumn(i, X.getColumn(c));
+          usedIndex[i] = pickCol(engine);
         }
       } else {
         const used = new Set();
-        let c = pickCol(engine);
-        for (let i = 0; i < n; i++) {
-          while (used.has(c)) c = pickCol(engine);
-          Xsub.setColumn(i, X.getColumn(c));
+        usedIndex = [];
+        while (usedIndex.length < n) {
+          const c = pickCol(engine);
+          if (used.has(c)) continue;
           used.add(c);
+          usedIndex.push(c);
         }
-        usedIndex = Array.from(used);
       }
 
+      const Xsub = new MatrixColumnSelectionView(X, usedIndex);
       return { X: Xsub, usedIndex, seed: engine.next() };
     }
 
@@ -3625,7 +3622,7 @@
         model.estimators[t].train(feat.X, bag.y);
 
         if (includeOob && bag.Xoob && bag.ioob && bag.ioob.length) {
-          const XoobSub = new MatrixColumnSelectionView(bag.Xoob, model.indexes[t]);
+          const XoobSub = new MatrixColumnSelectionView(bag.Xoob, feat.usedIndex);
           oobEntries[t] = { index: bag.ioob, predicted: model.estimators[t].predict(XoobSub) };
         }
 

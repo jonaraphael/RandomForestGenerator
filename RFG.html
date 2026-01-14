@@ -389,6 +389,31 @@
       color: rgba(234,240,255,0.65);
       font-size: 11px;
     }
+    .pickTarget{
+      cursor: pointer;
+    }
+    .pickTarget:hover{
+      text-decoration: underline;
+    }
+    .pickTarget.active{
+      font-weight: 750;
+      text-decoration: underline;
+    }
+    #previewTable th.previewPick,
+    #previewTable td.previewPick{
+      transition: background 120ms ease;
+    }
+    #previewTable th.previewPick.hoverCol,
+    #previewTable td.previewPick.hoverCol{
+      background: rgba(139,92,246,0.14);
+    }
+    #previewTable th.previewPick.selectedCol,
+    #previewTable td.previewPick.selectedCol{
+      background: rgba(139,92,246,0.22);
+    }
+    #previewTable th.previewPick{
+      cursor: pointer;
+    }
 
     .globalDropOverlay{
       position: fixed;
@@ -455,14 +480,14 @@
       <section class="card" id="panelUpload">
         <h2>Upload</h2>
 
-        <div class="drop" id="dropZone">
-          <div>
-            <div style="font-weight:650;margin-bottom:6px;">Drop a CSV to start</div>
-            <div class="muted">or <button class="btn" id="browseBtn">Browse…</button> <button class="btn ghost" id="sampleBtn">Use a sample CSV</button></div>
-            <input id="fileInput" type="file" accept=".csv,text/csv" />
-            <div class="muted2" style="margin-top:10px;">First row must be column headers.</div>
-          </div>
-        </div>
+	        <div class="drop" id="dropZone">
+	          <div>
+	            <div style="font-weight:650;margin-bottom:6px;">Drop a CSV to start</div>
+	            <div class="muted">or <button class="btn" id="browseBtn">Browse…</button> <button class="btn ghost" id="sampleBtn">Use a sample CSV</button></div>
+	            <input id="fileInput" type="file" accept=".csv,text/csv" />
+	            <div class="muted2" style="margin-top:10px;">First row must be column headers.</div>
+	          </div>
+	        </div>
 
         <div id="uploadStatus" class="row" style="margin-top:12px;"></div>
 
@@ -1462,16 +1487,83 @@
     // ----------------------------
     function renderPreviewTable(rows, columns) {
       const cols = columns.slice(0, Math.min(columns.length, 12));
-      const head = "<thead><tr>" + cols.map(c => `<th>${escapeHtml(c)}</th>`).join("") + "</tr></thead>";
+      const head = "<thead><tr>" + cols.map((c, i) => (
+        `<th class="previewPick" data-preview-col="${escapeHtml(c)}" data-preview-idx="${i}">${escapeHtml(c)}</th>`
+      )).join("") + "</tr></thead>";
       const body = rows.slice(0, 12).map(r => {
-        const tds = cols.map(c => {
+        const tds = cols.map((c, i) => {
           const full = normStr(r[c]) || "";
           const clipped = truncate(full, 200);
-          return `<td title="${escapeHtml(clipped)}">${escapeHtml(clipped)}</td>`;
+          return `<td class="previewPick" data-preview-col="${escapeHtml(c)}" data-preview-idx="${i}" title="${escapeHtml(clipped)}">${escapeHtml(clipped)}</td>`;
         }).join("");
         return `<tr>${tds}</tr>`;
       }).join("");
       $("previewTable").innerHTML = head + `<tbody>${body}</tbody>`;
+    }
+
+    function setPreviewColClass(idx, cls, enabled) {
+      const root = $("previewTable");
+      if (!root) return;
+      root.querySelectorAll(`[data-preview-idx="${idx}"]`).forEach(el => {
+        el.classList.toggle(cls, Boolean(enabled));
+      });
+    }
+
+    function bindPreviewTargetPicker() {
+      const table = $("previewTable");
+      if (!table) return;
+      if (table.dataset.boundTargetPicker === "1") return;
+      table.dataset.boundTargetPicker = "1";
+
+      let hoverIdx = null;
+      let selectedIdx = null;
+
+      const clearHover = () => {
+        if (hoverIdx === null) return;
+        setPreviewColClass(hoverIdx, "hoverCol", false);
+        hoverIdx = null;
+      };
+
+      const setHover = (idx) => {
+        if (hoverIdx === idx) return;
+        clearHover();
+        hoverIdx = idx;
+        setPreviewColClass(hoverIdx, "hoverCol", true);
+      };
+
+      const setSelected = (idx) => {
+        if (selectedIdx !== null) setPreviewColClass(selectedIdx, "selectedCol", false);
+        selectedIdx = idx;
+        if (selectedIdx !== null) setPreviewColClass(selectedIdx, "selectedCol", true);
+      };
+
+      table.addEventListener("mousemove", (e) => {
+        const cell = e.target.closest("[data-preview-idx]");
+        if (!cell) return;
+        const idx = Number(cell.getAttribute("data-preview-idx"));
+        if (!Number.isFinite(idx)) return;
+        setHover(idx);
+      });
+
+      table.addEventListener("mouseleave", clearHover);
+
+      table.addEventListener("click", (e) => {
+        const cell = e.target.closest("[data-preview-col][data-preview-idx]");
+        if (!cell) return;
+        const col = cell.getAttribute("data-preview-col");
+        const idx = Number(cell.getAttribute("data-preview-idx"));
+        if (!col) return;
+        if (Number.isFinite(idx)) setSelected(idx);
+
+        APP.raw.targetCol = col;
+        APP.setup.excluded.delete(col);
+        renderTargetSelect();
+        $("targetSelect").value = col;
+        $("targetSelect").dispatchEvent(new Event("change"));
+
+        $("uploadStatus").innerHTML = `<span class="pill good">Target selected</span><span class="muted2">Proceed to configure split & training.</span>`;
+        gotoStep(1);
+      });
     }
 
     // ----------------------------
@@ -1633,7 +1725,10 @@
           rows.push(`
             <tr>
               <td>${includeBox}</td>
-              <td class="mono">${escapeHtml(col)}</td>
+              <td class="mono">
+                <span class="pickTarget ${target && col === target ? "active" : ""}" data-picktarget="${escapeHtml(col)}">${escapeHtml(col)}</span>
+                ${target && col === target ? `<span class="pill good" style="margin-left:8px;">target</span>` : ""}
+              </td>
               <td>${typeSelect}</td>
               <td>${escapeHtml(missPct.toFixed(1) + "%")}</td>
               <td>${escapeHtml(String(m.uniqueSample))}</td>
@@ -1683,6 +1778,16 @@
           syncSetupUI();
           renderColumnTable();
           syncButtons();
+        });
+      });
+
+      $("colConfigBody").querySelectorAll("[data-picktarget]").forEach(el => {
+        el.addEventListener("click", () => {
+          const col = el.getAttribute("data-picktarget");
+          if (!col) return;
+          APP.setup.excluded.delete(col);
+          $("targetSelect").value = col;
+          $("targetSelect").dispatchEvent(new Event("change"));
         });
       });
     }
@@ -1769,8 +1874,8 @@
       const c = $("setupCallout");
       if (!hasTarget) {
         c.className = "callout";
-        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Pick a target to continue</div>
-                       <div class="muted2">Once selected, we’ll recommend a split strategy and a model task.</div>`;
+        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Click a column name to select the target</div>
+                       <div class="muted2">Or use the dropdown on the left.</div>`;
         show(c);
       } else {
         const splitText = (splitMode === "time")
@@ -4230,7 +4335,7 @@ function invertTargetIfNeeded(yPred, artifact){
       renderTrainChips();
     }
 
-    function hardReset() {
+	    function hardReset() {
       try { APP.ui.training.abortController?.abort(); } catch {}
       try { APP.ui.training.diagAbortController?.abort(); } catch {}
       APP.ui.training.abortController = null;
@@ -4304,11 +4409,12 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
 
       $("trainStatus").innerHTML = "";
-      setTrainingUi(false);
+	      setTrainingUi(false);
 
-      hide($("uploadSummary"));
-      $("uploadStatus").innerHTML = "";
-      $("previewTable").innerHTML = "";
+	      hide($("uploadSummary"));
+	      show($("dropZone"));
+	      $("uploadStatus").innerHTML = "";
+	      $("previewTable").innerHTML = "";
       $("predTable").innerHTML = "";
       $("worstErrTable").innerHTML = "";
       $("highUncTable").innerHTML = "";
@@ -4411,9 +4517,11 @@ function invertTargetIfNeeded(yPred, artifact){
       $("dsShapePill").textContent = `${rows.length} rows · ${cols.length} cols`;
 
       renderPreviewTable(rows, cols);
+      bindPreviewTargetPicker();
 
+      hide($("dropZone"));
       show($("uploadSummary"));
-      $("uploadStatus").innerHTML = `<span class="pill good">Ready</span><span class="muted2">Continue to pick a target.</span>`;
+      $("uploadStatus").innerHTML = `<span class="pill">Pick a target</span><span class="muted2">Click a column header in the preview.</span>`;
 
       $("continueToSetupBtn").disabled = false;
 
@@ -4609,6 +4717,7 @@ function invertTargetIfNeeded(yPred, artifact){
 
     $("targetSelect").addEventListener("change", () => {
       APP.raw.targetCol = $("targetSelect").value;
+      if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
       recomputeColumnMeta();
       if (APP.raw.targetCol) {
         APP.setup.taskMode = defaultTaskModeForTarget(APP.raw.rows, APP.raw.targetCol, APP.raw.colMeta);

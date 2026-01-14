@@ -668,12 +668,23 @@
             </div>
             <div class="field">
               <label for="maxFeatures">maxFeatures</label>
-              <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. 0.5 or 12" />
+              <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. sqrt, log2, 0.33, or 12" />
+            </div>
+          </div>
+
+          <div class="two" style="margin-top:10px;">
+            <div class="field">
+              <label for="maxDepth">maxDepth</label>
+              <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
+            </div>
+            <div class="field">
+              <label for="minNumSamples">minNumSamples</label>
+              <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
             </div>
           </div>
 
           <div class="muted2" style="margin-top:10px;">
-            Defaults follow common best practice for tabular baselines: enough trees, full features, and bagging for stability.
+            Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
           </div>
         </details>
 
@@ -1998,12 +2009,74 @@
     function parseMaxFeatures(v, nFeatures) {
       const s = normStr(v);
       if (!s) return 1.0;
+      const kw = s.toLowerCase();
+      if (kw === "sqrt") return Math.max(1, Math.floor(Math.sqrt(nFeatures)));
+      if (kw === "log2") return Math.max(1, Math.floor(Math.log2(nFeatures)));
       const x = Number(s);
       if (!Number.isFinite(x)) return 1.0;
       if (x > 0 && x < 1) return x;
       const k = Math.floor(x);
       if (k >= 1) return Math.min(k, nFeatures);
       return 1.0;
+    }
+
+    function parseOptionalPositiveInt(v) {
+      const s = normStr(v);
+      if (!s) return null;
+      const x = Math.floor(Number(s));
+      if (!Number.isFinite(x) || x <= 0) return null;
+      return x;
+    }
+
+    function estimateDerivedFeatureCount() {
+      const targetCol = APP.raw.targetCol;
+      const meta = APP.raw.colMeta || {};
+      if (!targetCol) return 0;
+
+      const featureCols = APP.raw.columns.filter(c => c !== targetCol && meta[c]?.include);
+      const cont = featureCols.filter(c => meta[c]?.inferredType === "continuous").length;
+      const cat = featureCols.filter(c => meta[c]?.inferredType === "categorical").length;
+      const date = featureCols.filter(c => meta[c]?.inferredType === "date").length;
+
+      const DATE_FEATURES_PER_COL = 14; // 13 parts + _na
+      return (cont * 2) + (cat * 1) + (date * DATE_FEATURES_PER_COL);
+    }
+
+    function suggestMaxFeaturesValue(task) {
+      return "1.0";
+    }
+
+    function suggestTreeOptions({ nRows, nFeatures }) {
+      const nr = Math.max(1, Math.floor(nRows || 1));
+      const nf = Math.max(1, Math.floor(nFeatures || 1));
+      const featurePenalty = Math.max(0, Math.floor(Math.log2(nf)) - 8); // >256 derived features => shallower
+      const maxDepthBase = Math.floor(Math.log2(nr)) + 6;
+      const maxDepth = Math.min(24, Math.max(16, maxDepthBase - featurePenalty));
+      const minNumSamples = Math.min(20, Math.max(5, Math.floor(nr / 2000)));
+      return { maxDepth, minNumSamples };
+    }
+
+    function applyAutoTrainDefaults() {
+      if (!APP.raw.targetCol) return;
+
+      const maxRows = Math.floor(parseNum($("maxRows")?.value) || 0);
+      const rawN = APP.raw.rows.length || 0;
+      const nRows = (maxRows > 0) ? Math.min(rawN, maxRows) : rawN;
+      const nFeatures = estimateDerivedFeatureCount();
+
+      const task = APP.setup.taskMode || "classification";
+
+      const mfEl = $("maxFeatures");
+      const mdEl = $("maxDepth");
+      const msEl = $("minNumSamples");
+      if (!mfEl || !mdEl || !msEl) return;
+
+      const suggestedMf = suggestMaxFeaturesValue(task);
+      const suggestedTree = suggestTreeOptions({ nRows, nFeatures });
+
+      if (!mfEl.dataset.userSet) mfEl.value = suggestedMf;
+      if (!mdEl.dataset.userSet) mdEl.value = String(suggestedTree.maxDepth);
+      if (!msEl.dataset.userSet) msEl.value = String(suggestedTree.minNumSamples);
     }
 
     function buildInverseMapping(mappingObj) {
@@ -3481,6 +3554,13 @@
       throw new RangeError(`Expected seed must be undefined or integer not ${seed}`);
     }
 
+    function yieldToBrowserPaint() {
+      return new Promise(resolve => {
+        const raf = window.requestAnimationFrame || ((cb) => setTimeout(cb, 16));
+        setTimeout(() => raf(() => resolve()), 0);
+      });
+    }
+
     function sampleWithBagging(X, y, seed, includeOob) {
       const engine = rngFromSeed(seed);
       const pickRow = integer(0, X.rows - 1);
@@ -3711,12 +3791,18 @@
       }
 
       const maxFeaturesParsed = parseMaxFeatures($("maxFeatures").value, featureNames.length);
+      const maxDepth = parseOptionalPositiveInt($("maxDepth")?.value);
+      const minNumSamples = parseOptionalPositiveInt($("minNumSamples")?.value);
+      const treeOptions = {};
+      if (maxDepth !== null) treeOptions.maxDepth = maxDepth;
+      if (minNumSamples !== null) treeOptions.minNumSamples = minNumSamples;
       const rfOptions = {
         seed,
         maxFeatures: maxFeaturesParsed,
         replacement,              // feature sampling replacement (usually false)
         nEstimators,
         useSampleBagging: true,   // bootstrap rows (actual “bagging”)
+        treeOptions,
       };
 
       APP.ui.training.totalUnits = nEstimators;
@@ -3915,6 +4001,7 @@
       // Background: shift diagnostic
       (async () => {
         try {
+          await yieldToBrowserPaint();
           const shift = await computeShiftDiagnostics({
             trainRows: trainRowRefs,
             testRows: testRowRefs,
@@ -3937,7 +4024,7 @@
       // Background: uncertainty via tree disagreement (predictionValues)
       (async () => {
         try {
-          await new Promise(r => setTimeout(r, 0));
+          await yieldToBrowserPaint();
           const out = await computeTreeDisagreementUncertainty({
             model,
             X: Xtest,
@@ -4438,6 +4525,8 @@ function invertTargetIfNeeded(yPred, artifact){
       $("maxCard").value = "50";
       $("nEstimators").value = "100";
       $("maxFeatures").value = "1.0";
+      $("maxDepth").value = "20";
+      $("minNumSamples").value = "10";
       $("replacement").value = "false";
       $("taskMode").value = "classification";
       $("targetTransform").value = "none";
@@ -4450,6 +4539,9 @@ function invertTargetIfNeeded(yPred, artifact){
       if ($("predFullDetails")) $("predFullDetails").open = false;
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
       $("pruneMinImp").value = "0.002";
+      if ($("maxFeatures")) delete $("maxFeatures").dataset.userSet;
+      if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
+      if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
 
       gotoStep(0);
     }
@@ -4466,6 +4558,8 @@ function invertTargetIfNeeded(yPred, artifact){
         maxCard: Math.max(1, Math.floor(parseNum($("maxCard").value) || 50)),
         nEstimators: Math.max(10, Math.floor(parseNum($("nEstimators").value) || 100)),
         maxFeatures: $("maxFeatures").value || "1.0",
+        maxDepth: $("maxDepth")?.value || "",
+        minNumSamples: $("minNumSamples")?.value || "",
         replacement: $("replacement").value || "false",
         seed: $("seed").value,
       };
@@ -4494,6 +4588,8 @@ function invertTargetIfNeeded(yPred, artifact){
       $("maxCard").value = String(APP.setup.maxCard);
       $("nEstimators").value = String(prefs.nEstimators);
       $("maxFeatures").value = String(prefs.maxFeatures);
+      if ($("maxDepth")) $("maxDepth").value = String(prefs.maxDepth);
+      if ($("minNumSamples")) $("minNumSamples").value = String(prefs.minNumSamples);
       $("replacement").value = String(prefs.replacement);
       $("seed").value = prefs.seed;
     }
@@ -4720,6 +4816,7 @@ function invertTargetIfNeeded(yPred, artifact){
         APP.setup.taskMode = defaultTaskModeForTarget(APP.raw.rows, APP.raw.targetCol, APP.raw.colMeta);
         $("taskMode").value = APP.setup.taskMode;
       }
+      applyAutoTrainDefaults();
       refreshSplitDateCol();
       syncSetupUI();
       renderColumnTable();
@@ -4730,6 +4827,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.setup.taskMode = $("taskMode").value;
       syncSetupUI();
       renderTrainChips();
+      applyAutoTrainDefaults();
     });
 
     $("targetTransform").addEventListener("change", () => {
@@ -4740,6 +4838,7 @@ function invertTargetIfNeeded(yPred, artifact){
     $("maxRows").addEventListener("change", () => {
       APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0);
       syncSetupUI();
+      applyAutoTrainDefaults();
     });
 
     $("splitStrategy").addEventListener("change", () => {
@@ -4780,10 +4879,23 @@ function invertTargetIfNeeded(yPred, artifact){
         recomputeColumnMeta();
         refreshSplitDateCol();
         syncSetupUI();
+        applyAutoTrainDefaults();
         renderColumnTable();
         syncButtons();
       }, 80);
     };
+
+    function markTrainSettingAsUserSet(id) {
+      const el = $(id);
+      if (!el) return;
+      const mark = () => { el.dataset.userSet = "1"; };
+      el.addEventListener("input", mark);
+      el.addEventListener("change", mark);
+    }
+    markTrainSettingAsUserSet("maxFeatures");
+    markTrainSettingAsUserSet("maxDepth");
+    markTrainSettingAsUserSet("minNumSamples");
+
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
     $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {
       th.addEventListener("click", () => {

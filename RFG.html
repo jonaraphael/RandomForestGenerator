@@ -290,7 +290,7 @@
       outline:none;
     }
 
-    .kpiGrid{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:12px}
+    .kpiGrid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px}
     @media(max-width:980px){.kpiGrid{grid-template-columns:1fr}}
     .kpi{
       border:1px solid var(--border2);
@@ -676,12 +676,6 @@
           </div>
 
           <div class="kpi">
-            <div class="lbl" id="oobMetricLabel">OOB —</div>
-            <div class="big mono" id="oobMetricValue">—</div>
-            <div class="small" id="oobMetricSub">—</div>
-          </div>
-
-          <div class="kpi">
             <div class="lbl">Setup</div>
             <div class="small mono" id="setupSummary">—</div>
             <div class="small mono" id="featureSummary">—</div>
@@ -769,20 +763,99 @@
         <div class="row space" style="margin-bottom:8px;">
           <div class="muted">Predictions explorer</div>
           <div class="row">
-            <input id="predFilter" type="text" placeholder="Filter (true/pred contains…)" style="width:260px;" />
-            <input id="pageSize" type="number" min="10" step="10" value="50" style="width:90px;" />
-            <button class="btn" id="prevPage">Prev</button>
-            <button class="btn" id="nextPage">Next</button>
+            <span class="pill" id="uncertaintyPill">Uncertainty: —</span>
+            <input id="predTopK" type="number" min="10" step="10" value="30" style="width:90px;" />
             <button class="btn" id="downloadPredCsvBtn">Download predictions CSV</button>
           </div>
         </div>
 
-        <div class="scroll">
-          <table id="predTable"></table>
-        </div>
+        <details id="predInsightsDetails">
+          <summary>
+            <div class="row space">
+              <div class="muted2">Prediction diagnostics (errors + uncertainty)</div>
+              <span class="pill">What am I looking at?</span>
+            </div>
+          </summary>
+
+          <div class="callout" style="margin-top:10px;">
+            <div style="font-weight:650;margin-bottom:6px;">What this section is</div>
+            <div class="muted2">
+              These views help you understand <span class="mono">which rows</span> the model struggles with, and <span class="mono">whether it knew it was struggling</span>.
+              Everything here is computed on the <span class="mono">test split</span> only (rows the model did not train on).
+            </div>
+          </div>
+
+          <div class="two" style="margin-top:10px;">
+            <div>
+              <div class="muted2" style="margin-bottom:6px;">Worst errors (top-k)</div>
+              <div class="muted2" style="margin:0 0 8px;">
+                Rows where the prediction was most wrong. Use this to spot data quality issues (missing values, strange units, parsing mistakes),
+                or segments the model can’t learn from the available features.
+              </div>
+              <div class="scroll">
+                <table id="worstErrTable"></table>
+              </div>
+              <div class="muted2" style="margin-top:8px;">
+                Tip: open “Full predictions table” below to see more raw columns for any suspicious row.
+              </div>
+            </div>
+            <div>
+              <div class="muted2" style="margin-bottom:6px;">Highest uncertainty (top-k)</div>
+              <div class="muted2" style="margin:0 0 8px;">
+                “Uncertainty” here means <span class="mono">tree disagreement</span> (fastai-style).
+                A Random Forest is many trees voting; if they don’t agree, the model is less confident for that row.
+              </div>
+              <div class="scroll">
+                <table id="highUncTable"></table>
+              </div>
+              <div class="muted2" style="margin-top:8px;">
+                Not all uncertainty is bad: a row can be uncertain but still correct. The scatter below helps separate “uncertain” from “wrong”.
+              </div>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="row space" style="margin-bottom:8px;">
+            <div class="muted2">Abs(error) vs uncertainty</div>
+            <div class="row">
+              <span class="pill" id="errUncPill">—</span>
+            </div>
+          </div>
+          <div class="chartBox">
+            <canvas id="errUncChart"></canvas>
+          </div>
+          <div class="muted2" style="margin-top:8px;">
+            How to read this: <span class="mono">right</span> = more wrong, <span class="mono">up</span> = less consensus across trees.
+            Upper-right often indicates shift or rare edge-cases. Bottom-right can mean “confidently wrong” (often leakage, label noise, or a missing important feature).
+          </div>
+        </details>
+
+        <div class="hr"></div>
+
+        <details id="predFullDetails">
+          <summary>
+            <div class="row space">
+              <div class="muted2">Full predictions table (paged)</div>
+              <span class="pill">Filter + paging</span>
+            </div>
+          </summary>
+          <div class="row" style="margin-top:10px;">
+            <input id="predFilter" type="text" placeholder="Filter (true/pred contains…)" style="width:260px;" />
+            <input id="pageSize" type="number" min="10" step="10" value="50" style="width:90px;" />
+            <button class="btn" id="prevPage">Prev</button>
+            <button class="btn" id="nextPage">Next</button>
+          </div>
+          <div class="scroll" style="margin-top:10px;">
+            <table id="predTable"></table>
+          </div>
+          <div class="muted2" style="margin-top:10px;">
+            This table shows raw input rows from your CSV (test split) alongside predictions, errors, and uncertainty (tree disagreement).
+          </div>
+        </details>
 
         <div class="muted2" style="margin-top:10px;">
-          This table shows raw input rows from your CSV (test split) alongside predictions. Use filters to focus on specific values.
+          Tree-disagreement uncertainty is a fastai-style confidence signal: higher values mean the trees disagree more.
         </div>
       </section>
 
@@ -878,6 +951,12 @@
         yTest: [],
         yPred: [],
         yPredLabel: [],
+        err: [],
+        absErr: [],
+        uncertainty: null,
+        uncertaintyDetails: null,
+        uncertaintyStatus: "none",
+        uncertaintyError: "",
         oobPred: null,
         testRowRefs: [],
         fiDerived: [],
@@ -889,7 +968,8 @@
         charts: {
           fi: null,
           secondary: null,
-          shift: null
+          shift: null,
+          errUnc: null,
         },
         training: {
           startMs: 0,
@@ -1205,6 +1285,12 @@
       APP.train.yTest = [];
       APP.train.yPred = [];
       APP.train.yPredLabel = [];
+      APP.train.err = [];
+      APP.train.absErr = [];
+      APP.train.uncertainty = null;
+      APP.train.uncertaintyDetails = null;
+      APP.train.uncertaintyStatus = "none";
+      APP.train.uncertaintyError = "";
       APP.train.oobPred = null;
       APP.train.testRowRefs = [];
       APP.train.fiDerived = [];
@@ -1214,6 +1300,7 @@
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
       APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
     }
 
     function downloadBlob(blob, filename) {
@@ -2543,6 +2630,356 @@
     // ----------------------------
     // Predictions explorer
     // ----------------------------
+    function updateUncertaintyPills() {
+      const task = APP.train.pipeline?.task || "";
+      const metric = (task === "regression") ? "tree std" : "1 - vote_frac";
+
+      const p = $("uncertaintyPill");
+      if (!APP.train.model || !APP.train.pipeline) {
+        p.className = "pill";
+        p.textContent = "Uncertainty: —";
+        p.title = "";
+        return;
+      }
+
+      const st = APP.train.uncertaintyStatus || "none";
+      if (st === "running") {
+        p.className = "pill warn";
+        p.textContent = `Uncertainty: computing (${metric})`;
+        p.title = "Computing how much the trees disagree for each test row.";
+      } else if (st === "ready") {
+        p.className = "pill good";
+        p.textContent = `Uncertainty: ready (${metric})`;
+        p.title = "Higher means less agreement across trees (less confidence).";
+      } else if (st === "error") {
+        p.className = "pill bad";
+        p.textContent = "Uncertainty: failed";
+        p.title = APP.train.uncertaintyError || "";
+      } else {
+        p.className = "pill";
+        p.textContent = "Uncertainty: —";
+        p.title = "";
+      }
+    }
+
+    async function computeTreeDisagreementUncertainty({ model, X, pipeline, ensemblePred, signal }) {
+      if (!model || !pipeline || !Array.isArray(X)) throw new Error("Missing model/pipeline/X.");
+      const task = pipeline.task;
+      const nRows = X.length;
+
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+      const tryPredictionValues = async () => {
+        if (typeof model.predictionValues !== "function") return null;
+        let predValues;
+        try {
+          predValues = model.predictionValues(X);
+        } catch (e) {
+          try {
+            predValues = model.predictionValues(new Matrix(X));
+          } catch {
+            throw e;
+          }
+        }
+        if (!Array.isArray(predValues) || predValues.length === 0) throw new Error("predictionValues() returned no data.");
+        if (!Array.isArray(predValues[0])) throw new Error("predictionValues() returned unexpected shape.");
+
+        const n0 = predValues.length;
+        const n1 = Array.isArray(predValues[0]) ? predValues[0].length : 0;
+        const shape = (n0 === nRows) ? "rowMajor"
+          : (n1 === nRows) ? "treeMajor"
+          : "unknown";
+        if (shape === "unknown") throw new Error(`predictionValues() shape mismatch (got ${n0}x${n1}, expected ${nRows} rows).`);
+        const nTrees = (shape === "rowMajor") ? (predValues[0]?.length || 0) : predValues.length;
+        if (!nTrees) throw new Error("predictionValues() reported 0 trees.");
+
+        if (task === "regression") {
+          const mean = new Float64Array(nRows);
+          const m2 = new Float64Array(nRows);
+          const count = new Uint16Array(nRows);
+
+          if (shape === "rowMajor") {
+            for (let i = 0; i < nRows; i++) {
+              if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+              const row = predValues[i];
+              if (!Array.isArray(row) || !row.length) continue;
+              let c = 0;
+              let mu = 0;
+              let m2i = 0;
+              for (let t = 0; t < row.length; t++) {
+                const x = Number(row[t]);
+                if (!Number.isFinite(x)) continue;
+                c++;
+                const d1 = x - mu;
+                mu += d1 / c;
+                const d2 = x - mu;
+                m2i += d1 * d2;
+              }
+              count[i] = Math.min(65535, c);
+              mean[i] = mu;
+              m2[i] = m2i;
+              if (i % 4000 === 0) await new Promise(r => setTimeout(r, 0));
+            }
+          } else {
+            for (let t = 0; t < predValues.length; t++) {
+              if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+              const tree = predValues[t];
+              if (!Array.isArray(tree) || tree.length !== nRows) throw new Error("predictionValues() tree length mismatch.");
+              for (let i = 0; i < nRows; i++) {
+                const x = Number(tree[i]);
+                if (!Number.isFinite(x)) continue;
+                const c = (count[i] + 1);
+                count[i] = c;
+                const d1 = x - mean[i];
+                mean[i] += d1 / c;
+                const d2 = x - mean[i];
+                m2[i] += d1 * d2;
+              }
+              if (t % 5 === 0) await new Promise(r => setTimeout(r, 0));
+            }
+          }
+
+          const treeStd = new Float64Array(nRows);
+          const uncertainty = new Float64Array(nRows);
+          for (let i = 0; i < nRows; i++) {
+            const c = count[i];
+            const v = (c > 1) ? (m2[i] / (c - 1)) : 0;
+            const s = Number.isFinite(v) && v > 0 ? Math.sqrt(v) : 0;
+            treeStd[i] = s;
+            uncertainty[i] = s;
+          }
+
+          return {
+            uncertainty: Array.from(uncertainty),
+            details: { treeStd: Array.from(treeStd), treeMean: Array.from(mean), treeCount: Array.from(count) },
+          };
+        }
+
+        if (task === "classification") {
+          const numClasses = pipeline.target?.numClasses || null;
+          const voteFracMode = new Float64Array(nRows);
+          const voteMargin = new Float64Array(nRows);
+          const voteEntropy = new Float64Array(nRows);
+          const uncertainty = new Float64Array(nRows);
+
+          const canDenseCount = Number.isFinite(numClasses) && numClasses > 0 && numClasses <= 200 && (nRows * numClasses) <= 10_000_000;
+          if (canDenseCount && shape === "treeMajor") {
+            const k = numClasses;
+            const counts = new Uint16Array(nRows * k);
+            for (let t = 0; t < predValues.length; t++) {
+              if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+              const tree = predValues[t];
+              if (!Array.isArray(tree) || tree.length !== nRows) throw new Error("predictionValues() tree length mismatch.");
+              for (let i = 0; i < nRows; i++) {
+                const cls = Number(tree[i]);
+                if (!Number.isFinite(cls)) continue;
+                const c = Math.floor(cls);
+                if (c < 0 || c >= k) continue;
+                const idx = i * k + c;
+                if (counts[idx] < 65535) counts[idx]++;
+              }
+              if (t % 5 === 0) await new Promise(r => setTimeout(r, 0));
+            }
+            for (let i = 0; i < nRows; i++) {
+              let maxC = 0, secondC = 0, sumC = 0;
+              let ent = 0;
+              const base = i * k;
+              for (let c = 0; c < k; c++) {
+                const v = counts[base + c];
+                sumC += v;
+                if (v >= maxC) { secondC = maxC; maxC = v; }
+                else if (v > secondC) secondC = v;
+              }
+              const denom = Math.max(1, sumC);
+              for (let c = 0; c < k; c++) {
+                const v = counts[base + c];
+                if (!v) continue;
+                const p = v / denom;
+                ent += -p * Math.log(p);
+              }
+              const frac = maxC / denom;
+              const mar = (maxC - secondC) / denom;
+              const entNorm = (k > 1) ? (ent / Math.log(k)) : 0;
+              voteFracMode[i] = frac;
+              voteMargin[i] = mar;
+              voteEntropy[i] = entNorm;
+              uncertainty[i] = 1 - frac;
+            }
+          } else {
+            throw new Error("predictionValues() classification fallback unsupported for this shape/classes.");
+          }
+
+          return {
+            uncertainty: Array.from(uncertainty),
+            details: {
+              voteFracMode: Array.from(voteFracMode),
+              voteMargin: Array.from(voteMargin),
+              voteEntropy: Array.from(voteEntropy),
+              nTrees,
+            }
+          };
+        }
+
+        throw new Error(`Unknown task: ${task}`);
+      };
+
+      const tryEstimators = async () => {
+        const est = model.estimators;
+        if (!Array.isArray(est) || !est.length) throw new Error("Model has no estimators.");
+        const nTrees = est.length;
+        let Xm = null;
+        const treePredict = (t) => {
+          try {
+            return est[t].predict(X);
+          } catch (e) {
+            try {
+              if (!Xm) Xm = new Matrix(X);
+              return est[t].predict(Xm);
+            } catch {
+              throw e;
+            }
+          }
+        };
+
+        if (task === "regression") {
+          const mean = new Float64Array(nRows);
+          const m2 = new Float64Array(nRows);
+          const count = new Uint16Array(nRows);
+
+          for (let t = 0; t < nTrees; t++) {
+            if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+            const treePred = treePredict(t);
+            if (!Array.isArray(treePred) || treePred.length !== nRows) throw new Error("Estimator prediction length mismatch.");
+            for (let i = 0; i < nRows; i++) {
+              const x = Number(treePred[i]);
+              if (!Number.isFinite(x)) continue;
+              const c = (count[i] + 1);
+              count[i] = c;
+              const d1 = x - mean[i];
+              mean[i] += d1 / c;
+              const d2 = x - mean[i];
+              m2[i] += d1 * d2;
+            }
+            if (t % 5 === 0) await new Promise(r => setTimeout(r, 0));
+          }
+
+          const treeStd = new Float64Array(nRows);
+          const uncertainty = new Float64Array(nRows);
+          for (let i = 0; i < nRows; i++) {
+            const c = count[i];
+            const v = (c > 1) ? (m2[i] / (c - 1)) : 0;
+            const s = Number.isFinite(v) && v > 0 ? Math.sqrt(v) : 0;
+            treeStd[i] = s;
+            uncertainty[i] = s;
+          }
+
+          return {
+            uncertainty: Array.from(uncertainty),
+            details: { treeStd: Array.from(treeStd), treeMean: Array.from(mean), treeCount: Array.from(count) },
+          };
+        }
+
+        if (task === "classification") {
+          const numClasses = pipeline.target?.numClasses || null;
+          const canDenseCount = Number.isFinite(numClasses) && numClasses > 0 && numClasses <= 200 && (nRows * numClasses) <= 10_000_000;
+
+          const voteFracMode = new Float64Array(nRows);
+          const voteMargin = new Float64Array(nRows);
+          const voteEntropy = new Float64Array(nRows);
+          const uncertainty = new Float64Array(nRows);
+
+          if (canDenseCount) {
+            const k = numClasses;
+            const counts = new Uint16Array(nRows * k);
+            for (let t = 0; t < nTrees; t++) {
+              if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+              const treePred = treePredict(t);
+              if (!Array.isArray(treePred) || treePred.length !== nRows) throw new Error("Estimator prediction length mismatch.");
+              for (let i = 0; i < nRows; i++) {
+                const cls = Number(treePred[i]);
+                if (!Number.isFinite(cls)) continue;
+                const c = Math.floor(cls);
+                if (c < 0 || c >= k) continue;
+                const idx = i * k + c;
+                if (counts[idx] < 65535) counts[idx]++;
+              }
+              if (t % 5 === 0) await new Promise(r => setTimeout(r, 0));
+            }
+
+            for (let i = 0; i < nRows; i++) {
+              let maxC = 0, secondC = 0, sumC = 0;
+              let ent = 0;
+              const base = i * k;
+              for (let c = 0; c < k; c++) {
+                const v = counts[base + c];
+                sumC += v;
+                if (v >= maxC) { secondC = maxC; maxC = v; }
+                else if (v > secondC) secondC = v;
+              }
+              const denom = Math.max(1, sumC);
+              for (let c = 0; c < k; c++) {
+                const v = counts[base + c];
+                if (!v) continue;
+                const p = v / denom;
+                ent += -p * Math.log(p);
+              }
+              const frac = maxC / denom;
+              const mar = (maxC - secondC) / denom;
+              const entNorm = (k > 1) ? (ent / Math.log(k)) : 0;
+              voteFracMode[i] = frac;
+              voteMargin[i] = mar;
+              voteEntropy[i] = entNorm;
+              uncertainty[i] = 1 - frac;
+            }
+
+            return {
+              uncertainty: Array.from(uncertainty),
+              details: {
+                voteFracMode: Array.from(voteFracMode),
+                voteMargin: Array.from(voteMargin),
+                voteEntropy: Array.from(voteEntropy),
+                nTrees,
+              }
+            };
+          }
+
+          // Fallback for large/unknown class counts: agreement with ensemble prediction.
+          if (!Array.isArray(ensemblePred) || ensemblePred.length !== nRows) throw new Error("Need ensemblePred for classification uncertainty fallback.");
+          const agree = new Uint16Array(nRows);
+          for (let t = 0; t < nTrees; t++) {
+            if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+            const treePred = treePredict(t);
+            if (!Array.isArray(treePred) || treePred.length !== nRows) throw new Error("Estimator prediction length mismatch.");
+            for (let i = 0; i < nRows; i++) {
+              if (Number(treePred[i]) === Number(ensemblePred[i])) agree[i]++;
+            }
+            if (t % 5 === 0) await new Promise(r => setTimeout(r, 0));
+          }
+          for (let i = 0; i < nRows; i++) {
+            const frac = agree[i] / Math.max(1, nTrees);
+            voteFracMode[i] = frac;
+            voteMargin[i] = NaN;
+            voteEntropy[i] = NaN;
+            uncertainty[i] = 1 - frac;
+          }
+          return {
+            uncertainty: Array.from(uncertainty),
+            details: { voteFracMode: Array.from(voteFracMode), voteMargin: null, voteEntropy: null, nTrees },
+          };
+        }
+
+        throw new Error(`Unknown task: ${task}`);
+      };
+
+      try {
+        const out = await tryPredictionValues();
+        if (out) return out;
+      } catch (e) {
+        // Fall through to estimator-based computation.
+      }
+      return await tryEstimators();
+    }
+
     function currentPredView() {
       const pageSize = Math.max(10, Math.floor(parseNum($("pageSize").value) || 50));
       const filter = normStr($("predFilter").value).toLowerCase();
@@ -2579,7 +3016,7 @@
 
       const view = currentPredView();
 
-      const headCols = ["__y_true__", "__y_pred__", "__err__"].concat(colsShown);
+      const headCols = ["__y_true__", "__y_pred__", "__err__", "__abs_err__", "__uncertainty__"].concat(colsShown);
       const thead = "<thead><tr>" + headCols.map(c => `<th>${escapeHtml(c)}</th>`).join("") + "</tr></thead>";
 
       const rowsHtml = view.pageIdx.map(i => {
@@ -2588,14 +3025,16 @@
         const yt = view.yTrueDisp[i];
         const yp = view.yPredDisp[i];
 
-        const err = (APP.train.pipeline.task === "regression")
-          ? (Number(yp) - Number(yt))
-          : (yp === yt ? 0 : 1);
+        const err = APP.train.err[i];
+        const absErr = APP.train.absErr[i];
+        const unc = Array.isArray(APP.train.uncertainty) ? APP.train.uncertainty[i] : null;
 
         const cells = [
           `<td class="mono">${escapeHtml(String(yt))}</td>`,
           `<td class="mono">${escapeHtml(String(yp))}</td>`,
-          `<td class="mono">${escapeHtml(String(Number.isFinite(err) ? formatNum(err, 6) : err))}</td>`
+          `<td class="mono">${escapeHtml(String(Number.isFinite(err) ? formatNum(err, 6) : err))}</td>`,
+          `<td class="mono">${escapeHtml(String(Number.isFinite(absErr) ? formatNum(absErr, 6) : absErr))}</td>`,
+          `<td class="mono">${escapeHtml(String(Number.isFinite(unc) ? formatNum(unc, 6) : ""))}</td>`,
         ];
 
         for (const c of colsShown) {
@@ -2608,9 +3047,144 @@
       $("predTable").innerHTML = thead + `<tbody>${rowsHtml}</tbody>`;
     }
 
+    function renderPredInsights() {
+      if (!APP.train.model || !APP.train.pipeline) return;
+      updateUncertaintyPills();
+
+      const targetCol = APP.raw.targetCol;
+      const featureCols = APP.raw.columns.filter(c => c !== targetCol);
+      const colsShown = featureCols.slice(0, Math.min(6, featureCols.length));
+
+      const topK = Math.max(10, Math.floor(parseNum($("predTopK").value) || 30));
+      const n = APP.train.testRowRefs.length;
+
+      const idxAll = Array.from({ length: n }, (_, i) => i);
+      const uncReady = Array.isArray(APP.train.uncertainty) && APP.train.uncertainty.length === n;
+      const idxWorst = idxAll
+        .slice()
+        .sort((a, b) => {
+          const da = APP.train.absErr[a] || 0;
+          const db = APP.train.absErr[b] || 0;
+          if (db !== da) return db - da;
+          if (!uncReady) return 0;
+          return (APP.train.uncertainty[b] || 0) - (APP.train.uncertainty[a] || 0);
+        })
+        .slice(0, Math.min(topK, n));
+
+      const idxUnc = uncReady
+        ? idxAll.slice().sort((a, b) => (APP.train.uncertainty[b] || 0) - (APP.train.uncertainty[a] || 0)).slice(0, Math.min(topK, n))
+        : [];
+
+      const task = APP.train.pipeline.task;
+      const inv = APP.train.pipeline.targetInvMapping;
+      const yTrueDisp = (task === "classification")
+        ? APP.train.yTest.map(v => String(inv?.[v] ?? v))
+        : APP.train.yTest.map(v => String(v));
+      const yPredDisp = (task === "classification")
+        ? APP.train.yPredLabel
+        : APP.train.yPred.map(v => String(v));
+
+      const renderRankTable = (tableId, idx, emptyText) => {
+        const headCols = ["i", "y_true", "y_pred", "err", "abs_err", "uncertainty"].concat(colsShown);
+        const thead = "<thead><tr>" + headCols.map(c => `<th>${escapeHtml(c)}</th>`).join("") + "</tr></thead>";
+        if (!idx.length) {
+          $(tableId).innerHTML = thead + `<tbody><tr><td colspan="${headCols.length}" class="muted2">${escapeHtml(emptyText)}</td></tr></tbody>`;
+          return;
+        }
+        const rowsHtml = idx.map(i => {
+          const r = APP.train.testRowRefs[i];
+          const yt = yTrueDisp[i];
+          const yp = yPredDisp[i];
+          const err = APP.train.err[i];
+          const absErr = APP.train.absErr[i];
+          const unc = uncReady ? APP.train.uncertainty[i] : null;
+          const cells = [
+            `<td class="mono">${i}</td>`,
+            `<td class="mono">${escapeHtml(String(yt))}</td>`,
+            `<td class="mono">${escapeHtml(String(yp))}</td>`,
+            `<td class="mono">${escapeHtml(String(Number.isFinite(err) ? formatNum(err, 6) : err))}</td>`,
+            `<td class="mono">${escapeHtml(String(Number.isFinite(absErr) ? formatNum(absErr, 6) : absErr))}</td>`,
+            `<td class="mono">${escapeHtml(String(Number.isFinite(unc) ? formatNum(unc, 6) : ""))}</td>`,
+          ];
+          for (const c of colsShown) {
+            cells.push(`<td>${escapeHtml(truncate(normStr(r[c]) || "", 200))}</td>`);
+          }
+          return `<tr>${cells.join("")}</tr>`;
+        }).join("");
+        $(tableId).innerHTML = thead + `<tbody>${rowsHtml}</tbody>`;
+      };
+
+      renderRankTable("worstErrTable", idxWorst, "No rows.");
+      const uncStatus = APP.train.uncertaintyStatus || "none";
+      const uncEmpty = uncReady
+        ? "No rows."
+        : (uncStatus === "error")
+          ? `Uncertainty failed: ${APP.train.uncertaintyError || "unknown error"}`
+          : "Uncertainty is still computing (tree disagreement).";
+      renderRankTable("highUncTable", idxUnc, uncEmpty);
+
+      renderErrVsUncChart();
+    }
+
+    function renderErrVsUncChart() {
+      const pl = APP.train.pipeline;
+      if (!pl) return;
+
+      const n = APP.train.testRowRefs.length;
+      const uncReady = Array.isArray(APP.train.uncertainty) && APP.train.uncertainty.length === n;
+      if (!uncReady) {
+        $("errUncPill").className = "pill warn";
+        $("errUncPill").textContent = "waiting for uncertainty…";
+        APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+        return;
+      }
+
+      const maxPts = Math.min(2000, n);
+      const rng = mulberry32(2025);
+      const idx = Array.from({ length: n }, (_, i) => i);
+      shuffleInPlace(idx, rng);
+      const pick = idx.slice(0, maxPts);
+
+      const pts = [];
+      for (let j = 0; j < pick.length; j++) {
+        const i = pick[j];
+        const x0 = APP.train.absErr[i];
+        const y0 = APP.train.uncertainty[i];
+        if (!Number.isFinite(x0) || !Number.isFinite(y0)) continue;
+        const x = (pl.task === "classification") ? (x0 + (rng() - 0.5) * 0.06) : x0;
+        pts.push({ x, y: y0 });
+      }
+
+      $("errUncPill").className = "pill";
+      $("errUncPill").textContent = `n=${pts.length}`;
+
+      const ctx = $("errUncChart").getContext("2d");
+      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+      APP.ui.charts.errUnc = new Chart(ctx, {
+        type: "scatter",
+        data: {
+          datasets: [
+            { label: "abs(error) vs uncertainty", data: pts, pointRadius: 2 },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { title: { display: true, text: "abs(error)" }, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
+            y: { title: { display: true, text: "uncertainty (tree disagreement)" }, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
+          }
+        }
+      });
+    }
+
     function buildPredictionsCsv() {
       const targetCol = APP.raw.targetCol;
-      const cols = ["y_true", "y_pred"].concat(APP.raw.columns.filter(c => c !== targetCol));
+      const cols = ["y_true", "y_pred", "err", "abs_err", "uncertainty"];
+      if (APP.train.pipeline.task === "classification") cols.push("vote_frac_mode", "vote_margin", "vote_entropy");
+      if (APP.train.pipeline.task === "regression") cols.push("tree_std");
+      cols.push(...APP.raw.columns.filter(c => c !== targetCol));
       const inv = APP.train.pipeline.targetInvMapping;
 
       const lines = [];
@@ -2630,6 +3204,19 @@
         const row = [];
         row.push(String(yt));
         row.push(String(yp));
+        row.push(String(APP.train.err?.[i] ?? ""));
+        row.push(String(APP.train.absErr?.[i] ?? ""));
+        row.push(String(Array.isArray(APP.train.uncertainty) ? (APP.train.uncertainty[i] ?? "") : ""));
+        if (APP.train.pipeline.task === "classification") {
+          const d = APP.train.uncertaintyDetails || {};
+          row.push(String(Array.isArray(d.voteFracMode) ? (d.voteFracMode[i] ?? "") : ""));
+          row.push(String(Array.isArray(d.voteMargin) ? (d.voteMargin[i] ?? "") : ""));
+          row.push(String(Array.isArray(d.voteEntropy) ? (d.voteEntropy[i] ?? "") : ""));
+        }
+        if (APP.train.pipeline.task === "regression") {
+          const d = APP.train.uncertaintyDetails || {};
+          row.push(String(Array.isArray(d.treeStd) ? (d.treeStd[i] ?? "") : ""));
+        }
         for (const c of APP.raw.columns.filter(c => c !== targetCol)) row.push(normStr(r[c]) || "");
 
         lines.push(row.map(csvCell).join(","));
@@ -3012,12 +3599,18 @@
       APP.train.yTrain = ytrain;
       APP.train.yTest = ytestRaw;
       APP.train.yPred = ypredRaw;
+      APP.train.err = new Array(ytestRaw.length);
+      APP.train.absErr = new Array(ytestRaw.length);
       APP.train.oobPred = oobPred;
       APP.train.testRowRefs = testRowRefs;
       APP.train.fiDerived = fiDerived;
       APP.train.fiBase = fiBase;
       APP.train.dropped = dropped;
       APP.train.shift = { status: "running" };
+      APP.train.uncertainty = null;
+      APP.train.uncertaintyDetails = null;
+      APP.train.uncertaintyStatus = "running";
+      APP.train.uncertaintyError = "";
 
       if (pipeline.task === "classification") {
         const inv = invTarget || {};
@@ -3026,6 +3619,18 @@
       } else {
         APP.train.yPredLabel = ypredRaw.map(v => String(v));
         APP.train.yTestLabel = ytestRaw.map(v => String(v));
+      }
+
+      for (let i = 0; i < ytestRaw.length; i++) {
+        if (pipeline.task === "regression") {
+          const e = Number(ypredRaw[i]) - Number(ytestRaw[i]);
+          APP.train.err[i] = e;
+          APP.train.absErr[i] = Math.abs(e);
+        } else {
+          const e = (Number(ypred[i]) === Number(ytest[i])) ? 0 : 1;
+          APP.train.err[i] = e;
+          APP.train.absErr[i] = e;
+        }
       }
 
       // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
@@ -3064,6 +3669,33 @@
           renderShiftSection();
         }
       })();
+
+      // Background: uncertainty via tree disagreement (predictionValues)
+      (async () => {
+        try {
+          await new Promise(r => setTimeout(r, 0));
+          const out = await computeTreeDisagreementUncertainty({
+            model,
+            X: Xtest,
+            pipeline,
+            ensemblePred: (pipeline.task === "classification") ? ypred : null,
+            signal: diagSignal,
+          });
+          if (runSeq !== APP.ui.training.runSeq) return;
+          APP.train.uncertainty = out.uncertainty || null;
+          APP.train.uncertaintyDetails = out.details || null;
+          APP.train.uncertaintyStatus = "ready";
+          APP.train.uncertaintyError = "";
+        } catch (e) {
+          if (runSeq !== APP.ui.training.runSeq) return;
+          APP.train.uncertainty = null;
+          APP.train.uncertaintyDetails = null;
+          APP.train.uncertaintyStatus = "error";
+          APP.train.uncertaintyError = e?.message || String(e);
+        }
+        renderPredInsights();
+        renderPredTable();
+      })();
     }
 
     // ----------------------------
@@ -3075,9 +3707,6 @@
       const task = pl.task;
 
       if (!oobPred || !ytrain || oobPred.length !== ytrain.length) {
-        $("oobMetricLabel").textContent = (task === "regression") ? "OOB RMSE" : "OOB Accuracy";
-        $("oobMetricValue").textContent = "n/a";
-        $("oobMetricSub").textContent = "OOB not available for this run.";
         const c = $("diagCallout");
         if (c) c.className = "callout";
         if (c) c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Baseline</div><div class="muted2">Inspect feature importance and sanity-check suspicious predictors.</div>`;
@@ -3100,13 +3729,7 @@
         const oobRm = f.yTrue.length ? rmse(f.yTrue, f.yPred) : null;
         const oobRl = f.yTrue.length ? rmsle(f.yTrue, f.yPred) : null;
 
-        $("oobMetricLabel").textContent = "OOB RMSE";
-        $("oobMetricValue").textContent = (oobRm === null) ? "n/a" : formatNum(oobRm, 6);
         if (oobRm !== null) {
-          const gapPct = ((rm / Math.max(1e-12, oobRm)) - 1) * 100;
-          $("oobMetricSub").textContent =
-            `RMSLE=${oobRl===null?"n/a":formatNum(oobRl,6)} · Gap=${formatNum(gapPct,2)}% · OOB cov=${Math.round(oobCov * 100)}%`;
-
           if (diag) {
             if (rm > oobRm * 1.15) {
               diag.className = "callout warn";
@@ -3118,9 +3741,7 @@
                                 <div class="muted2">Next, focus on interpretation (top drivers) and sanity-check suspicious predictors.</div>`;
             }
           }
-        } else {
-          $("oobMetricSub").textContent = "OOB not available for this run.";
-        }
+        } 
       } else {
         const yTrue = APP.train.yTest.map(v => Number(v));
         const yPred = APP.train.yPred.map(v => Number(v));
@@ -3131,13 +3752,7 @@
         const oobAcc = f.yTrue.length ? accuracy(f.yTrue, f.yPred) : null;
         const oobF1 = f.yTrue.length ? f1Macro(f.yTrue, f.yPred, pl.target.numClasses || 2) : null;
 
-        $("oobMetricLabel").textContent = "OOB Accuracy";
-        $("oobMetricValue").textContent = (oobAcc === null) ? "n/a" : formatNum(oobAcc, 6);
         if (oobAcc !== null) {
-          const gapPct = (acc - oobAcc) * 100;
-          $("oobMetricSub").textContent =
-            `Macro-F1=${oobF1===null?"n/a":formatNum(oobF1,6)} · Gap=${formatNum(gapPct,2)}pp · OOB cov=${Math.round(oobCov * 100)}%`;
-
           if (diag) {
             if (acc < oobAcc - 0.05) {
               diag.className = "callout warn";
@@ -3149,8 +3764,6 @@
                                 <div class="muted2">Next, inspect feature importance and sanity-check whether the most important columns make sense.</div>`;
             }
           }
-        } else {
-          $("oobMetricSub").textContent = "OOB not available for this run.";
         }
       }
     }
@@ -3224,9 +3837,6 @@
         `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
 
       $("resultsCallouts").innerHTML = "";
-      $("oobMetricLabel").textContent = "OOB —";
-      $("oobMetricValue").textContent = "—";
-      $("oobMetricSub").textContent = "—";
 
       const addCallout = (cls, title, body) => {
         const el = document.createElement("div");
@@ -3260,10 +3870,6 @@
         $("primaryMetricValue").textContent = formatNum(rm, 6);
         $("primaryMetricSub").textContent = `MAE=${formatNum(ma,6)} · R²=${formatNum(r,6)} · RMSLE=${rl===null?"n/a":formatNum(rl,6)}`;
 
-        $("oobMetricLabel").textContent = "OOB RMSE";
-        $("oobMetricValue").textContent = "…";
-        $("oobMetricSub").textContent = "Computing OOB in the background…";
-
         $("secondaryChartTitle").textContent = "Predicted vs true (scatter)";
         $("secondaryChartPill").textContent = `n=${APP.train.yTest.length}`;
         $("secondaryChartHint").textContent = "Ideally points cluster around the diagonal. Outliers can indicate missingness, leakage, or rare categories.";
@@ -3279,10 +3885,6 @@
         $("primaryMetricLabel").textContent = "Test Accuracy";
         $("primaryMetricValue").textContent = formatNum(acc, 6);
         $("primaryMetricSub").textContent = `Macro-F1=${formatNum(f1,6)} · Classes=${pl.target.numClasses}`;
-
-        $("oobMetricLabel").textContent = "OOB Accuracy";
-        $("oobMetricValue").textContent = "…";
-        $("oobMetricSub").textContent = "Computing OOB in the background…";
 
         $("secondaryChartTitle").textContent = "Confusion matrix (top classes)";
         $("secondaryChartPill").textContent = `classes=${pl.target.numClasses}`;
@@ -3304,6 +3906,10 @@
 
       APP.ui.predPage = 0;
       $("predFilter").value = "";
+      if ($("predFullDetails")) $("predFullDetails").open = false;
+      if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
+      updateUncertaintyPills();
+      renderPredInsights();
       renderPredTable();
 
       updateExportUI();
@@ -3546,6 +4152,12 @@ function invertTargetIfNeeded(yPred, artifact){
         yTest: [],
         yPred: [],
         yPredLabel: [],
+        err: [],
+        absErr: [],
+        uncertainty: null,
+        uncertaintyDetails: null,
+        uncertaintyStatus: "none",
+        uncertaintyError: "",
         oobPred: null,
         testRowRefs: [],
         fiDerived: [],
@@ -3559,6 +4171,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
       APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
 
       $("trainStatus").innerHTML = "";
       setTrainingUi(false);
@@ -3567,7 +4180,14 @@ function invertTargetIfNeeded(yPred, artifact){
       $("uploadStatus").innerHTML = "";
       $("previewTable").innerHTML = "";
       $("predTable").innerHTML = "";
+      $("worstErrTable").innerHTML = "";
+      $("highUncTable").innerHTML = "";
       $("resultsCallouts").innerHTML = "";
+      $("uncertaintyPill").textContent = "Uncertainty: —";
+      $("uncertaintyPill").className = "pill";
+      $("errUncPill").textContent = "—";
+      $("errUncPill").className = "pill";
+      if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
       $("shiftPill").textContent = "—";
       $("shiftPill").className = "pill";
       $("shiftSummary").textContent = "—";
@@ -3585,9 +4205,12 @@ function invertTargetIfNeeded(yPred, artifact){
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";
       $("splitStrategy").value = "random";
+      $("predTopK").value = "30";
       $("predFilter").value = "";
       $("pageSize").value = "50";
       $("importanceMode").value = "base";
+      if ($("predFullDetails")) $("predFullDetails").open = false;
+      if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
 
       gotoStep(0);
     }
@@ -3950,6 +4573,13 @@ function invertTargetIfNeeded(yPred, artifact){
 
     $("predFilter").addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });
     $("pageSize").addEventListener("change", () => { APP.ui.predPage = 0; renderPredTable(); });
+    $("predTopK").addEventListener("change", () => { renderPredInsights(); });
+    $("predInsightsDetails").addEventListener("toggle", () => {
+      if ($("predInsightsDetails").open) {
+        renderPredInsights();
+        if (APP.ui.charts.errUnc) APP.ui.charts.errUnc.resize();
+      }
+    });
 
     $("prevPage").addEventListener("click", () => { APP.ui.predPage = Math.max(0, APP.ui.predPage - 1); renderPredTable(); });
     $("nextPage").addEventListener("click", () => { APP.ui.predPage = APP.ui.predPage + 1; renderPredTable(); });
@@ -3972,7 +4602,7 @@ function invertTargetIfNeeded(yPred, artifact){
 This zip contains:
 - rf_artifact.json: preprocessing pipeline + serialized ml-random-forest model
 - use_model.js: sample loader code (browser ESM + Node)
-- test_predictions.csv: your test split with predictions (for inspection)
+- test_predictions.csv: your test split with predictions + uncertainty (tree disagreement)
 
 Notes
 - Preprocessing is fit on the training split only to avoid leakage.

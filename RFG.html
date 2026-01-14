@@ -714,6 +714,16 @@
             <div class="muted2" style="margin-top:8px;">
               Aggregation groups derived features (e.g. date parts + missing indicators) back to their original column.
             </div>
+            <div class="row hidden" id="pruneImpRow" style="margin-top:10px;">
+              <button class="btn" id="pruneImpBtn">Prune low-importance → retrain</button>
+              <div class="field" style="margin:0;min-width:160px;">
+                <label for="pruneMinImp" style="margin-bottom:4px;">Min importance</label>
+                <input id="pruneMinImp" type="number" min="0" step="0.001" value="0.002" style="width:160px;" />
+                <div class="muted2" style="margin-top:4px;">Drops columns below this fraction</div>
+              </div>
+              <button class="btn ghost" id="pruneUndoBtn" disabled>Undo prune</button>
+              <span class="muted2" id="pruneMiniHint">—</span>
+            </div>
           </div>
 
           <div>
@@ -750,7 +760,10 @@
               <div class="muted2" id="shiftSummary">—</div>
             </div>
             <div>
-              <div class="muted" style="margin-bottom:8px;margin-top:0;">Top shift drivers (feature importance)</div>
+              <div class="row space" style="margin-bottom:8px;margin-top:0;">
+                <div class="muted">Top shift drivers (feature importance)</div>
+                <button class="btn" id="pruneShiftTopBtn" disabled>Prune top shift driver → retrain</button>
+              </div>
               <div class="chartBox">
                 <canvas id="shiftFiChart"></canvas>
               </div>
@@ -957,6 +970,7 @@
         uncertaintyDetails: null,
         uncertaintyStatus: "none",
         uncertaintyError: "",
+        runSummary: null,
         oobPred: null,
         testRowRefs: [],
         fiDerived: [],
@@ -986,6 +1000,10 @@
         predFilter: "",
         colSort: { key: "name", dir: "asc" },
         shiftAutoExpandedRunSeq: 0,
+        prevRunSummary: null,
+        pruneUndoExcluded: null,
+        pruneUndoReason: "",
+        pruneJustApplied: false,
       }
     };
 
@@ -1291,6 +1309,7 @@
       APP.train.uncertaintyDetails = null;
       APP.train.uncertaintyStatus = "none";
       APP.train.uncertaintyError = "";
+      APP.train.runSummary = null;
       APP.train.oobPred = null;
       APP.train.testRowRefs = [];
       APP.train.fiDerived = [];
@@ -2628,6 +2647,99 @@
     }
 
     // ----------------------------
+    // Prune → retrain (feature selection loop)
+    // ----------------------------
+    function currentIncludedFeatureCols() {
+      const targetCol = APP.raw.targetCol;
+      const meta = APP.raw.colMeta || {};
+      return APP.raw.columns.filter(c => c !== targetCol && meta[c]?.include);
+    }
+
+    function normalizeFi(fiBase) {
+      const xs = (fiBase || [])
+        .filter(x => x && typeof x.name === "string" && Number.isFinite(x.imp))
+        .map(x => ({ name: x.name, imp: Math.max(0, Number(x.imp)) }));
+      const sum = xs.reduce((a, x) => a + x.imp, 0);
+      if (!(sum > 0)) return [];
+      let cum = 0;
+      return xs.map(x => {
+        const frac = x.imp / sum;
+        cum += frac;
+        return { name: x.name, imp: x.imp, frac, cum };
+      });
+    }
+
+    const PRUNE_SHOW_THRESHOLD = 0.002;
+
+    function applyExclusionsAndRetrain({ dropCols, reason }) {
+      const cols = (dropCols || []).filter(c => c && c !== APP.raw.targetCol);
+      if (!cols.length) return;
+      if (APP.ui.training.isTraining) return;
+
+      APP.ui.pruneUndoExcluded = new Set(APP.setup.excluded);
+      APP.ui.pruneUndoReason = reason || "prune";
+      APP.ui.pruneJustApplied = true;
+
+      for (const c of cols) APP.setup.excluded.add(c);
+      syncHiddenTypingLists();
+      recomputeColumnMeta();
+      refreshSplitDateCol();
+      syncSetupUI();
+      renderColumnTable();
+      syncButtons();
+
+      gotoStep(2);
+      setTimeout(() => trainModel(), 50);
+    }
+
+    function undoLastPrune() {
+      if (!APP.ui.pruneUndoExcluded) return;
+      if (APP.ui.training.isTraining) return;
+      APP.setup.excluded = new Set(APP.ui.pruneUndoExcluded);
+      APP.ui.pruneUndoExcluded = null;
+      APP.ui.pruneUndoReason = "";
+      APP.ui.pruneJustApplied = false;
+      syncHiddenTypingLists();
+      recomputeColumnMeta();
+      refreshSplitDateCol();
+      syncSetupUI();
+      renderColumnTable();
+      syncButtons();
+      updatePruneMiniUi();
+    }
+
+    function updatePruneMiniUi() {
+      const hasModel = Boolean(APP.train.model && APP.train.pipeline);
+      $("pruneUndoBtn").disabled = !APP.ui.pruneUndoExcluded;
+
+      if (!hasModel) {
+        hide($("pruneImpRow"));
+        $("pruneImpBtn").disabled = true;
+        $("pruneShiftTopBtn").disabled = true;
+        $("pruneMiniHint").textContent = "Train a model to enable pruning.";
+        return;
+      }
+
+      const fiNorm = normalizeFi(APP.train.fiBase);
+      const hasFi = fiNorm.length > 0;
+      const includedCols = currentIncludedFeatureCols();
+      const hasLow = hasFi && fiNorm.some(x => includedCols.includes(x.name) && x.frac < PRUNE_SHOW_THRESHOLD);
+      if (hasLow) show($("pruneImpRow"));
+      else hide($("pruneImpRow"));
+      $("pruneImpBtn").disabled = !(hasFi && hasLow);
+
+      const shift = APP.train.shift;
+      const shiftScore = shift?.oobBalAcc ?? shift?.oobAcc ?? null;
+      const shiftReady = (shiftScore !== null) && shiftScore >= 0.75 && Array.isArray(shift?.fiBase) && normalizeFi(shift.fiBase).length;
+      $("pruneShiftTopBtn").disabled = !shiftReady;
+
+      const included = currentIncludedFeatureCols().length;
+      const excluded = APP.setup.excluded?.size || 0;
+      const shiftTxt = (shiftScore === null) ? "shift: n/a" : `shift=${formatNum(shiftScore, 3)}`;
+      $("pruneMiniHint").textContent = `Included=${included} · Excluded=${excluded} · ${shiftTxt}`;
+    }
+
+    // ----------------------------
     // Predictions explorer
     // ----------------------------
     function updateUncertaintyPills() {
@@ -3448,6 +3560,10 @@
       APP.ui.training.diagAbortController = new AbortController();
       const diagSignal = APP.ui.training.diagAbortController.signal;
 
+      if (APP.train.runSummary) {
+        APP.ui.prevRunSummary = { ...APP.train.runSummary };
+      }
+
       APP.ui.training.startMs = performance.now();
       $("trainStatus").innerHTML = `<span class="spinner"></span> Preparing data…`;
 
@@ -3633,20 +3749,61 @@
         }
       }
 
+      // Run summary (test + OOB, for compare + pruning loop)
+      const testSummary = (pipeline.task === "regression")
+        ? (() => {
+          const rm = rmse(ytestRaw, ypredRaw);
+          const ma = mae(ytestRaw, ypredRaw);
+          const r = r2(ytestRaw, ypredRaw);
+          const rl = rmsle(ytestRaw, ypredRaw);
+          return { primaryLabel: "Test RMSE", primary: rm, sub: `MAE=${formatNum(ma,6)} · R²=${formatNum(r,6)} · RMSLE=${rl===null?"n/a":formatNum(rl,6)}` };
+        })()
+        : (() => {
+          const yT = ytest.map(v => Number(v));
+          const yP = ypred.map(v => Number(v));
+          const acc = accuracy(yT, yP);
+          const f1 = f1Macro(yT, yP, pipeline.target.numClasses || 2);
+          return { primaryLabel: "Test Accuracy", primary: acc, sub: `Macro-F1=${formatNum(f1,6)} · Classes=${pipeline.target.numClasses}` };
+        })();
+
+      let oobSummary = null;
+      if (Array.isArray(oobPred) && oobPred.length === ytrain.length) {
+        if (pipeline.task === "regression") {
+          const ytRaw = (pipeline.targetTransform === "log1p") ? ytrain.map(v => Math.expm1(v)) : ytrain.slice();
+          const ypRaw = (pipeline.targetTransform === "log1p")
+            ? oobPred.map(v => (v === null || v === undefined) ? null : Math.expm1(v))
+            : oobPred.map(v => (v === null || v === undefined) ? null : Number(v));
+          const f = filterPaired(ytRaw, ypRaw);
+          const cov = f.yTrue.length / Math.max(1, ytrain.length);
+          const oobRm = f.yTrue.length ? rmse(f.yTrue, f.yPred) : null;
+          oobSummary = { label: "OOB RMSE", value: oobRm, coverage: cov, sub: `OOB cov=${Math.round(cov * 100)}%` };
+        } else {
+          const f = filterPaired(ytrain.map(v => Number(v)), oobPred.map(v => (v === null || v === undefined) ? null : Number(v)));
+          const cov = f.yTrue.length / Math.max(1, ytrain.length);
+          const oobAcc = f.yTrue.length ? accuracy(f.yTrue, f.yPred) : null;
+          oobSummary = { label: "OOB Accuracy", value: oobAcc, coverage: cov, sub: `OOB cov=${Math.round(cov * 100)}%` };
+        }
+      }
+
+      APP.train.runSummary = {
+        runId: Date.now(),
+        task: pipeline.task,
+        test: testSummary,
+        oob: oobSummary,
+        includedCols: currentIncludedFeatureCols().length,
+        excludedCols: APP.setup.excluded?.size || 0,
+        pruneReason: APP.ui.pruneJustApplied ? (APP.ui.pruneUndoReason || "") : "",
+      };
+      APP.ui.pruneJustApplied = false;
+
       // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
-      renderResults({ oobPred: null, ytrain: null });
+      renderResults();
       gotoStep(3);
 
-      $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally. Diagnostics running…</span>`;
+      $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
       APP.ui.training.abortController = null;
       APP.ui.training.stopRequested = false;
       setTrainingUi(false);
-
-      // Background: OOB KPI (does not affect “good stuff” rendering)
-      setTimeout(() => {
-        if (runSeq !== APP.ui.training.runSeq) return;
-        renderOobKpis({ oobPred: APP.train.oobPred, ytrain: APP.train.yTrain });
-      }, 0);
 
       // Background: shift diagnostic
       (async () => {
@@ -3701,73 +3858,6 @@
     // ----------------------------
     // Results rendering
     // ----------------------------
-    function renderOobKpis({ oobPred, ytrain }) {
-      const pl = APP.train.pipeline;
-      if (!pl) return;
-      const task = pl.task;
-
-      if (!oobPred || !ytrain || oobPred.length !== ytrain.length) {
-        const c = $("diagCallout");
-        if (c) c.className = "callout";
-        if (c) c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Baseline</div><div class="muted2">Inspect feature importance and sanity-check suspicious predictors.</div>`;
-        return;
-      }
-
-      const diag = $("diagCallout");
-      if (task === "regression") {
-        const yTrue = APP.train.yTest;
-        const yPred = APP.train.yPred;
-        const rm = rmse(yTrue, yPred);
-
-        const ytRaw = (pl.targetTransform === "log1p") ? ytrain.map(v => Math.expm1(v)) : ytrain.slice();
-        const ypRaw = (pl.targetTransform === "log1p")
-          ? oobPred.map(v => (v === null || v === undefined) ? null : Math.expm1(v))
-          : oobPred.map(v => (v === null || v === undefined) ? null : Number(v));
-
-        const f = filterPaired(ytRaw, ypRaw);
-        const oobCov = f.yTrue.length / Math.max(1, ytrain.length);
-        const oobRm = f.yTrue.length ? rmse(f.yTrue, f.yPred) : null;
-        const oobRl = f.yTrue.length ? rmsle(f.yTrue, f.yPred) : null;
-
-        if (oobRm !== null) {
-          if (diag) {
-            if (rm > oobRm * 1.15) {
-              diag.className = "callout warn";
-              diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Test error is worse than OOB error</div>
-                                <div class="muted2">This often indicates distribution shift (time-like IDs, changing behavior). Consider a time-based split and/or excluding ID-like columns.</div>`;
-            } else {
-              diag.className = "callout good";
-              diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Baseline looks healthy</div>
-                                <div class="muted2">Next, focus on interpretation (top drivers) and sanity-check suspicious predictors.</div>`;
-            }
-          }
-        } 
-      } else {
-        const yTrue = APP.train.yTest.map(v => Number(v));
-        const yPred = APP.train.yPred.map(v => Number(v));
-        const acc = accuracy(yTrue, yPred);
-
-        const f = filterPaired(ytrain.map(v => Number(v)), oobPred.map(v => (v === null || v === undefined) ? null : Number(v)));
-        const oobCov = f.yTrue.length / Math.max(1, ytrain.length);
-        const oobAcc = f.yTrue.length ? accuracy(f.yTrue, f.yPred) : null;
-        const oobF1 = f.yTrue.length ? f1Macro(f.yTrue, f.yPred, pl.target.numClasses || 2) : null;
-
-        if (oobAcc !== null) {
-          if (diag) {
-            if (acc < oobAcc - 0.05) {
-              diag.className = "callout warn";
-              diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Generalization gap detected</div>
-                                <div class="muted2">Test accuracy is noticeably worse than OOB accuracy. Consider excluding ID-like columns or using a time-based split if the data has temporal structure.</div>`;
-            } else {
-              diag.className = "callout good";
-              diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Baseline looks healthy</div>
-                                <div class="muted2">Next, inspect feature importance and sanity-check whether the most important columns make sense.</div>`;
-            }
-          }
-        }
-      }
-    }
-
     function renderShiftSection() {
       const shift = APP.train.shift;
       const isRunning = Boolean(shift && shift.status === "running");
@@ -3819,9 +3909,10 @@
         `<div>Use “Top shift drivers” to spot culprits (often IDs, timestamps/elapsed, or proxies for the target). Try excluding them, changing the cutoff, or using only recent data.</div>`;
 
       renderShiftFIChart(shift.fiBase || []);
+      updatePruneMiniUi();
     }
 
-    function renderResults({ oobPred, ytrain }) {
+    function renderResults() {
       const pl = APP.train.pipeline;
       const task = pl.task;
 
@@ -3854,6 +3945,40 @@
       if (APP.train.dropped?.unseenTestLabels) {
         addCallout("warn", "Some test rows were dropped (unseen labels)",
           `Dropped <span class="mono">${APP.train.dropped.unseenTestLabels}</span> test rows because their label never appeared in the training split (train-only label encoding).`
+        );
+      }
+
+      const cur = APP.train.runSummary;
+      if (cur?.pruneReason) {
+        addCallout("", "Prune applied", escapeHtml(cur.pruneReason));
+      }
+
+      const prev = APP.ui.prevRunSummary;
+      if (prev && prev.runId && cur && cur.runId && prev.runId !== cur.runId && prev.task === cur.task) {
+        const betterIsLower = (cur.task === "regression");
+        const a = Number(prev.test?.primary);
+        const b = Number(cur.test?.primary);
+        const delta = (Number.isFinite(a) && Number.isFinite(b)) ? (b - a) : null;
+        const improved = (delta !== null)
+          ? (betterIsLower ? (delta < 0) : (delta > 0))
+          : null;
+
+        const cls = (improved === null) ? "" : (improved ? "good" : "warn");
+        const deltaTxt = (delta === null) ? "n/a" : `${delta >= 0 ? "+" : ""}${formatNum(delta, 6)}`;
+        const prevTxt = Number.isFinite(a) ? formatNum(a, 6) : "n/a";
+        const curTxt = Number.isFinite(b) ? formatNum(b, 6) : "n/a";
+
+        const oA = Number(prev.oob?.value);
+        const oB = Number(cur.oob?.value);
+        const oDelta = (Number.isFinite(oA) && Number.isFinite(oB)) ? (oB - oA) : null;
+        const oDeltaTxt = (oDelta === null) ? "n/a" : `${oDelta >= 0 ? "+" : ""}${formatNum(oDelta, 6)}`;
+
+        addCallout(cls, "Compare to previous run",
+          `${escapeHtml(cur.test?.primaryLabel || "Test metric")}: <span class="mono">${escapeHtml(curTxt)}</span> (prev <span class="mono">${escapeHtml(prevTxt)}</span>, Δ <span class="mono">${escapeHtml(deltaTxt)}</span>)` +
+          (prev.oob?.label && cur.oob?.label
+            ? `<div style="margin-top:6px;">${escapeHtml(cur.oob.label)}: <span class="mono">${escapeHtml(Number.isFinite(oB) ? formatNum(oB, 6) : "n/a")}</span> (prev <span class="mono">${escapeHtml(Number.isFinite(oA) ? formatNum(oA, 6) : "n/a")}</span>, Δ <span class="mono">${escapeHtml(oDeltaTxt)}</span>)</div>`
+            : "") +
+          `<div style="margin-top:6px;">Columns: included <span class="mono">${cur.includedCols}</span> (prev <span class="mono">${prev.includedCols}</span>) · excluded <span class="mono">${cur.excludedCols}</span> (prev <span class="mono">${prev.excludedCols}</span>)</div>`
         );
       }
 
@@ -3892,12 +4017,6 @@
         renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 15);
       }
 
-      const diag = document.createElement("div");
-      diag.id = "diagCallout";
-      diag.className = "callout";
-      diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Diagnostics running</div>
-                        <div class="muted2">OOB and shift diagnostics are computed in the background and will fill in automatically.</div>`;
-      $("resultsCallouts").appendChild(diag);
       renderShiftSection();
 
       const mode = $("importanceMode").value;
@@ -3911,6 +4030,7 @@
       updateUncertaintyPills();
       renderPredInsights();
       renderPredTable();
+      updatePruneMiniUi();
 
       updateExportUI();
     }
@@ -4158,6 +4278,7 @@ function invertTargetIfNeeded(yPred, artifact){
         uncertaintyDetails: null,
         uncertaintyStatus: "none",
         uncertaintyError: "",
+        runSummary: null,
         oobPred: null,
         testRowRefs: [],
         fiDerived: [],
@@ -4167,6 +4288,10 @@ function invertTargetIfNeeded(yPred, artifact){
       };
       APP.ui.predPage = 0;
       APP.ui.predFilter = "";
+      APP.ui.prevRunSummary = null;
+      APP.ui.pruneUndoExcluded = null;
+      APP.ui.pruneUndoReason = "";
+      APP.ui.pruneJustApplied = false;
 
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
@@ -4188,6 +4313,11 @@ function invertTargetIfNeeded(yPred, artifact){
       $("errUncPill").textContent = "—";
       $("errUncPill").className = "pill";
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
+      $("pruneUndoBtn").disabled = true;
+      $("pruneImpBtn").disabled = true;
+      $("pruneShiftTopBtn").disabled = true;
+      $("pruneMiniHint").textContent = "—";
+      hide($("pruneImpRow"));
       $("shiftPill").textContent = "—";
       $("shiftPill").className = "pill";
       $("shiftSummary").textContent = "—";
@@ -4211,6 +4341,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("importanceMode").value = "base";
       if ($("predFullDetails")) $("predFullDetails").open = false;
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
+      $("pruneMinImp").value = "0.002";
 
       gotoStep(0);
     }
@@ -4581,6 +4712,39 @@ function invertTargetIfNeeded(yPred, artifact){
       }
     });
 
+    $("pruneImpBtn").addEventListener("click", () => {
+      if (!APP.train.model || !APP.train.pipeline) return;
+      const included = currentIncludedFeatureCols();
+      const fiNorm = normalizeFi(APP.train.fiBase).filter(x => included.includes(x.name));
+      if (!fiNorm.length) return;
+
+      const tau = Math.max(0, parseNum($("pruneMinImp").value) || 0);
+      const keep = fiNorm.filter(x => x.frac >= tau).map(x => x.name);
+      const minKeep = Math.min(included.length, 5);
+      if (keep.length < minKeep) {
+        keep.length = 0;
+        for (let i = 0; i < Math.min(minKeep, fiNorm.length); i++) keep.push(fiNorm[i].name);
+      }
+      const drop = included.filter(c => !keep.includes(c));
+      applyExclusionsAndRetrain({ dropCols: drop, reason: `Pruned low-importance (min imp=${formatNum(tau, 4)})` });
+    });
+
+    $("pruneShiftTopBtn").addEventListener("click", () => {
+      if (!APP.train.model || !APP.train.pipeline) return;
+      const shiftFi = APP.train.shift?.fiBase || null;
+      const shiftScore = APP.train.shift?.oobBalAcc ?? APP.train.shift?.oobAcc ?? null;
+      if (!Array.isArray(shiftFi) || !shiftFi.length || shiftScore === null) return;
+      const included = currentIncludedFeatureCols();
+      const fiNorm = normalizeFi(shiftFi).filter(x => included.includes(x.name));
+      if (!fiNorm.length) return;
+      const top = fiNorm[0].name;
+      applyExclusionsAndRetrain({ dropCols: [top], reason: `Pruned top shift driver (${top})` });
+    });
+
+    $("pruneUndoBtn").addEventListener("click", () => {
+      undoLastPrune();
+    });
+
     $("prevPage").addEventListener("click", () => { APP.ui.predPage = Math.max(0, APP.ui.predPage - 1); renderPredTable(); });
     $("nextPage").addEventListener("click", () => { APP.ui.predPage = APP.ui.predPage + 1; renderPredTable(); });
 
@@ -4623,6 +4787,49 @@ Compatibility
 
       const blob = await zip.generateAsync({ type: "blob" });
       downloadBlob(blob, "rf_artifact.zip");
+    });
+
+    // Keyboard: Return = "next step" (via training)
+    window.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+      if (APP.ui.training.isTraining) return;
+
+      if (APP.step === 0) {
+        if ($("continueToSetupBtn")?.disabled) return;
+        e.preventDefault();
+        gotoStep(1);
+        return;
+      }
+
+      if (APP.step === 1) {
+        if ($("continueToTrainBtn")?.disabled) return;
+        e.preventDefault();
+        gotoStep(2);
+        return;
+      }
+
+      if (APP.step === 2) {
+        if ($("trainBtn")?.disabled) return;
+        e.preventDefault();
+        trainModel();
+        return;
+      }
+
+      if (APP.step === 3) {
+        e.preventDefault();
+        gotoStep(4);
+        return;
+      }
+
+      if (APP.step === 4) {
+        if ($("downloadZipBtn")?.disabled) return;
+        e.preventDefault();
+        $("downloadZipBtn").click();
+      }
     });
 
     // ----------------------------

@@ -290,7 +290,7 @@
       outline:none;
     }
 
-    .kpiGrid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px}
+    .kpiGrid{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:12px}
     @media(max-width:980px){.kpiGrid{grid-template-columns:1fr}}
     .kpi{
       border:1px solid var(--border2);
@@ -327,6 +327,12 @@
     }
     details > summary::-webkit-details-marker{display:none}
     details .muted{margin-top:8px}
+
+    #shiftDetails > summary{
+      padding:0;
+    }
+    #shiftDetails > summary .muted{margin-top:0}
+    #shiftDetails[open] > summary{margin-bottom:10px}
 
     .spinner{
       width:14px;height:14px;border-radius:50%;
@@ -670,6 +676,12 @@
           </div>
 
           <div class="kpi">
+            <div class="lbl" id="oobMetricLabel">OOB —</div>
+            <div class="big mono" id="oobMetricValue">—</div>
+            <div class="small" id="oobMetricSub">—</div>
+          </div>
+
+          <div class="kpi">
             <div class="lbl">Setup</div>
             <div class="small mono" id="setupSummary">—</div>
             <div class="small mono" id="featureSummary">—</div>
@@ -728,6 +740,29 @@
             <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
           </div>
         </div>
+
+        <div class="hr"></div>
+
+        <details id="shiftDetails">
+          <summary>
+            <div class="row space">
+              <div class="muted">Shift detector (is_valid model)</div>
+              <span class="pill" id="shiftPill">—</span>
+            </div>
+          </summary>
+          <div class="two" style="margin-top:10px;">
+            <div class="callout">
+              <div style="font-weight:650;margin-bottom:6px;">How to read this</div>
+              <div class="muted2" id="shiftSummary">—</div>
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:8px;margin-top:0;">Top shift drivers (feature importance)</div>
+              <div class="chartBox">
+                <canvas id="shiftFiChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </details>
 
         <div class="hr"></div>
 
@@ -837,20 +872,24 @@
         pipeline: null,
         featureNames: [],
         baseForDerived: [],
+        derivedTypeByFeature: null,
         split: { trainIdx: [], testIdx: [] },
         yTrain: [],
         yTest: [],
         yPred: [],
         yPredLabel: [],
+        oobPred: null,
         testRowRefs: [],
         fiDerived: [],
         fiBase: [],
+        shift: null,
         dropped: { unusableTargetRows: 0, unseenTestLabels: 0, sampledRows: 0, usableRows: 0 }
       },
       ui: {
         charts: {
           fi: null,
-          secondary: null
+          secondary: null,
+          shift: null
         },
         training: {
           startMs: 0,
@@ -859,11 +898,14 @@
           isTraining: false,
           stopRequested: false,
           abortController: null,
+          diagAbortController: null,
+          runSeq: 0,
         },
         parseSeq: 0,
         predPage: 0,
         predFilter: "",
         colSort: { key: "name", dir: "asc" },
+        shiftAutoExpandedRunSeq: 0,
       }
     };
 
@@ -1049,6 +1091,37 @@
       return ok / Math.max(1, yTrue.length);
     }
 
+    function balancedAccuracy(yTrue, yPred, numClasses) {
+      const k = Math.max(2, Math.floor(numClasses || 2));
+      const tp = new Array(k).fill(0);
+      const fn = new Array(k).fill(0);
+      for (let i = 0; i < yTrue.length; i++) {
+        const t = yTrue[i];
+        const p = yPred[i];
+        if (t === p) tp[t]++;
+        else fn[t]++;
+      }
+      let recallSum = 0;
+      for (let c = 0; c < k; c++) {
+        const denom = tp[c] + fn[c];
+        const recall = denom ? (tp[c] / denom) : 0;
+        recallSum += recall;
+      }
+      return recallSum / Math.max(1, k);
+    }
+
+    function filterPaired(yTrue, yPred) {
+      const yt = [];
+      const yp = [];
+      for (let i = 0; i < Math.min(yTrue.length, yPred.length); i++) {
+        const p = yPred[i];
+        if (p === null || p === undefined || !Number.isFinite(Number(p))) continue;
+        yt.push(yTrue[i]);
+        yp.push(p);
+      }
+      return { yTrue: yt, yPred: yp };
+    }
+
     function f1Macro(yTrue, yPred, numClasses) {
       const tp = new Array(numClasses).fill(0);
       const fp = new Array(numClasses).fill(0);
@@ -1116,7 +1189,9 @@
 
     function releaseAllResources() {
       try { APP.ui.training.abortController?.abort(); } catch {}
+      try { APP.ui.training.diagAbortController?.abort(); } catch {}
       APP.ui.training.abortController = null;
+      APP.ui.training.diagAbortController = null;
       APP.ui.training.isTraining = false;
       APP.ui.training.stopRequested = false;
 
@@ -1125,16 +1200,20 @@
       APP.train.pipeline = null;
       APP.train.featureNames = [];
       APP.train.baseForDerived = [];
+      APP.train.derivedTypeByFeature = null;
       APP.train.yTrain = [];
       APP.train.yTest = [];
       APP.train.yPred = [];
       APP.train.yPredLabel = [];
+      APP.train.oobPred = null;
       APP.train.testRowRefs = [];
       APP.train.fiDerived = [];
       APP.train.fiBase = [];
+      APP.train.shift = null;
 
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
     }
 
     function downloadBlob(blob, filename) {
@@ -1702,13 +1781,13 @@
 
     function parseMaxFeatures(v, nFeatures) {
       const s = normStr(v);
-      if (!s) return 0.5;
+      if (!s) return 1.0;
       const x = Number(s);
-      if (!Number.isFinite(x)) return 0.5;
+      if (!Number.isFinite(x)) return 1.0;
       if (x > 0 && x < 1) return x;
       const k = Math.floor(x);
       if (k >= 1) return Math.min(k, nFeatures);
-      return 0.5;
+      return 1.0;
     }
 
     function buildInverseMapping(mappingObj) {
@@ -1849,6 +1928,7 @@
         return {
           Xtrain: [], ytrain: [], Xtest: [], ytest: [],
           testRowRefs: [],
+          trainRowRefs: [],
           featureNames, baseForDerived,
           pipeline: null, task,
           dropped: { unusableTargetRows: droppedTargets, unseenTestLabels: 0, sampledRows: sampledRows.length, usableRows: 0 }
@@ -1993,6 +2073,7 @@
 
       return {
         Xtrain, ytrain, Xtest, ytest, testRowRefs,
+        trainRowRefs: trainRows,
         featureNames, baseForDerived,
         pipeline, task,
         dropped: {
@@ -2053,6 +2134,46 @@
     // ----------------------------
     // Charts
     // ----------------------------
+    const FEATURE_COLORS = {
+      continuous: { fill: "rgba(79, 152, 255, 0.75)", stroke: "rgba(79, 152, 255, 1)" },
+      categorical: { fill: "rgba(182, 120, 255, 0.75)", stroke: "rgba(182, 120, 255, 1)" },
+      date: { fill: "rgba(255, 170, 80, 0.75)", stroke: "rgba(255, 170, 80, 1)" },
+      datepart: { fill: "rgba(255, 170, 80, 0.75)", stroke: "rgba(255, 170, 80, 1)" },
+      other: { fill: "rgba(160, 175, 205, 0.60)", stroke: "rgba(160, 175, 205, 0.90)" },
+    };
+
+    function baseTypeOfColumn(col) {
+      const t = APP.raw.colMeta?.[col]?.inferredType;
+      if (t === "continuous" || t === "categorical" || t === "date") return t;
+      return "other";
+    }
+
+    function buildDerivedTypeByFeature(featureNames, baseForDerived) {
+      const map = {};
+      for (let i = 0; i < featureNames.length; i++) {
+        const feat = featureNames[i];
+        const base = baseForDerived[i] || feat;
+        const baseType = baseTypeOfColumn(base);
+        map[feat] = (baseType === "date") ? "datepart" : baseType;
+      }
+      return map;
+    }
+
+    function colorsForFiLabels(labels, mode) {
+      const backgroundColor = [];
+      const borderColor = [];
+      const derivedMap = APP.train.derivedTypeByFeature || {};
+      for (const name of labels) {
+        const t = (mode === "derived")
+          ? (derivedMap[name] || baseTypeOfColumn(name))
+          : baseTypeOfColumn(name);
+        const c = FEATURE_COLORS[t] || FEATURE_COLORS.other;
+        backgroundColor.push(c.fill);
+        borderColor.push(c.stroke);
+      }
+      return { backgroundColor, borderColor };
+    }
+
     function destroyChart(ch) {
       if (ch) { try { ch.destroy(); } catch {} }
       return null;
@@ -2070,17 +2191,27 @@
       if ($("classMetrics")) $("classMetrics").textContent = "—";
     }
 
-    function renderFIChart(pairs, titleLabel) {
+    function renderFIChart(pairs, titleLabel, mode = "base") {
       const top = pairs.slice(0, 20);
       const labels = top.map(x => x.name);
       const data = top.map(x => x.imp);
+      const colors = colorsForFiLabels(labels, mode);
 
       const ctx = $("fiChart").getContext("2d");
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
 
       APP.ui.charts.fi = new Chart(ctx, {
         type: "bar",
-        data: { labels, datasets: [{ label: titleLabel || "importance", data }] },
+        data: {
+          labels,
+          datasets: [{
+            label: titleLabel || "importance",
+            data,
+            backgroundColor: colors.backgroundColor,
+            borderColor: colors.borderColor,
+            borderWidth: 1,
+          }]
+        },
         options: {
           responsive: true,
           maintainAspectRatio: false,
@@ -2092,6 +2223,164 @@
           }
         }
       });
+    }
+
+    function renderShiftFIChart(pairs) {
+      const top = (pairs || []).slice(0, 20);
+      const labels = top.map(x => x.name);
+      const data = top.map(x => x.imp);
+      const colors = colorsForFiLabels(labels, "base");
+
+      const ctx = $("shiftFiChart").getContext("2d");
+      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+
+      APP.ui.charts.shift = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "shift importance",
+            data,
+            backgroundColor: colors.backgroundColor,
+            borderColor: colors.borderColor,
+            borderWidth: 1,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: "y",
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
+            y: { ticks: { color: "rgba(234,240,255,0.75)" }, grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    function sampleRows(rows, maxRows, seed) {
+      const n = rows.length;
+      if (n <= maxRows) return { rows, idx: Array.from({ length: n }, (_, i) => i) };
+      const rng = mulberry32(seed >>> 0);
+      const idx = Array.from({ length: n }, (_, i) => i);
+      shuffleInPlace(idx, rng);
+      const pick = idx.slice(0, maxRows);
+      return { rows: pick.map(i => rows[i]), idx: pick };
+    }
+
+    function buildShiftPipelineFromRows(basePipeline, rowsAll) {
+      const contCols = basePipeline.preprocess.continuous.cols;
+      const catCols = basePipeline.preprocess.categorical.cols;
+      const dateCols = basePipeline.preprocess.date.cols;
+      const DATE_PARTS = basePipeline.preprocess.date.parts;
+
+      const contMedian = {};
+      for (const c of contCols) {
+        const vals = [];
+        for (const r of rowsAll) {
+          const x = parseNum(r[c]);
+          if (Number.isFinite(x)) vals.push(x);
+        }
+        contMedian[c] = median(vals);
+      }
+
+      const dateMedian = {};
+      for (const c of dateCols) {
+        const vals = [];
+        for (const r of rowsAll) {
+          const d = parseDate(r[c]);
+          if (d) vals.push(d.getTime());
+        }
+        dateMedian[c] = median(vals);
+      }
+
+      const catMapping = {};
+      for (const c of catCols) {
+        const m = new Map();
+        m.set("#na#", 0);
+        let id = 1;
+        for (const r of rowsAll) {
+          const s = normStr(r[c]) || "#na#";
+          if (!m.has(s)) m.set(s, id++);
+        }
+        catMapping[c] = Object.fromEntries(m.entries());
+      }
+
+      return {
+        preprocess: {
+          continuous: { cols: [...contCols], median: { ...contMedian } },
+          categorical: { cols: [...catCols], mapping: JSON.parse(JSON.stringify(catMapping)), missingToken: "#na#", unknownId: 0 },
+          date: { cols: [...dateCols], medianElapsed: { ...dateMedian }, parts: [...DATE_PARTS] }
+        }
+      };
+    }
+
+    async function computeShiftDiagnostics({ trainRows, testRows, pipeline, featureNames, baseForDerived, seed, signal }) {
+      // Fit procs on combined (train+test) rows to avoid artificial shift from "unknown category" encoding.
+      const nTrain = trainRows.length;
+      const nTest = testRows.length;
+      const total = nTrain + nTest;
+      if (!nTrain || !nTest || !total) return null;
+
+      // IMPORTANT: Balance classes 50/50; otherwise accuracy is dominated by class imbalance
+      // (e.g., with a 90/10 train/test split, a dumb classifier gets 0.90 accuracy).
+      const maxTotal = 20000;
+      const perClass = Math.max(1, Math.min(Math.floor(maxTotal / 2), nTrain, nTest));
+
+      const trainS = sampleRows(trainRows, perClass, seed + 101);
+      const testS = sampleRows(testRows, perClass, seed + 202);
+      const rowsAll = trainS.rows.concat(testS.rows);
+
+      const shiftPipe = buildShiftPipelineFromRows(pipeline, rowsAll);
+      const X = rowsAll.map(r => transformRowToFeatures(r, shiftPipe));
+      const y = new Array(trainS.rows.length).fill(0).concat(new Array(testS.rows.length).fill(1));
+
+      const trees = 120;
+      const shiftModel = new RandomForestClassifier({
+        seed: Math.floor(seed + 777),
+        nEstimators: trees,
+        maxFeatures: 1.0,
+        replacement: false,
+        useSampleBagging: true,
+      });
+
+      const info = await trainForestWithProgress(shiftModel, X, y, {
+        onProgress: () => {},
+        signal: signal || null,
+      });
+
+      const oobPred = info?.oobPred || null;
+      let oobAcc = null;
+      let oobBalAcc = null;
+      let oobF1 = null;
+      let oobCovered = 0;
+      if (oobPred && oobPred.length === y.length) {
+        const filtered = filterPaired(y.map(v => Number(v)), oobPred.map(v => (v === null ? null : Number(v))));
+        oobCovered = filtered.yTrue.length;
+        if (filtered.yTrue.length) {
+          oobAcc = accuracy(filtered.yTrue, filtered.yPred);
+          oobBalAcc = balancedAccuracy(filtered.yTrue, filtered.yPred, 2);
+          oobF1 = f1Macro(filtered.yTrue, filtered.yPred, 2);
+        }
+      }
+
+      let fi = null;
+      try { fi = shiftModel.featureImportance(); } catch { fi = null; }
+      const fiBase = (fi && fi.length === featureNames.length)
+        ? aggregateFI(fi, featureNames, baseForDerived)
+        : [];
+
+      return {
+        oobAcc,
+        oobBalAcc,
+        oobF1,
+        oobCovered,
+        nTotal: y.length,
+        nTrainUsed: trainS.rows.length,
+        nTestUsed: testS.rows.length,
+        fiBase,
+      };
     }
 
     function renderRegressionScatter(yTrue, yPred) {
@@ -2548,11 +2837,14 @@
       if (includeOob && oobEntries) {
         const used = oobEntries.slice(0, trainedEstimators);
         const oob = computeOobResults(used, ym, model.selection.bind(model));
+        const oobPred = oob.map(x => (x && x.predicted !== undefined) ? x.predicted : null);
+        const covered = oobPred.reduce((a, v) => a + (v === null ? 0 : 1), 0);
         const complete = oob.length && oob.every(x => x && x.predicted !== null && x.predicted !== undefined);
         if (complete) model.oobResults = oob;
+        return { trainedEstimators, stoppedEarly: trainedEstimators !== nEstimators, oobPred, oobCovered: covered };
       }
 
-      return { trainedEstimators, stoppedEarly: trainedEstimators !== nEstimators };
+      return { trainedEstimators, stoppedEarly: trainedEstimators !== nEstimators, oobPred: null, oobCovered: 0 };
     }
 
     async function trainModel() {
@@ -2560,6 +2852,14 @@
       APP.ui.training.abortController = abortController;
       APP.ui.training.stopRequested = false;
       setTrainingUi(true);
+
+      APP.ui.training.runSeq = (APP.ui.training.runSeq || 0) + 1;
+      const runSeq = APP.ui.training.runSeq;
+      APP.ui.shiftAutoExpandedRunSeq = 0;
+
+      try { APP.ui.training.diagAbortController?.abort(); } catch {}
+      APP.ui.training.diagAbortController = new AbortController();
+      const diagSignal = APP.ui.training.diagAbortController.signal;
 
       APP.ui.training.startMs = performance.now();
       $("trainStatus").innerHTML = `<span class="spinner"></span> Preparing data…`;
@@ -2587,7 +2887,7 @@
         return;
       }
 
-      const { Xtrain, ytrain, Xtest, ytest, testRowRefs, featureNames, baseForDerived, pipeline, task, dropped } = built;
+      const { Xtrain, ytrain, Xtest, ytest, testRowRefs, trainRowRefs, featureNames, baseForDerived, pipeline, task, dropped } = built;
 
       if (!pipeline || !Xtrain.length || !Xtest.length) {
         const hint = (!pipeline || !Xtrain.length)
@@ -2671,8 +2971,10 @@
         return;
       }
 
-      let oobPred = null;
-      try { oobPred = model.predictOOB(); } catch {}
+      let oobPred = trainInfo?.oobPred || null;
+      if (!oobPred) {
+        try { oobPred = model.predictOOB(); } catch {}
+      }
 
       let fi = null;
       try { fi = model.featureImportance(); } catch { fi = null; }
@@ -2702,6 +3004,7 @@
       APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
       APP.train.featureNames = featureNames;
       APP.train.baseForDerived = baseForDerived;
+      APP.train.derivedTypeByFeature = buildDerivedTypeByFeature(featureNames, baseForDerived);
       APP.train.split = {
         trainIdx: Array.from({ length: Xtrain.length }, (_, i) => i),
         testIdx: Array.from({ length: Xtest.length }, (_, i) => i)
@@ -2709,10 +3012,12 @@
       APP.train.yTrain = ytrain;
       APP.train.yTest = ytestRaw;
       APP.train.yPred = ypredRaw;
+      APP.train.oobPred = oobPred;
       APP.train.testRowRefs = testRowRefs;
       APP.train.fiDerived = fiDerived;
       APP.train.fiBase = fiBase;
       APP.train.dropped = dropped;
+      APP.train.shift = { status: "running" };
 
       if (pipeline.task === "classification") {
         const inv = invTarget || {};
@@ -2723,19 +3028,186 @@
         APP.train.yTestLabel = ytestRaw.map(v => String(v));
       }
 
-      renderResults({ oobPred, ytrain });
+      // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
+      renderResults({ oobPred: null, ytrain: null });
+      gotoStep(3);
 
-      $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
+      $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally. Diagnostics running…</span>`;
       APP.ui.training.abortController = null;
       APP.ui.training.stopRequested = false;
       setTrainingUi(false);
 
-      gotoStep(3);
+      // Background: OOB KPI (does not affect “good stuff” rendering)
+      setTimeout(() => {
+        if (runSeq !== APP.ui.training.runSeq) return;
+        renderOobKpis({ oobPred: APP.train.oobPred, ytrain: APP.train.yTrain });
+      }, 0);
+
+      // Background: shift diagnostic
+      (async () => {
+        try {
+          const shift = await computeShiftDiagnostics({
+            trainRows: trainRowRefs,
+            testRows: testRowRefs,
+            pipeline,
+            featureNames,
+            baseForDerived,
+            seed,
+            signal: diagSignal,
+          });
+          if (runSeq !== APP.ui.training.runSeq) return;
+          APP.train.shift = shift || null;
+          renderShiftSection();
+        } catch {
+          if (runSeq !== APP.ui.training.runSeq) return;
+          APP.train.shift = null;
+          renderShiftSection();
+        }
+      })();
     }
 
     // ----------------------------
     // Results rendering
     // ----------------------------
+    function renderOobKpis({ oobPred, ytrain }) {
+      const pl = APP.train.pipeline;
+      if (!pl) return;
+      const task = pl.task;
+
+      if (!oobPred || !ytrain || oobPred.length !== ytrain.length) {
+        $("oobMetricLabel").textContent = (task === "regression") ? "OOB RMSE" : "OOB Accuracy";
+        $("oobMetricValue").textContent = "n/a";
+        $("oobMetricSub").textContent = "OOB not available for this run.";
+        const c = $("diagCallout");
+        if (c) c.className = "callout";
+        if (c) c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Baseline</div><div class="muted2">Inspect feature importance and sanity-check suspicious predictors.</div>`;
+        return;
+      }
+
+      const diag = $("diagCallout");
+      if (task === "regression") {
+        const yTrue = APP.train.yTest;
+        const yPred = APP.train.yPred;
+        const rm = rmse(yTrue, yPred);
+
+        const ytRaw = (pl.targetTransform === "log1p") ? ytrain.map(v => Math.expm1(v)) : ytrain.slice();
+        const ypRaw = (pl.targetTransform === "log1p")
+          ? oobPred.map(v => (v === null || v === undefined) ? null : Math.expm1(v))
+          : oobPred.map(v => (v === null || v === undefined) ? null : Number(v));
+
+        const f = filterPaired(ytRaw, ypRaw);
+        const oobCov = f.yTrue.length / Math.max(1, ytrain.length);
+        const oobRm = f.yTrue.length ? rmse(f.yTrue, f.yPred) : null;
+        const oobRl = f.yTrue.length ? rmsle(f.yTrue, f.yPred) : null;
+
+        $("oobMetricLabel").textContent = "OOB RMSE";
+        $("oobMetricValue").textContent = (oobRm === null) ? "n/a" : formatNum(oobRm, 6);
+        if (oobRm !== null) {
+          const gapPct = ((rm / Math.max(1e-12, oobRm)) - 1) * 100;
+          $("oobMetricSub").textContent =
+            `RMSLE=${oobRl===null?"n/a":formatNum(oobRl,6)} · Gap=${formatNum(gapPct,2)}% · OOB cov=${Math.round(oobCov * 100)}%`;
+
+          if (diag) {
+            if (rm > oobRm * 1.15) {
+              diag.className = "callout warn";
+              diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Test error is worse than OOB error</div>
+                                <div class="muted2">This often indicates distribution shift (time-like IDs, changing behavior). Consider a time-based split and/or excluding ID-like columns.</div>`;
+            } else {
+              diag.className = "callout good";
+              diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Baseline looks healthy</div>
+                                <div class="muted2">Next, focus on interpretation (top drivers) and sanity-check suspicious predictors.</div>`;
+            }
+          }
+        } else {
+          $("oobMetricSub").textContent = "OOB not available for this run.";
+        }
+      } else {
+        const yTrue = APP.train.yTest.map(v => Number(v));
+        const yPred = APP.train.yPred.map(v => Number(v));
+        const acc = accuracy(yTrue, yPred);
+
+        const f = filterPaired(ytrain.map(v => Number(v)), oobPred.map(v => (v === null || v === undefined) ? null : Number(v)));
+        const oobCov = f.yTrue.length / Math.max(1, ytrain.length);
+        const oobAcc = f.yTrue.length ? accuracy(f.yTrue, f.yPred) : null;
+        const oobF1 = f.yTrue.length ? f1Macro(f.yTrue, f.yPred, pl.target.numClasses || 2) : null;
+
+        $("oobMetricLabel").textContent = "OOB Accuracy";
+        $("oobMetricValue").textContent = (oobAcc === null) ? "n/a" : formatNum(oobAcc, 6);
+        if (oobAcc !== null) {
+          const gapPct = (acc - oobAcc) * 100;
+          $("oobMetricSub").textContent =
+            `Macro-F1=${oobF1===null?"n/a":formatNum(oobF1,6)} · Gap=${formatNum(gapPct,2)}pp · OOB cov=${Math.round(oobCov * 100)}%`;
+
+          if (diag) {
+            if (acc < oobAcc - 0.05) {
+              diag.className = "callout warn";
+              diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Generalization gap detected</div>
+                                <div class="muted2">Test accuracy is noticeably worse than OOB accuracy. Consider excluding ID-like columns or using a time-based split if the data has temporal structure.</div>`;
+            } else {
+              diag.className = "callout good";
+              diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Baseline looks healthy</div>
+                                <div class="muted2">Next, inspect feature importance and sanity-check whether the most important columns make sense.</div>`;
+            }
+          }
+        } else {
+          $("oobMetricSub").textContent = "OOB not available for this run.";
+        }
+      }
+    }
+
+    function renderShiftSection() {
+      const shift = APP.train.shift;
+      const isRunning = Boolean(shift && shift.status === "running");
+      const shiftScore = shift?.oobBalAcc ?? shift?.oobAcc ?? null;
+
+      if (isRunning) {
+        $("shiftPill").className = "pill";
+        $("shiftPill").textContent = "Shift: running…";
+        $("shiftSummary").textContent = "Training an is_valid model in the background (predict train vs validation).";
+        return;
+      }
+
+      if (!shift || shiftScore === null) {
+        $("shiftPill").className = "pill";
+        $("shiftPill").textContent = "Shift: n/a";
+        $("shiftSummary").textContent = "Shift diagnostic unavailable (not enough rows, or OOB not available).";
+        APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+        try {
+          const c = $("shiftFiChart");
+          const ctx = c.getContext("2d");
+          ctx.clearRect(0, 0, c.width, c.height);
+        } catch {}
+        return;
+      }
+
+      const details = $("shiftDetails");
+      if (details && shiftScore > 0.6 && APP.ui.shiftAutoExpandedRunSeq !== APP.ui.training.runSeq) {
+        details.open = true;
+        APP.ui.shiftAutoExpandedRunSeq = APP.ui.training.runSeq;
+      }
+
+      const cov = shift.nTotal ? (shift.oobCovered / shift.nTotal) : 0;
+      const covTxt = `${Math.round(cov * 100)}%`;
+      const balTxt = formatNum(shiftScore, 6);
+      const accTxt = (shift.oobAcc === null) ? "n/a" : formatNum(shift.oobAcc, 6);
+      const f1Txt = (shift.oobF1 === null) ? "n/a" : formatNum(shift.oobF1, 6);
+      const baseline = shift.nTotal ? (Math.max(shift.nTrainUsed || 0, shift.nTestUsed || 0) / shift.nTotal) : null;
+      const baselineTxt = (baseline === null) ? "n/a" : formatNum(baseline, 6);
+      const severity = (shiftScore >= 0.90) ? "bad" : (shiftScore >= 0.75) ? "warn" : "good";
+
+      $("shiftPill").className = `pill ${severity}`.trim();
+      $("shiftPill").textContent = `Shift OOB bal-acc=${balTxt}`;
+      $("shiftSummary").innerHTML =
+        `<div style="margin-bottom:6px;">This trains a second random forest where the target is <span class="mono">is_valid</span>: <span class="mono">0</span>=train, <span class="mono">1</span>=validation.</div>` +
+        `<div style="margin-bottom:6px;">If it can easily predict which split a row came from, your validation set is in a different “domain” (time shift, IDs, leakage, changing missingness).</div>` +
+        `<div style="margin-bottom:6px;">Interpretation: <span class="mono">~0.50</span> is good (hard to tell); <span class="mono">≥0.75</span> suggests strong shift; <span class="mono">≥0.90</span> is severe.</div>` +
+        `<div style="margin-bottom:6px;">Score: OOB bal-acc <span class="mono">${balTxt}</span> · raw acc <span class="mono">${accTxt}</span> · baseline <span class="mono">${baselineTxt}</span> · F1 <span class="mono">${f1Txt}</span> · OOB coverage <span class="mono">${covTxt}</span>.</div>` +
+        `<div class="muted2" style="margin-bottom:6px;">Rows used: train=<span class="mono">${shift.nTrainUsed}</span>, valid=<span class="mono">${shift.nTestUsed}</span> (balanced on purpose).</div>` +
+        `<div>Use “Top shift drivers” to spot culprits (often IDs, timestamps/elapsed, or proxies for the target). Try excluding them, changing the cutoff, or using only recent data.</div>`;
+
+      renderShiftFIChart(shift.fiBase || []);
+    }
+
     function renderResults({ oobPred, ytrain }) {
       const pl = APP.train.pipeline;
       const task = pl.task;
@@ -2752,6 +3224,10 @@
         `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
 
       $("resultsCallouts").innerHTML = "";
+      $("oobMetricLabel").textContent = "OOB —";
+      $("oobMetricValue").textContent = "—";
+      $("oobMetricSub").textContent = "—";
+
       const addCallout = (cls, title, body) => {
         const el = document.createElement("div");
         el.className = `callout ${cls || ""}`.trim();
@@ -2784,28 +3260,9 @@
         $("primaryMetricValue").textContent = formatNum(rm, 6);
         $("primaryMetricSub").textContent = `MAE=${formatNum(ma,6)} · R²=${formatNum(r,6)} · RMSLE=${rl===null?"n/a":formatNum(rl,6)}`;
 
-        let oobRm = null;
-        if (oobPred && oobPred.length === ytrain.length) {
-          if (pl.targetTransform === "log1p") {
-            const yt = ytrain.map(v => Math.expm1(v));
-            const yp = oobPred.map(v => Math.expm1(v));
-            oobRm = rmse(yt, yp);
-          } else {
-            oobRm = rmse(ytrain, oobPred);
-          }
-        }
-
-        if (oobRm !== null && rm > oobRm * 1.15) {
-          addCallout("warn",
-            "Test error is worse than OOB error",
-            "This often indicates distribution shift between train and test (common with time-like IDs or changing behavior). Consider a time-based split, and/or excluding ID-like columns."
-          );
-        } else {
-          addCallout("good",
-            "Baseline looks healthy",
-            "Random forests are a strong first pass for tabular data. Next, focus on interpretation (top drivers) and sanity-check suspicious predictors."
-          );
-        }
+        $("oobMetricLabel").textContent = "OOB RMSE";
+        $("oobMetricValue").textContent = "…";
+        $("oobMetricSub").textContent = "Computing OOB in the background…";
 
         $("secondaryChartTitle").textContent = "Predicted vs true (scatter)";
         $("secondaryChartPill").textContent = `n=${APP.train.yTest.length}`;
@@ -2823,22 +3280,9 @@
         $("primaryMetricValue").textContent = formatNum(acc, 6);
         $("primaryMetricSub").textContent = `Macro-F1=${formatNum(f1,6)} · Classes=${pl.target.numClasses}`;
 
-        let oobAcc = null;
-        if (oobPred && oobPred.length === ytrain.length) {
-          oobAcc = accuracy(ytrain.map(v=>Number(v)), oobPred.map(v=>Number(v)));
-        }
-
-        if (oobAcc !== null && acc < oobAcc - 0.05) {
-          addCallout("warn",
-            "Generalization gap detected",
-            "Test accuracy is noticeably worse than OOB accuracy. Consider excluding ID-like columns or using a time-based split if the data has temporal structure."
-          );
-        } else {
-          addCallout("good",
-            "Baseline looks healthy",
-            "Next, inspect feature importance and consider if the most important columns make sense operationally."
-          );
-        }
+        $("oobMetricLabel").textContent = "OOB Accuracy";
+        $("oobMetricValue").textContent = "…";
+        $("oobMetricSub").textContent = "Computing OOB in the background…";
 
         $("secondaryChartTitle").textContent = "Confusion matrix (top classes)";
         $("secondaryChartPill").textContent = `classes=${pl.target.numClasses}`;
@@ -2846,9 +3290,17 @@
         renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 15);
       }
 
+      const diag = document.createElement("div");
+      diag.id = "diagCallout";
+      diag.className = "callout";
+      diag.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Diagnostics running</div>
+                        <div class="muted2">OOB and shift diagnostics are computed in the background and will fill in automatically.</div>`;
+      $("resultsCallouts").appendChild(diag);
+      renderShiftSection();
+
       const mode = $("importanceMode").value;
-      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance");
-      else renderFIChart(APP.train.fiBase, "importance");
+      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance", "derived");
+      else renderFIChart(APP.train.fiBase, "importance", "base");
 
       APP.ui.predPage = 0;
       $("predFilter").value = "";
@@ -3049,9 +3501,13 @@ function invertTargetIfNeeded(yPred, artifact){
 
     function hardReset() {
       try { APP.ui.training.abortController?.abort(); } catch {}
+      try { APP.ui.training.diagAbortController?.abort(); } catch {}
       APP.ui.training.abortController = null;
+      APP.ui.training.diagAbortController = null;
       APP.ui.training.isTraining = false;
       APP.ui.training.stopRequested = false;
+      APP.ui.training.runSeq = 0;
+      APP.ui.shiftAutoExpandedRunSeq = 0;
 
       APP.ui.parseSeq = (APP.ui.parseSeq || 0) + 1;
       APP.step = 0;
@@ -3084,14 +3540,17 @@ function invertTargetIfNeeded(yPred, artifact){
         pipeline: null,
         featureNames: [],
         baseForDerived: [],
+        derivedTypeByFeature: null,
         split: { trainIdx: [], testIdx: [] },
         yTrain: [],
         yTest: [],
         yPred: [],
         yPredLabel: [],
+        oobPred: null,
         testRowRefs: [],
         fiDerived: [],
         fiBase: [],
+        shift: null,
         dropped: { unusableTargetRows: 0, unseenTestLabels: 0, sampledRows: 0, usableRows: 0 }
       };
       APP.ui.predPage = 0;
@@ -3099,6 +3558,7 @@ function invertTargetIfNeeded(yPred, artifact){
 
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
 
       $("trainStatus").innerHTML = "";
       setTrainingUi(false);
@@ -3108,6 +3568,10 @@ function invertTargetIfNeeded(yPred, artifact){
       $("previewTable").innerHTML = "";
       $("predTable").innerHTML = "";
       $("resultsCallouts").innerHTML = "";
+      $("shiftPill").textContent = "—";
+      $("shiftPill").className = "pill";
+      $("shiftSummary").textContent = "—";
+      if ($("shiftDetails")) $("shiftDetails").open = false;
 
       $("testFrac").value = "0.1";
       $("cutoffDate").value = "";
@@ -3480,8 +3944,8 @@ function invertTargetIfNeeded(yPred, artifact){
     $("importanceMode").addEventListener("change", () => {
       if (!APP.train.model) return;
       const mode = $("importanceMode").value;
-      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance");
-      else renderFIChart(APP.train.fiBase, "importance");
+      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance", "derived");
+      else renderFIChart(APP.train.fiBase, "importance", "base");
     });
 
     $("predFilter").addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });

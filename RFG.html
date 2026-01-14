@@ -1784,9 +1784,14 @@
           ? `<div class="muted2" style="margin-top:6px;">We flagged ${idLike.length} ID-like column(s). Consider excluding them in “Review columns” if you care about robustness.</div>`
           : ``;
 
-        c.className = (splitMode === "time") ? "callout good" : "callout";
+        const extrapolationWarn = (splitMode === "time")
+          ? `<div class="muted2" style="margin-top:8px;"><span class="pill warn">Extrapolation warning</span>
+               Forests can’t extrapolate beyond the target range. If your target trends over time, expect systematic underprediction on future rows.</div>`
+          : "";
+
+        c.className = (splitMode === "time") ? "callout warn" : "callout";
         c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Ready</div>
-                       <div class="muted2">${splitText} You can train immediately.</div>${idHint}`;
+                       <div class="muted2">${splitText} You can train immediately.</div>${extrapolationWarn}${idHint}`;
         show(c);
       }
     }

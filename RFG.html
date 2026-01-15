@@ -593,6 +593,67 @@
 
             <div id="setupCallout" class="callout hidden"></div>
 
+            <details id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
+              <summary>Advanced (multi-class target)</summary>
+              <div class="hr"></div>
+
+              <div class="muted2" style="margin-bottom:10px;">
+                These options are off by default and only apply if enabled.
+              </div>
+
+              <div class="callout" id="multiClassSummaryCallout"></div>
+
+              <div class="hr"></div>
+
+              <div class="callout">
+                <div style="font-weight:650;margin-bottom:6px;">1) Keep top N classes (map the rest → <span class="mono">RARE</span>)</div>
+                <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">
+                  <label class="row" style="gap:8px;align-items:center;margin:0;">
+                    <input type="checkbox" id="topNEnable" />
+                    <span>Enable</span>
+                  </label>
+                  <div class="row" style="gap:8px;align-items:center;">
+                    <span class="muted2">Keep</span>
+                    <input id="topNKeep" type="number" min="1" step="1" value="5" style="width:110px;" />
+                    <span class="muted2">most frequent classes</span>
+                  </div>
+                </div>
+                <div class="muted2" id="topNSummary" style="margin-top:8px;">—</div>
+              </div>
+
+              <div class="hr"></div>
+
+	              <div class="callout">
+	                <div style="font-weight:650;margin-bottom:6px;">2) Derived boolean target (binary) from a pythonic expression</div>
+	                <div class="muted2">
+	                  Use <span class="mono" id="derivedTargetValueIdent">target</span> for the target-cell value. Examples:
+	                  <span class="mono" id="derivedTargetExprExample1">target in (6,7,8)</span>,
+	                  <span class="mono" id="derivedTargetExprExample2">len(target) &gt; 5</span>.
+	                </div>
+	                <div class="muted2" style="margin-top:6px;">
+	                  Assumptions: the value is converted to a trimmed string; comparisons (<span class="mono">&lt;</span>, <span class="mono">&gt;=</span>, etc.) use numeric compare only if both sides parse as numbers, otherwise string compare; <span class="mono">in (...) </span> / <span class="mono">not in (...) </span> accept only literal lists (numbers/strings/true/false/none). No regex, arithmetic, or access to other columns.
+	                </div>
+
+                <div class="two" style="margin-top:10px;">
+                  <div class="field" style="margin:0;">
+                    <label for="derivedTargetColName">New column name</label>
+                    <input id="derivedTargetColName" type="text" placeholder="e.g. is_positive" />
+                  </div>
+                  <div class="field" style="margin:0;">
+                    <label for="derivedTargetExpr">Expression</label>
+	                    <input id="derivedTargetExpr" type="text" placeholder='e.g. target in (6,7,8) or len(target) > 5' />
+	                  </div>
+	                </div>
+
+                <div class="row" style="margin-top:10px;">
+                  <button class="btn primary" id="applyDerivedTargetBtn">Create column + use as target</button>
+                  <button class="btn ghost" id="undoDerivedTargetBtn">Undo</button>
+                </div>
+
+                <div class="muted2" id="derivedTargetStatus" style="margin-top:8px;">—</div>
+              </div>
+            </details>
+
             <div class="row space" style="margin-top:12px;">
               <button class="btn" id="backToUploadBtn">Back</button>
               <button class="btn primary" id="continueToTrainBtn" disabled>Continue</button>
@@ -986,6 +1047,21 @@
           date: new Set(),
           categorical: new Set(),
           continuous: new Set(),
+        },
+        multiClass: {
+          topN: {
+            enabled: false,
+            keep: 5,
+            rareLabel: "RARE",
+          },
+          derivedTarget: {
+            enabled: false,
+            sourceCol: null,
+            derivedCol: "",
+            expr: "",
+            lastStatus: "",
+            lastError: "",
+          },
         },
       },
       train: {
@@ -1709,8 +1785,10 @@
           const missPct = (m.missingFrac * 100);
           const forced = forcedTypeForColumn(col);
 
-          const includeDisabled = (target && col === target) ? "disabled" : "";
-          const includeChecked = (m.include || (target && col === target)) ? "checked" : "";
+          const lockedReason = lockedExcludedReason(col);
+          const locked = Boolean(lockedReason);
+          const includeDisabled = ((target && col === target) || locked) ? "disabled" : "";
+          const includeChecked = ((target && col === target) || (!locked && m.include)) ? "checked" : "";
           const includeBox = `<input type="checkbox" data-include="${escapeHtml(col)}" ${includeChecked} ${includeDisabled} />`;
 
           const typeSelect = `
@@ -1725,6 +1803,7 @@
           const flags = [];
           if (m.flags?.idLike) flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
           if (forced) flags.push(`<span class="pill" title="Manually overridden">Forced</span>`);
+          if (locked) flags.push(`<span class="pill warn" title="${escapeHtml(lockedReason)}">Locked</span>`);
           const flagsHtml = flags.length ? flags.join(" ") : `<span class="muted2">—</span>`;
 
           const examplesFull = (m.examples || [])
@@ -1910,6 +1989,590 @@
                        <div class="muted2">${splitText} You can train immediately.</div>${extrapolationWarn}${idHint}`;
         show(c);
       }
+
+      syncAdvancedTargetUI();
+    }
+
+    // ----------------------------
+    // Advanced target options (multi-class classification)
+    // ----------------------------
+    function isDerivedTargetActive() {
+      const dt = APP.setup.multiClass?.derivedTarget || null;
+      if (!dt || !dt.enabled) return false;
+      if (!dt.derivedCol) return false;
+      return APP.raw.targetCol === dt.derivedCol;
+    }
+
+    function lockedExcludedReason(col) {
+      const dt = APP.setup.multiClass?.derivedTarget || null;
+      if (!dt || !dt.enabled) return null;
+      if (!dt.sourceCol || !dt.derivedCol) return null;
+      if (APP.raw.targetCol !== dt.derivedCol) return null;
+      if (col !== dt.sourceCol) return null;
+      return "Excluded to prevent leakage from the original target.";
+    }
+
+    function sampleIndicesNoAlloc(n, k, seed) {
+      const nn = Math.max(0, Math.floor(n || 0));
+      const kk = Math.max(0, Math.min(nn, Math.floor(k || 0)));
+      if (kk >= nn) return Array.from({ length: nn }, (_, i) => i);
+      const rng = mulberry32(seed >>> 0);
+      const out = new Set();
+      for (let i = nn - kk; i < nn; i++) {
+        const t = Math.floor(rng() * (i + 1));
+        if (out.has(t)) out.add(i);
+        else out.add(t);
+      }
+      return Array.from(out);
+    }
+
+    function computeCategoricalCounts(rows, col, { maxSample = 8000, seed = 1337 } = {}) {
+      if (!col) return { counts: new Map(), nSampled: 0, nMissing: 0 };
+      const idx = sampleIndicesNoAlloc(rows.length, maxSample, seed);
+      const counts = new Map();
+      let missing = 0;
+      for (const i of idx) {
+        const s = normStr(rows[i]?.[col]);
+        if (!s) { missing++; continue; }
+        counts.set(s, (counts.get(s) || 0) + 1);
+      }
+      return { counts, nSampled: idx.length, nMissing: missing };
+    }
+
+    function sortedCountEntries(counts) {
+      return Array.from(counts.entries())
+        .sort((a, b) => (b[1] - a[1]) || String(a[0]).localeCompare(String(b[0])));
+    }
+
+	    function defaultDerivedTargetColName(sourceCol) {
+	      const base = normStr(sourceCol) || "target";
+	      return `${base}_is`;
+	    }
+
+	    function isValidExprValueIdent(word) {
+	      if (!word) return false;
+	      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(word)) return false;
+	      const kw = word.toLowerCase();
+	      return !(kw === "and" || kw === "or" || kw === "not" || kw === "in" || kw === "len" || kw === "true" || kw === "false" || kw === "none");
+	    }
+
+	    function exprValueIdentForColumnName(col) {
+	      const raw = normStr(col);
+	      if (!raw) return "o";
+	      if (isValidExprValueIdent(raw)) return raw;
+	      let out = raw.replace(/[^A-Za-z0-9_]/g, "_").replace(/_+/g, "_");
+	      if (!out) out = "o";
+	      if (!/^[A-Za-z_]/.test(out)) out = `_${out}`;
+	      if (!isValidExprValueIdent(out)) out = `${out}_`;
+	      return out;
+	    }
+
+	    function compilePythonicBoolExpr(exprRaw, { valueIdent = "o" } = {}) {
+	      const expr = normStr(exprRaw);
+	      if (!expr) throw new Error("Expression is required.");
+
+	      const s = expr;
+      const tokens = [];
+      let i = 0;
+
+      const isWs = (c) => /\s/.test(c);
+      const isDigit = (c) => /[0-9]/.test(c);
+      const isIdentStart = (c) => /[A-Za-z_]/.test(c);
+      const isIdentChar = (c) => /[A-Za-z0-9_]/.test(c);
+
+      const push = (type, value = null) => tokens.push({ type, value });
+
+      while (i < s.length) {
+        const c = s[i];
+        if (isWs(c)) { i++; continue; }
+
+        if (c === "(" || c === ")" || c === "[" || c === "]" || c === ",") {
+          push(c);
+          i++;
+          continue;
+        }
+
+        if (c === "'" || c === "\"") {
+          const quote = c;
+          i++;
+          let out = "";
+          let closed = false;
+          while (i < s.length) {
+            const ch = s[i];
+            if (ch === quote) { i++; closed = true; break; }
+            if (ch === "\\") {
+              const nxt = s[i + 1];
+              if (nxt === undefined) throw new Error("Unterminated string escape.");
+              if (nxt === "n") out += "\n";
+              else if (nxt === "t") out += "\t";
+              else out += nxt;
+              i += 2;
+              continue;
+            }
+            out += ch;
+            i++;
+          }
+          if (!closed) throw new Error("Unterminated string literal.");
+          push("string", out);
+          continue;
+        }
+
+        if ((c === "-" && (isDigit(s[i + 1]) || (s[i + 1] === "." && isDigit(s[i + 2])))) || isDigit(c) || (c === "." && isDigit(s[i + 1]))) {
+          const start = i;
+          i++; // consume first char
+          while (i < s.length) {
+            const ch = s[i];
+            if (isDigit(ch) || ch === "." || ch === "e" || ch === "E" || ch === "+" || ch === "-") i++;
+            else break;
+          }
+          const raw = s.slice(start, i);
+          const num = Number(raw);
+          if (!Number.isFinite(num)) throw new Error(`Invalid number literal: ${raw}`);
+          push("number", num);
+          continue;
+        }
+
+	        if (isIdentStart(c)) {
+	          const start = i;
+	          i++;
+	          while (i < s.length && isIdentChar(s[i])) i++;
+	          const word = s.slice(start, i);
+	          const kw = word.toLowerCase();
+	          if (kw === "and" || kw === "or" || kw === "not" || kw === "in" || kw === "len") push("kw", kw);
+	          else if (kw === "true") push("boolean", true);
+	          else if (kw === "false") push("boolean", false);
+	          else if (kw === "none") push("none", null);
+	          else if (word === "o" || word === valueIdent) push("ident", "o");
+	          else throw new Error(`Unknown identifier: ${word}`);
+	          continue;
+	        }
+
+        const two = s.slice(i, i + 2);
+        if (two === "==" || two === "!=" || two === "<=" || two === ">=") { push("op", two); i += 2; continue; }
+        if (c === "<" || c === ">") { push("op", c); i++; continue; }
+
+        throw new Error(`Unexpected character: ${c}`);
+      }
+      push("eof");
+
+      let tok = 0;
+      const cur = () => tokens[tok];
+      const eat = (type, value = null) => {
+        const t = cur();
+        if (!t || t.type !== type) return false;
+        if (value !== null && t.value !== value) return false;
+        tok++;
+        return true;
+      };
+      const expect = (type, value = null) => {
+        const t = cur();
+        if (!eat(type, value)) {
+          const v = (t && t.type === "kw") ? t.value : (t && t.value !== null ? t.value : t?.type);
+          throw new Error(`Expected ${value !== null ? `${type}(${value})` : type}, got ${v || "end"}.`);
+        }
+      };
+
+      const parseExpr = () => parseOr();
+
+      const parseOr = () => {
+        let node = parseAnd();
+        while (eat("kw", "or")) node = { t: "or", a: node, b: parseAnd() };
+        return node;
+      };
+
+      const parseAnd = () => {
+        let node = parseNot();
+        while (eat("kw", "and")) node = { t: "and", a: node, b: parseNot() };
+        return node;
+      };
+
+      const parseNot = () => {
+        if (eat("kw", "not")) return { t: "not", a: parseNot() };
+        return parseCmp();
+      };
+
+      const parseCollection = () => {
+        const open = cur();
+        if (!eat("(") && !eat("[")) throw new Error("Expected a list/tuple after 'in'.");
+        const close = (open.type === "(") ? ")" : "]";
+        const items = [];
+        if (eat(close)) return items;
+        while (true) {
+          const t = cur();
+          if (t.type === "number") { items.push({ t: "number", v: t.value }); tok++; }
+          else if (t.type === "string") { items.push({ t: "string", v: t.value }); tok++; }
+          else if (t.type === "boolean") { items.push({ t: "boolean", v: t.value }); tok++; }
+          else if (t.type === "none") { items.push({ t: "none", v: null }); tok++; }
+          else throw new Error("Only literals are allowed inside ( ... ) for 'in'.");
+
+          if (eat(",")) {
+            if (eat(close)) break;
+            continue;
+          }
+          expect(close);
+          break;
+        }
+        return items;
+      };
+
+      const parseCmp = () => {
+        const left = parsePrimary();
+        const t = cur();
+        if (t.type === "op") {
+          tok++;
+          const right = parsePrimary();
+          return { t: "cmp", op: t.value, a: left, b: right };
+        }
+        if (t.type === "kw" && t.value === "in") {
+          tok++;
+          const items = parseCollection();
+          return { t: "in", not: false, a: left, items };
+        }
+        if (t.type === "kw" && t.value === "not") {
+          if (tokens[tok + 1]?.type === "kw" && tokens[tok + 1]?.value === "in") {
+            tok += 2;
+            const items = parseCollection();
+            return { t: "in", not: true, a: left, items };
+          }
+        }
+        return left;
+      };
+
+      const parsePrimary = () => {
+        const t = cur();
+        if (t.type === "number") { tok++; return { t: "number", v: t.value }; }
+        if (t.type === "string") { tok++; return { t: "string", v: t.value }; }
+        if (t.type === "boolean") { tok++; return { t: "boolean", v: t.value }; }
+        if (t.type === "none") { tok++; return { t: "none", v: null }; }
+        if (t.type === "ident" && t.value === "o") { tok++; return { t: "o" }; }
+        if (t.type === "kw" && t.value === "len") {
+          tok++;
+          expect("(");
+          const arg = parseExpr();
+          expect(")");
+          return { t: "len", a: arg };
+        }
+	        if (eat("(")) {
+	          const inner = parseExpr();
+	          expect(")");
+	          return inner;
+	        }
+	        throw new Error("Expected a value (number/string/identifier/len(...)/(...)).");
+	      };
+
+      const ast = parseExpr();
+      expect("eof");
+
+      const truthy = (v) => {
+        if (v === null || v === undefined) return false;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "number") return Number.isFinite(v) && v !== 0;
+        if (typeof v === "string") return v.length > 0;
+        if (Array.isArray(v)) return v.length > 0;
+        return Boolean(v);
+      };
+
+      const toNum = (v) => {
+        if (typeof v === "number") return v;
+        if (typeof v === "boolean") return v ? 1 : 0;
+        const s = normStr(v);
+        if (!s) return NaN;
+        const n = Number(s);
+        return Number.isFinite(n) ? n : NaN;
+      };
+
+      const eq = (a, b) => {
+        if (a === null || b === null) return a === b;
+        if (typeof a === typeof b) return a === b;
+        if (typeof a === "number" || typeof b === "number") {
+          const na = toNum(a), nb = toNum(b);
+          if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
+        }
+        return String(a) === String(b);
+      };
+
+      const inList = (val, items) => {
+        const hasNum = items.some(x => typeof x === "number");
+        const hasStr = items.some(x => typeof x === "string");
+        if (hasNum && !hasStr) {
+          const n = toNum(val);
+          if (!Number.isFinite(n)) return false;
+          return items.includes(n);
+        }
+        if (hasStr && !hasNum) {
+          const s0 = String(val);
+          return items.includes(s0);
+        }
+        const s0 = String(val);
+        const n0 = toNum(val);
+        for (const it of items) {
+          if (typeof it === "number") {
+            if (Number.isFinite(n0) && it === n0) return true;
+          } else if (typeof it === "string") {
+            if (it === s0) return true;
+          } else {
+            if (it === val) return true;
+          }
+        }
+        return false;
+      };
+
+      const evalNode = (node, oVal) => {
+        switch (node.t) {
+          case "number": return node.v;
+          case "string": return node.v;
+          case "boolean": return node.v;
+          case "none": return null;
+          case "o": return oVal;
+          case "len": return String(evalNode(node.a, oVal) ?? "").length;
+          case "not": return !truthy(evalNode(node.a, oVal));
+          case "and": return truthy(evalNode(node.a, oVal)) && truthy(evalNode(node.b, oVal));
+          case "or": return truthy(evalNode(node.a, oVal)) || truthy(evalNode(node.b, oVal));
+          case "cmp": {
+            const a = evalNode(node.a, oVal);
+            const b = evalNode(node.b, oVal);
+            switch (node.op) {
+              case "==": return eq(a, b);
+              case "!=": return !eq(a, b);
+              case "<":
+              case "<=":
+              case ">":
+              case ">=": {
+                const na = toNum(a), nb = toNum(b);
+                if (Number.isFinite(na) && Number.isFinite(nb)) {
+                  if (node.op === "<") return na < nb;
+                  if (node.op === "<=") return na <= nb;
+                  if (node.op === ">") return na > nb;
+                  return na >= nb;
+                }
+                const sa = String(a), sb = String(b);
+                if (node.op === "<") return sa < sb;
+                if (node.op === "<=") return sa <= sb;
+                if (node.op === ">") return sa > sb;
+                return sa >= sb;
+              }
+              default: throw new Error(`Unsupported operator: ${node.op}`);
+            }
+          }
+          case "in": {
+            const a = evalNode(node.a, oVal);
+            const items = node.items.map(x => (x.t === "none") ? null : x.v);
+            const hit = inList(a, items);
+            return node.not ? !hit : hit;
+          }
+          default:
+            throw new Error("Unsupported expression.");
+        }
+      };
+
+      return (o) => Boolean(truthy(evalNode(ast, normStr(o))));
+    }
+
+	    function applyDerivedTargetFromExpr() {
+	      const dt = APP.setup.multiClass?.derivedTarget || null;
+	      if (!dt) return;
+
+      const currentTarget = APP.raw.targetCol;
+      const sourceCol = (dt.enabled && dt.derivedCol && dt.sourceCol && currentTarget === dt.derivedCol)
+        ? dt.sourceCol
+        : currentTarget;
+      if (!sourceCol) throw new Error("Pick a target column first.");
+
+      const expr = normStr($("derivedTargetExpr")?.value);
+      const derivedCol = normStr($("derivedTargetColName")?.value) || defaultDerivedTargetColName(sourceCol);
+
+      if (!expr) throw new Error("Provide an expression.");
+      if (!derivedCol) throw new Error("Provide a new column name.");
+
+      const existing = APP.raw.columns.includes(derivedCol);
+      const allowedOverwrite = (dt.enabled && dt.derivedCol === derivedCol);
+      if (existing && !allowedOverwrite) throw new Error(`Column already exists: ${derivedCol}`);
+
+      if (dt.enabled && dt.derivedCol && dt.derivedCol !== derivedCol) {
+        const prev = dt.derivedCol;
+        for (const r of APP.raw.rows) delete r[prev];
+        APP.raw.columns = APP.raw.columns.filter(c => c !== prev);
+        APP.setup.excluded.delete(prev);
+      }
+
+	      const valueIdent = exprValueIdentForColumnName(sourceCol);
+	      const pred = compilePythonicBoolExpr(expr, { valueIdent });
+
+      let tCount = 0, fCount = 0;
+      for (const r of APP.raw.rows) {
+        const o = r ? r[sourceCol] : "";
+        const v = pred(o);
+        r[derivedCol] = v ? "true" : "false";
+        if (v) tCount++;
+        else fCount++;
+      }
+
+      if (!existing) APP.raw.columns.push(derivedCol);
+
+      dt.enabled = true;
+      dt.sourceCol = sourceCol;
+      dt.derivedCol = derivedCol;
+      dt.expr = expr;
+      dt.lastError = "";
+      dt.lastStatus = `Created ${derivedCol}: true=${tCount}, false=${fCount}.`;
+
+      APP.setup.excluded.add(sourceCol);
+      APP.setup.excluded.delete(derivedCol);
+
+      renderTargetSelect();
+      $("targetSelect").value = derivedCol;
+      $("targetSelect").dispatchEvent(new Event("change"));
+
+      const statusEl = $("derivedTargetStatus");
+      if (statusEl) {
+        statusEl.innerHTML = `<span class="pill good">Ready</span> <span class="mono">${escapeHtml(dt.lastStatus)}</span>`;
+      }
+    }
+
+    function undoDerivedTarget() {
+      const dt = APP.setup.multiClass?.derivedTarget || null;
+      if (!dt || !dt.enabled) return;
+
+      const sourceCol = dt.sourceCol;
+      const derivedCol = dt.derivedCol;
+
+      if (derivedCol) {
+        for (const r of APP.raw.rows) delete r[derivedCol];
+        APP.raw.columns = APP.raw.columns.filter(c => c !== derivedCol);
+        APP.setup.excluded.delete(derivedCol);
+      }
+
+      if (sourceCol) APP.setup.excluded.delete(sourceCol);
+
+      dt.enabled = false;
+      dt.sourceCol = null;
+      dt.derivedCol = "";
+      dt.expr = "";
+      dt.lastError = "";
+      dt.lastStatus = "";
+
+      if (sourceCol) APP.raw.targetCol = sourceCol;
+
+      renderTargetSelect();
+      if (sourceCol) $("targetSelect").value = sourceCol;
+      $("targetSelect").dispatchEvent(new Event("change"));
+
+      const statusEl = $("derivedTargetStatus");
+      if (statusEl) statusEl.textContent = "—";
+    }
+
+	    function syncAdvancedTargetUI() {
+	      const details = $("advancedTargetDetails");
+	      if (!details) return;
+
+      const topNState = APP.setup.multiClass?.topN || { enabled: false, keep: 5, rareLabel: "RARE" };
+      const dt = APP.setup.multiClass?.derivedTarget || { enabled: false, sourceCol: null, derivedCol: "", expr: "", lastStatus: "", lastError: "" };
+
+      const targetCol = APP.raw.targetCol;
+      const hasTarget = Boolean(targetCol);
+      const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
+
+      const sourceCol = (dt.enabled && dt.sourceCol) ? dt.sourceCol : targetCol;
+      const canShow = Boolean(hasTarget && task === "classification" && sourceCol);
+
+      if (!canShow) {
+        details.classList.add("hidden");
+        return;
+      }
+
+      const info = computeCategoricalCounts(APP.raw.rows, sourceCol, { maxSample: 8000, seed: 1337 });
+      const numClasses = info.counts.size;
+      const isMultiClass = numClasses > 2;
+      const showDetails = isMultiClass || topNState.enabled || dt.enabled;
+      details.classList.toggle("hidden", !showDetails);
+      if (!showDetails) return;
+
+      const callout = $("multiClassSummaryCallout");
+      if (callout) {
+        const top = sortedCountEntries(info.counts).slice(0, 6);
+        const topText = top.length
+          ? top.map(([k, v]) => `${escapeHtml(truncate(k, 30))} (${v})`).join(", ")
+          : "—";
+        const missTxt = info.nMissing ? ` · missing=${info.nMissing}` : "";
+        callout.innerHTML =
+          `<div style="font-weight:650;margin-bottom:6px;">Target summary (sample)</div>` +
+          `<div class="muted2">Column <span class="mono">${escapeHtml(sourceCol)}</span> · classes=${numClasses} · sampled=${info.nSampled}${missTxt}</div>` +
+          `<div class="muted2" style="margin-top:6px;">Top: ${topText}</div>`;
+      }
+
+      const topNEnableEl = $("topNEnable");
+      const topNKeepEl = $("topNKeep");
+      const derivedActive = isDerivedTargetActive();
+      if (topNEnableEl) {
+        topNEnableEl.checked = Boolean(topNState.enabled);
+        topNEnableEl.disabled = derivedActive;
+      }
+      if (topNKeepEl) {
+        topNKeepEl.value = String(Math.max(1, Math.floor(topNState.keep || 5)));
+        topNKeepEl.disabled = derivedActive || !Boolean(topNState.enabled);
+      }
+
+      const topNSummaryEl = $("topNSummary");
+      if (topNSummaryEl) {
+        if (derivedActive) topNSummaryEl.textContent = "Disabled (derived target is active).";
+        else if (!topNState.enabled) topNSummaryEl.textContent = "Disabled.";
+        else {
+          const keepN = Math.max(1, Math.floor(topNState.keep || 1));
+          const entries = sortedCountEntries(info.counts);
+          const kept = entries.slice(0, Math.min(keepN, entries.length));
+          const hasRare = entries.length > kept.length;
+          const outK = Math.min(keepN, entries.length) + (hasRare ? 1 : 0);
+          const keptText = kept.length ? kept.map(([k, v]) => `${truncate(k, 30)} (${v})`).join(", ") : "—";
+          topNSummaryEl.textContent = `Keeps: ${keptText}${hasRare ? ` · Others → ${topNState.rareLabel} · New classes≈${outK}` : " · No rare classes in sample."}`;
+        }
+      }
+
+	      const applyBtn = $("applyDerivedTargetBtn");
+	      const undoBtn = $("undoDerivedTargetBtn");
+	      const nameEl = $("derivedTargetColName");
+	      const exprEl = $("derivedTargetExpr");
+	      const valueIdent = exprValueIdentForColumnName(sourceCol);
+
+	      const valueIdentEl = $("derivedTargetValueIdent");
+	      if (valueIdentEl) valueIdentEl.textContent = valueIdent;
+	      const ex1El = $("derivedTargetExprExample1");
+	      if (ex1El) ex1El.textContent = `${valueIdent} in (6,7,8)`;
+	      const ex2El = $("derivedTargetExprExample2");
+	      if (ex2El) ex2El.textContent = `len(${valueIdent}) > 5`;
+
+	      if (nameEl && !normStr(nameEl.value)) {
+	        nameEl.placeholder = defaultDerivedTargetColName(sourceCol);
+	      }
+	      if (exprEl) {
+	        exprEl.placeholder = `e.g. ${valueIdent} in (6,7,8) or len(${valueIdent}) > 5`;
+	      }
+	      if (exprEl && dt.enabled && normStr(dt.expr) && !exprEl.dataset.userSet) {
+	        exprEl.value = dt.expr;
+	      }
+      if (nameEl && dt.enabled && dt.derivedCol && !nameEl.dataset.userSet) {
+        nameEl.value = dt.derivedCol;
+      }
+
+      if (applyBtn) {
+        const expr = normStr(exprEl?.value);
+        applyBtn.disabled = !expr;
+      }
+      if (undoBtn) undoBtn.disabled = !dt.enabled;
+
+      const statusEl = $("derivedTargetStatus");
+      if (statusEl) {
+        if (dt.lastError) {
+          statusEl.innerHTML = `<span class="pill bad">Error</span> <span class="mono">${escapeHtml(dt.lastError)}</span>`;
+        } else if (dt.enabled && dt.derivedCol && dt.sourceCol) {
+          const active = isDerivedTargetActive();
+          const activeTxt = active ? " (active)" : "";
+          statusEl.innerHTML =
+            `<span class="pill good">Ready</span> ` +
+            `<span class="muted2">Derived <span class="mono">${escapeHtml(dt.derivedCol)}</span> from <span class="mono">${escapeHtml(dt.sourceCol)}</span>${activeTxt}.</span>`;
+        } else {
+          statusEl.textContent = "—";
+        }
+      }
     }
 
     function renderTargetSelect() {
@@ -1938,6 +2601,16 @@
       if (APP.raw.targetCol) {
         const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
         add("Task", task);
+      }
+
+      const topNState = APP.setup.multiClass?.topN || null;
+      if (topNState?.enabled && !isDerivedTargetActive()) {
+        add("TopN", `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`);
+      }
+
+      const dt = APP.setup.multiClass?.derivedTarget || null;
+      if (dt?.enabled && dt.sourceCol && dt.derivedCol && APP.raw.targetCol === dt.derivedCol) {
+        add("Derived", `${dt.sourceCol} → ${dt.derivedCol}`);
       }
 
       const splitMode = effectiveSplitMode();
@@ -2284,12 +2957,58 @@
 
       let targetMapping = null;
       let numTargetClasses = null;
+      let normalizeTargetLabel = null;
       if (task === "classification") {
+        const topN = APP.setup.multiClass?.topN || null;
+        const dt = APP.setup.multiClass?.derivedTarget || null;
+        const derivedActive = Boolean(dt?.enabled && dt.derivedCol && targetCol === dt.derivedCol);
+        const enabled = Boolean(topN?.enabled) && !derivedActive;
+        const keepN = Math.max(1, Math.floor(topN?.keep || 1));
+        const rareLabel = normStr(topN?.rareLabel) || "RARE";
+
+        let topSet = null;
+        let hasRare = false;
+        let kept = [];
+
+        if (enabled) {
+          const counts = new Map();
+          for (const i of split.trainIdx) {
+            const s = normStr(yAll[i]) || "#na#";
+            if (s === "#na#") continue;
+            counts.set(s, (counts.get(s) || 0) + 1);
+          }
+
+          const entries = Array.from(counts.entries())
+            .sort((a, b) => (b[1] - a[1]) || String(a[0]).localeCompare(String(b[0])));
+          kept = entries.slice(0, Math.min(keepN, entries.length)).map(([k]) => k);
+          topSet = new Set(kept);
+          for (const y of yAll) {
+            const s = normStr(y) || "#na#";
+            if (s === "#na#") continue;
+            if (!topSet.has(s)) { hasRare = true; break; }
+          }
+        }
+
+        normalizeTargetLabel = (label) => {
+          const s = normStr(label) || "#na#";
+          if (s === "#na#") return "#na#";
+          if (!topSet || topSet.has(s)) return s;
+          return rareLabel;
+        };
+
         const seen = new Map();
         seen.set("#na#", 0);
         let id = 1;
-        for (const r of trainRows) {
-          const s = normStr(r[targetCol]) || "#na#";
+
+        if (topSet) {
+          for (const s of kept) {
+            if (!seen.has(s)) seen.set(s, id++);
+          }
+          if (hasRare && !seen.has(rareLabel)) seen.set(rareLabel, id++);
+        }
+
+        for (const i of split.trainIdx) {
+          const s = normalizeTargetLabel(yAll[i]);
           if (!seen.has(s)) seen.set(s, id++);
         }
         targetMapping = Object.fromEntries(seen.entries());
@@ -2332,7 +3051,7 @@
         ytrain = split.trainIdx.map(i => yAll[i]);
       } else {
         ytrain = split.trainIdx.map(i => {
-          const s = yAll[i];
+          const s = normalizeTargetLabel ? normalizeTargetLabel(yAll[i]) : yAll[i];
           return (targetMapping[s] === undefined) ? 0 : targetMapping[s];
         });
       }
@@ -2351,7 +3070,7 @@
         }
       } else {
         for (const i of split.testIdx) {
-          const label = yAll[i];
+          const label = normalizeTargetLabel ? normalizeTargetLabel(yAll[i]) : yAll[i];
           const id = targetMapping[label];
           if (id === undefined) { droppedUnseenTestLabels++; continue; }
           Xtest.push(transformRowToFeatures(rowRefs[i], pipeline));
@@ -4452,6 +5171,21 @@ function invertTargetIfNeeded(yPred, artifact){
           categorical: new Set(),
           continuous: new Set(),
         },
+        multiClass: {
+          topN: {
+            enabled: false,
+            keep: 5,
+            rareLabel: "RARE",
+          },
+          derivedTarget: {
+            enabled: false,
+            sourceCol: null,
+            derivedCol: "",
+            expr: "",
+            lastStatus: "",
+            lastError: "",
+          },
+        },
       };
       syncHiddenTypingLists();
       APP.train = {
@@ -4542,6 +5276,17 @@ function invertTargetIfNeeded(yPred, artifact){
       if ($("maxFeatures")) delete $("maxFeatures").dataset.userSet;
       if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
       if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
+
+      if ($("advancedTargetDetails")) $("advancedTargetDetails").classList.add("hidden");
+      if ($("multiClassSummaryCallout")) $("multiClassSummaryCallout").innerHTML = "";
+      if ($("topNEnable")) $("topNEnable").checked = false;
+      if ($("topNKeep")) $("topNKeep").value = "5";
+      if ($("topNSummary")) $("topNSummary").textContent = "—";
+      if ($("derivedTargetColName")) $("derivedTargetColName").value = "";
+      if ($("derivedTargetColName")) delete $("derivedTargetColName").dataset.userSet;
+      if ($("derivedTargetExpr")) $("derivedTargetExpr").value = "";
+      if ($("derivedTargetExpr")) delete $("derivedTargetExpr").dataset.userSet;
+      if ($("derivedTargetStatus")) $("derivedTargetStatus").textContent = "—";
 
       gotoStep(0);
     }
@@ -4871,6 +5616,47 @@ function invertTargetIfNeeded(yPred, artifact){
       renderTrainChips();
     });
 
+    $("topNEnable").addEventListener("change", () => {
+      APP.setup.multiClass.topN.enabled = Boolean($("topNEnable").checked);
+      syncAdvancedTargetUI();
+      renderTrainChips();
+    });
+
+    $("topNKeep").addEventListener("change", () => {
+      const v = Math.max(1, Math.floor(parseNum($("topNKeep").value) || 1));
+      APP.setup.multiClass.topN.keep = v;
+      $("topNKeep").value = String(v);
+      syncAdvancedTargetUI();
+      renderTrainChips();
+    });
+
+    $("derivedTargetColName").addEventListener("input", () => {
+      $("derivedTargetColName").dataset.userSet = "1";
+      syncAdvancedTargetUI();
+    });
+
+    $("derivedTargetExpr").addEventListener("input", () => {
+      $("derivedTargetExpr").dataset.userSet = "1";
+      syncAdvancedTargetUI();
+    });
+
+    $("applyDerivedTargetBtn").addEventListener("click", () => {
+      const dt = APP.setup.multiClass?.derivedTarget || null;
+      if (dt) { dt.lastError = ""; dt.lastStatus = ""; }
+      try {
+        applyDerivedTargetFromExpr();
+      } catch (e) {
+        if (dt) dt.lastError = e?.message || String(e);
+        syncAdvancedTargetUI();
+      }
+    });
+
+    $("undoDerivedTargetBtn").addEventListener("click", () => {
+      undoDerivedTarget();
+      syncAdvancedTargetUI();
+      renderTrainChips();
+    });
+
     let typingDebounce = null;
     const scheduleTypingRefresh = () => {
       if (!APP.raw.columns.length) return;
@@ -4895,6 +5681,8 @@ function invertTargetIfNeeded(yPred, artifact){
     markTrainSettingAsUserSet("maxFeatures");
     markTrainSettingAsUserSet("maxDepth");
     markTrainSettingAsUserSet("minNumSamples");
+    markTrainSettingAsUserSet("derivedTargetColName");
+    markTrainSettingAsUserSet("derivedTargetExpr");
 
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
     $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {

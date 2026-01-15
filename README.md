@@ -31,6 +31,15 @@ python -m http.server
 - **Regression**: target is numeric (optionally with `log1p` transform).
 - **Classification**: target is treated as discrete labels and encoded to integer class IDs.
 
+### Derived boolean target (pythonic expression)
+The UI can create a new binary target column from a small “pythonic” expression language evaluated per-row on the current target cell value.
+
+- **Value variable**: use the identifier shown in the UI (derived from the selected target column name; if the column name isn’t a valid identifier, it’s sanitized). `o` is also accepted for backward compatibility.
+- **Value type/coercion**: the target cell is converted to a **trimmed string** before evaluation.
+- **Numeric vs string comparison**: for `<`, `<=`, `>`, `>=` the app compares numerically only if **both sides** parse as numbers; otherwise it compares as strings.
+- **Supported syntax**: `and`, `or`, `not`, parentheses, `len(x)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), and membership (`x in ( ... )`, `x not in ( ... )`) where the collection contains only literals (`number`, quoted `string`, `true`, `false`, `none`).
+- **Not supported**: regex, arithmetic, or referencing other columns/row fields.
+
 ### Split strategies
 - **Random split**: standard train/test split using a fixed seed for reproducibility.
 - **Time-based split**: uses a chosen date column to split chronologically (useful for leakage/shift checks).

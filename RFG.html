@@ -570,7 +570,6 @@
               <span class="pill" id="rowsPill">Rows: —</span>
               <span class="pill" id="colsPill">Columns: —</span>
               <span class="pill" id="reviewPill">Needs review: —</span>
-              <span class="pill hidden" id="splitStrategyPill">Split: —</span>
             </div>
 
             <div class="hr"></div>
@@ -1072,7 +1071,7 @@
         splitDateCol: null,
         splitMethod: "cutoff",
         cutoffDate: "",
-        splitStrategy: "random",
+        splitStrategy: "stratified",
         testFrac: 0.1,
         taskMode: "auto",
         targetTransform: "none",
@@ -2021,7 +2020,7 @@
       const hasDates = dateCols.length > 0;
       const splitSel = $("splitStrategy");
       if (splitSel) {
-        const cur = splitSel.value || "random";
+        const cur = APP.setup.splitStrategy || splitSel.value || "random";
         const options = [`<option value="random">Random</option>`];
         if (decidedTask === "classification") {
           options.push(`<option value="stratified">Stratified (classification)</option>`);
@@ -2049,17 +2048,6 @@
       $("cutoffField").classList.toggle("hidden", !(splitMode === "time" && splitMethod === "cutoff"));
       $("cutoffDate").disabled = !(splitMode === "time" && splitMethod === "cutoff");
       $("testFrac").disabled = !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
-
-      const splitPill = $("splitStrategyPill");
-      if (splitPill) {
-        if (splitMode === "random" && APP.setup.splitStrategy === "stratified" && decidedTask === "classification") {
-          splitPill.textContent = "Split: stratified";
-          splitPill.classList.remove("hidden");
-        } else {
-          splitPill.textContent = "Split: —";
-          splitPill.classList.add("hidden");
-        }
-      }
 
       const c = $("setupCallout");
       if (!hasTarget) {
@@ -5294,7 +5282,7 @@ function invertTargetIfNeeded(yPred, artifact){
         splitDateCol: null,
         splitMethod: "cutoff",
         cutoffDate: "",
-        splitStrategy: "random",
+        splitStrategy: "stratified",
         testFrac: 0.1,
         taskMode: "auto",
         targetTransform: "none",
@@ -5405,7 +5393,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("taskMode").value = "auto";
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";
-      $("splitStrategy").value = "random";
+      $("splitStrategy").value = "stratified";
       $("predTopK").value = "30";
       $("predFilter").value = "";
       $("pageSize").value = "50";
@@ -5441,7 +5429,7 @@ function invertTargetIfNeeded(yPred, artifact){
         testFrac: parseNum($("testFrac").value) || 0.1,
         splitMethod: $("splitMethod").value || "cutoff",
         cutoffDate: $("cutoffDate").value || "",
-        splitStrategy: $("splitStrategy").value || "random",
+        splitStrategy: $("splitStrategy").value || "stratified",
         taskMode,
         targetTransform: $("targetTransform").value,
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),

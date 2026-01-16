@@ -180,7 +180,6 @@
     .pill.good{border-color:rgba(50,213,131,0.35);background:rgba(50,213,131,0.08);color:rgba(50,213,131,0.95)}
     .pill.warn{border-color:rgba(253,176,34,0.35);background:rgba(253,176,34,0.08);color:rgba(253,176,34,0.95)}
     .pill.bad {border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
-
     .hr{height:1px;background:var(--border2);margin:12px 0}
 
     .drop{
@@ -535,7 +534,12 @@
           </div>
 
           <div class="hr"></div>
-          <div class="muted2">Preview (first 12 rows)</div>
+          <div class="field" style="margin-bottom:8px;">
+            <label for="targetSearch">Search target column</label>
+            <input id="targetSearch" type="text" placeholder="Search columns…" />
+            <div class="muted2">Type to filter the preview columns below.</div>
+          </div>
+          <div class="muted2" style="margin-top:10px;">Preview (first 12 rows)</div>
           <div class="scroll" style="margin-top:8px;max-height:320px;">
             <table id="previewTable"></table>
           </div>
@@ -1149,6 +1153,7 @@
         parseSeq: 0,
         predPage: 0,
         predFilter: "",
+        previewFilter: "",
         colSort: { key: "name", dir: "asc" },
         maxUnlockedStep: 0,
         shiftAutoExpandedRunSeq: 0,
@@ -1635,11 +1640,37 @@
       };
     }
 
+    function setTargetFromPicker(col, { advanceStep = true } = {}) {
+      if (!col) return;
+      APP.raw.targetCol = col;
+      APP.setup.excluded.delete(col);
+      renderTargetSelect();
+      $("targetSelect").value = col;
+      $("targetSelect").dispatchEvent(new Event("change"));
+
+      if (advanceStep) {
+        $("uploadStatus").innerHTML =
+          `<span class="pill good">Target selected</span><span class="muted2">Proceed to configure split & training.</span>`;
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
+        gotoStep(1);
+      }
+    }
+
     // ----------------------------
     // Rendering: Upload preview
     // ----------------------------
     function renderPreviewTable(rows, columns) {
-      const cols = columns.slice(0, Math.min(columns.length, 12));
+      const filter = normStr(APP.ui.previewFilter).toLowerCase();
+      const cols = filter
+        ? columns.filter(c => c.toLowerCase().includes(filter))
+        : columns.slice();
+      if (!cols.length) {
+        $("previewTable").innerHTML =
+          `<tbody><tr><td class="muted2">No columns match the search.</td></tr></tbody>`;
+        return;
+      }
+
       const head = "<thead><tr>" + cols.map((c, i) => (
         `<th class="previewPick" data-preview-col="${escapeHtml(c)}" data-preview-idx="${i}">${escapeHtml(c)}</th>`
       )).join("") + "</tr></thead>";
@@ -1707,18 +1738,8 @@
         const idx = Number(cell.getAttribute("data-preview-idx"));
         if (!col) return;
         if (Number.isFinite(idx)) setSelected(idx);
-
-        APP.raw.targetCol = col;
-        APP.setup.excluded.delete(col);
-        renderTargetSelect();
-        $("targetSelect").value = col;
-        $("targetSelect").dispatchEvent(new Event("change"));
-
-        $("uploadStatus").innerHTML = `<span class="pill good">Target selected</span><span class="muted2">Proceed to configure split & training.</span>`;
+        setTargetFromPicker(col, { advanceStep: true });
         showToast(`Target set to ${col}`, "good");
-        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
-        renderStepper();
-        gotoStep(1);
     });
   }
 
@@ -5302,6 +5323,7 @@ function invertTargetIfNeeded(yPred, artifact){
       };
       APP.ui.predPage = 0;
       APP.ui.predFilter = "";
+      APP.ui.previewFilter = "";
       APP.ui.prevRunSummary = null;
       APP.ui.pruneUndoExcluded = null;
       APP.ui.pruneUndoReason = "";
@@ -5316,10 +5338,11 @@ function invertTargetIfNeeded(yPred, artifact){
       $("trainStatus").innerHTML = "";
 	      setTrainingUi(false);
 
-	      hide($("uploadSummary"));
-	      show($("dropZone"));
-	      $("uploadStatus").innerHTML = "";
-	      $("previewTable").innerHTML = "";
+      hide($("uploadSummary"));
+      show($("dropZone"));
+      $("uploadStatus").innerHTML = "";
+      $("previewTable").innerHTML = "";
+      if ($("targetSearch")) $("targetSearch").value = "";
       $("predTable").innerHTML = "";
       $("worstErrTable").innerHTML = "";
       $("highUncTable").innerHTML = "";
@@ -5448,12 +5471,17 @@ function invertTargetIfNeeded(yPred, artifact){
       $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
       $("dsShapePill").textContent = `${rows.length} rows · ${cols.length} cols`;
 
+      APP.ui.previewFilter = "";
       renderPreviewTable(rows, cols);
       bindPreviewTargetPicker();
 
       hide($("dropZone"));
       show($("uploadSummary"));
-      $("uploadStatus").innerHTML = `<span class="pill">Pick a target</span><span class="muted2">Click a column header in the preview.</span>`;
+      $("uploadStatus").innerHTML =
+        `<span class="pill">Pick a target</span>` +
+        `<span class="muted2">Pick the column you want to predict (click a header or use search).</span>`;
+
+      $("targetSearch").value = "";
 
       $("continueToSetupBtn").disabled = false;
 
@@ -5669,6 +5697,11 @@ function invertTargetIfNeeded(yPred, artifact){
       syncSetupUI();
       renderColumnTable();
       syncButtons();
+    });
+
+    $("targetSearch").addEventListener("input", () => {
+      APP.ui.previewFilter = $("targetSearch").value;
+      renderPreviewTable(APP.raw.rows, APP.raw.columns);
     });
 
     $("taskMode").addEventListener("change", () => {

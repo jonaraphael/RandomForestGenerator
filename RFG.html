@@ -88,6 +88,14 @@
       transition:120ms ease;
     }
     .step:hover{transform:translateY(-1px);border-color:rgba(234,240,255,0.16)}
+    .step.locked{
+      opacity:0.45;
+      cursor:not-allowed;
+    }
+    .step.locked:hover{
+      transform:none;
+      border-color:rgba(234,240,255,0.12);
+    }
     .step .dot{
       width:20px;height:20px;border-radius:50%;
       border:1px solid var(--border);
@@ -311,6 +319,31 @@
     .callout.good{border-color:rgba(50,213,131,0.35);background:rgba(50,213,131,0.08);color:rgba(50,213,131,0.95)}
     .callout.warn{border-color:rgba(253,176,34,0.35);background:rgba(253,176,34,0.08);color:rgba(253,176,34,0.95)}
     .callout.bad{border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
+
+    .toast{
+      display:grid;
+      gap:6px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(12,18,38,0.78);
+      color:var(--text);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      max-width:360px;
+      font-size:13px;
+      line-height:1.3;
+      opacity:0;
+      transform: translateY(6px);
+      transition: 160ms ease;
+    }
+    .toast.show{
+      opacity:1;
+      transform: translateY(0);
+    }
+    .toast.good{border-color:rgba(50,213,131,0.45);background:rgba(50,213,131,0.12);color:rgba(50,213,131,0.95)}
+    .toast.warn{border-color:rgba(253,176,34,0.45);background:rgba(253,176,34,0.12);color:rgba(253,176,34,0.95)}
+    .toast.bad{border-color:rgba(249,112,102,0.45);background:rgba(249,112,102,0.12);color:rgba(249,112,102,0.95)}
 
     details{
       border:1px solid var(--border2);
@@ -1002,6 +1035,8 @@
     </div>
   </div>
 
+  <div id="toastHost" style="position:fixed;right:14px;bottom:14px;z-index:1000;display:grid;gap:10px;"></div>
+
   <script type="module">
     import { RandomForestRegression, RandomForestClassifier } from "https://esm.sh/ml-random-forest@2.1.0";
     import { DecisionTreeClassifier, DecisionTreeRegression } from "https://esm.sh/ml-cart@^2.1.1?target=es2022";
@@ -1111,6 +1146,7 @@
         predPage: 0,
         predFilter: "",
         colSort: { key: "name", dir: "asc" },
+        maxUnlockedStep: 0,
         shiftAutoExpandedRunSeq: 0,
         prevRunSummary: null,
         pruneUndoExcluded: null,
@@ -1125,6 +1161,22 @@
     const $ = (id) => document.getElementById(id);
     const show = (el) => el.classList.remove("hidden");
     const hide = (el) => el.classList.add("hidden");
+
+    function showToast(message, kind = "") {
+      const host = $("toastHost");
+      if (!host) return;
+      const toast = document.createElement("div");
+      toast.className = `toast ${kind}`.trim();
+      toast.textContent = message;
+      host.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.add("show"));
+      const dismiss = () => {
+        toast.classList.remove("show");
+        toast.addEventListener("transitionend", () => toast.remove(), { once: true });
+        setTimeout(() => toast.remove(), 220);
+      };
+      setTimeout(dismiss, 3000);
+    }
 
     function escapeHtml(s) {
       return String(s)
@@ -1464,7 +1516,13 @@
     function renderStepper() {
       const s = $("stepper");
       s.innerHTML = STEPS.map((st, i) => {
-        const cls = (i === APP.step) ? "step active" : (i < APP.step ? "step done" : "step");
+        const isLocked = i > (APP.ui.maxUnlockedStep || 0);
+        const cls = [
+          "step",
+          i === APP.step ? "active" : "",
+          i < APP.step ? "done" : "",
+          isLocked ? "locked" : "",
+        ].filter(Boolean).join(" ");
         const dot = (i < APP.step) ? "✓" : String(i + 1);
         return `<div class="${cls}" data-step="${i}">
           <div class="dot">${dot}</div>
@@ -1476,6 +1534,10 @@
         el.addEventListener("click", () => {
           const i = Number(el.getAttribute("data-step"));
           if (!Number.isFinite(i)) return;
+          if (i > (APP.ui.maxUnlockedStep || 0)) {
+            showToast("Complete the previous step first.", "warn");
+            return;
+          }
           gotoStep(i);
         });
       });
@@ -1649,9 +1711,12 @@
         $("targetSelect").dispatchEvent(new Event("change"));
 
         $("uploadStatus").innerHTML = `<span class="pill good">Target selected</span><span class="muted2">Proceed to configure split & training.</span>`;
+        showToast(`Target set to ${col}`, "good");
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
         gotoStep(1);
-      });
-    }
+    });
+  }
 
     // ----------------------------
     // Setup rendering
@@ -4617,6 +4682,8 @@
       APP.train.rfOptions = rfOptions;
       APP.train.model = model;
       APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
+      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 3);
+      renderStepper();
       APP.train.featureNames = featureNames;
       APP.train.baseForDerived = baseForDerived;
       APP.train.derivedTypeByFeature = buildDerivedTypeByFeature(featureNames, baseForDerived);
@@ -4713,6 +4780,7 @@
       gotoStep(3);
 
       $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
+      showToast("Training complete", "good");
       APP.ui.training.abortController = null;
       APP.ui.training.stopRequested = false;
       setTrainingUi(false);
@@ -5125,6 +5193,8 @@ function invertTargetIfNeeded(yPred, artifact){
       $("artifactDetailPill").textContent = `task=${artifact.task} · features=${artifact.derivedFeatureNames.length}`;
       $("downloadZipBtn").disabled = false;
       $("sampleCode").textContent = buildSampleCode(artifact);
+      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 4);
+      renderStepper();
     }
 
     // ----------------------------
@@ -5220,6 +5290,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.ui.pruneUndoExcluded = null;
       APP.ui.pruneUndoReason = "";
       APP.ui.pruneJustApplied = false;
+      APP.ui.maxUnlockedStep = 0;
 
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
@@ -5348,6 +5419,8 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.raw.fileName = fileName || "data.csv";
       APP.raw.rows = rows;
       APP.raw.columns = cols;
+      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 1);
+      renderStepper();
 
       recomputeColumnMeta();
 
@@ -5556,6 +5629,10 @@ function invertTargetIfNeeded(yPred, artifact){
     $("targetSelect").addEventListener("change", () => {
       APP.raw.targetCol = $("targetSelect").value;
       if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
+      if (APP.raw.targetCol) {
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
+      }
       recomputeColumnMeta();
       if (APP.raw.targetCol) {
         APP.setup.taskMode = defaultTaskModeForTarget(APP.raw.rows, APP.raw.targetCol, APP.raw.colMeta);
@@ -5798,6 +5875,7 @@ Compatibility
 
       const blob = await zip.generateAsync({ type: "blob" });
       downloadBlob(blob, "rf_artifact.zip");
+      showToast("Downloading rf_artifact.zip", "good");
     });
 
     // Keyboard: Return = "next step" (via training)

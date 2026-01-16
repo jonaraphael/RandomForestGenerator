@@ -710,6 +710,22 @@
                 </div>
               </div>
 
+              <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
+                <div class="field" style="margin:0;min-width:240px;">
+                  <label for="colFilter">Search columns</label>
+                  <input id="colFilter" type="text" placeholder="Filter by column name" />
+                </div>
+                <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                  <button class="btn" id="excludeIdLikeBtn">Exclude ID-like</button>
+                  <div class="field" style="margin:0;min-width:180px;">
+                    <label for="missCut">Missing % cutoff</label>
+                    <input id="missCut" type="number" min="0" max="100" step="1" value="50" />
+                  </div>
+                  <button class="btn" id="excludeMissingBtn">Exclude &gt;X% missing</button>
+                  <button class="btn ghost" id="resetExcludedBtn">Reset exclusions</button>
+                </div>
+              </div>
+
               <div class="scroll" style="max-height:420px;">
                 <table id="reviewColumnsTable">
                   <thead>
@@ -1786,6 +1802,7 @@
     function renderColumnTable() {
       const meta = APP.raw.colMeta;
       const target = APP.raw.targetCol;
+      const q = normStr($("colFilter")?.value).toLowerCase();
 
       const groups = [
         { key: "continuous", title: "Continuous" },
@@ -1827,6 +1844,7 @@
         const colsInGroup = APP.raw.columns.filter(col => {
           const m = meta[col];
           if (!m) return false;
+          if (q && !col.toLowerCase().includes(q)) return false;
 
           const groupKey = m.include ? m.inferredType : "excluded";
           if (groupKey !== g.key) return false;
@@ -1949,6 +1967,38 @@
           $("targetSelect").dispatchEvent(new Event("change"));
         });
       });
+    }
+
+    function refreshSetupAfterExclusion() {
+      syncHiddenTypingLists();
+      recomputeColumnMeta();
+      refreshSplitDateCol();
+      syncSetupUI();
+      renderColumnTable();
+      syncButtons();
+    }
+
+    function applyBulkExclusion(cols, label) {
+      const target = APP.raw.targetCol;
+      let added = 0;
+      for (const col of cols) {
+        if (col === target) continue;
+        if (!APP.setup.excluded.has(col)) {
+          APP.setup.excluded.add(col);
+          added++;
+        }
+      }
+      refreshSetupAfterExclusion();
+      showToast(`Excluded ${added} columns (${label}).`, added ? "good" : "warn");
+    }
+
+    function resetExcludedColumns() {
+      const locked = APP.raw.columns.filter(col => lockedExcludedReason(col));
+      APP.setup.excluded = new Set(locked);
+      if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
+      refreshSetupAfterExclusion();
+      const lockedCount = APP.setup.excluded.size;
+      showToast(`Reset exclusions (kept ${lockedCount} locked).`, "good");
     }
 
     function listDateColumns() {
@@ -5786,6 +5836,28 @@ function invertTargetIfNeeded(yPred, artifact){
     markTrainSettingAsUserSet("minNumSamples");
     markTrainSettingAsUserSet("derivedTargetColName");
     markTrainSettingAsUserSet("derivedTargetExpr");
+
+    $("colFilter").addEventListener("input", () => {
+      renderColumnTable();
+    });
+
+    $("excludeIdLikeBtn").addEventListener("click", () => {
+      const meta = APP.raw.colMeta || {};
+      const cols = APP.raw.columns.filter(col => meta[col]?.flags?.idLike);
+      applyBulkExclusion(cols, "ID-like");
+    });
+
+    $("excludeMissingBtn").addEventListener("click", () => {
+      const cut = Math.max(0, Math.min(100, parseNum($("missCut").value) || 0));
+      $("missCut").value = String(cut);
+      const meta = APP.raw.colMeta || {};
+      const cols = APP.raw.columns.filter(col => ((meta[col]?.missingFrac ?? 0) * 100) >= cut);
+      applyBulkExclusion(cols, `≥${cut}% missing`);
+    });
+
+    $("resetExcludedBtn").addEventListener("click", () => {
+      resetExcludedColumns();
+    });
 
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
     $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {

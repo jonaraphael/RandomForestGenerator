@@ -177,6 +177,10 @@
       font-size:12px;
       white-space:nowrap;
     }
+    .pill.tiny{
+      padding:2px 6px;
+      font-size:10px;
+    }
     .pill.good{border-color:rgba(50,213,131,0.35);background:rgba(50,213,131,0.08);color:rgba(50,213,131,0.95)}
     .pill.warn{border-color:rgba(253,176,34,0.35);background:rgba(253,176,34,0.08);color:rgba(253,176,34,0.95)}
     .pill.bad {border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
@@ -711,18 +715,9 @@
               </div>
 
               <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
-                <div class="field" style="margin:0;min-width:240px;">
+                <div class="field hidden" id="colFilterField" style="margin:0;min-width:240px;">
                   <label for="colFilter">Search columns</label>
                   <input id="colFilter" type="text" placeholder="Filter by column name" />
-                </div>
-                <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;">
-                  <button class="btn" id="excludeIdLikeBtn">Exclude ID-like</button>
-                  <div class="field" style="margin:0;min-width:180px;">
-                    <label for="missCut">Missing % cutoff</label>
-                    <input id="missCut" type="number" min="0" max="100" step="1" value="50" />
-                  </div>
-                  <button class="btn" id="excludeMissingBtn">Exclude &gt;X% missing</button>
-                  <button class="btn ghost" id="resetExcludedBtn">Reset exclusions</button>
                 </div>
               </div>
 
@@ -731,7 +726,10 @@
                   <thead>
                     <tr>
                       <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="name">Column <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="name">
+                        Column <span class="sort-indicator"></span>
+                        <button class="btn ghost" id="toggleColFilterBtn" type="button" style="padding:2px 8px;font-size:11px;margin-left:6px;">Filter</button>
+                      </th>
                       <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
@@ -1073,6 +1071,7 @@
       { key: "results", title: "Results" },
       { key: "export",  title: "Export" },
     ];
+    const AUTO_EXCLUDE_MISSING_PCT = 50;
 
     let APP = {
       step: 0,
@@ -1098,6 +1097,7 @@
         forceCont: "",
         excludeCols: "",
         excluded: new Set(),
+        autoExcludedReasons: {},
         forcedTypes: {
           date: new Set(),
           categorical: new Set(),
@@ -1785,6 +1785,33 @@
       syncHiddenTypingLists();
     }
 
+    function applyDefaultColumnExclusions() {
+      const meta = APP.raw.colMeta || {};
+      const target = APP.raw.targetCol;
+      const reasons = {};
+
+      for (const col of APP.raw.columns) {
+        if (col === target) continue;
+        const m = meta[col];
+        if (!m) continue;
+        const colReasons = [];
+
+        if (m.flags?.idLike) colReasons.push("Auto: ID-like");
+        if ((m.missingFrac ?? 0) * 100 > AUTO_EXCLUDE_MISSING_PCT) {
+          colReasons.push(`Auto: >${AUTO_EXCLUDE_MISSING_PCT}% missing`);
+        }
+
+        if (colReasons.length) {
+          APP.setup.excluded.add(col);
+          reasons[col] = colReasons;
+        }
+      }
+
+      APP.setup.autoExcludedReasons = reasons;
+      if (target) APP.setup.excluded.delete(target);
+      syncHiddenTypingLists();
+    }
+
     function computeTypeCounts() {
       const meta = APP.raw.colMeta;
       const counts = { date: 0, categorical: 0, continuous: 0, excluded: 0 };
@@ -1891,6 +1918,10 @@
           if (m.flags?.idLike) flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
           if (forced) flags.push(`<span class="pill" title="Manually overridden">Forced</span>`);
           if (locked) flags.push(`<span class="pill warn" title="${escapeHtml(lockedReason)}">Locked</span>`);
+          const autoReasons = (!m.include && APP.setup.autoExcludedReasons?.[col]) || [];
+          for (const reason of autoReasons) {
+            flags.push(`<span class="pill warn tiny" title="Excluded by default">${escapeHtml(reason)}</span>`);
+          }
           const flagsHtml = flags.length ? flags.join(" ") : `<span class="muted2">—</span>`;
 
           const examplesFull = (m.examples || [])
@@ -1967,38 +1998,6 @@
           $("targetSelect").dispatchEvent(new Event("change"));
         });
       });
-    }
-
-    function refreshSetupAfterExclusion() {
-      syncHiddenTypingLists();
-      recomputeColumnMeta();
-      refreshSplitDateCol();
-      syncSetupUI();
-      renderColumnTable();
-      syncButtons();
-    }
-
-    function applyBulkExclusion(cols, label) {
-      const target = APP.raw.targetCol;
-      let added = 0;
-      for (const col of cols) {
-        if (col === target) continue;
-        if (!APP.setup.excluded.has(col)) {
-          APP.setup.excluded.add(col);
-          added++;
-        }
-      }
-      refreshSetupAfterExclusion();
-      showToast(`Excluded ${added} columns (${label}).`, added ? "good" : "warn");
-    }
-
-    function resetExcludedColumns() {
-      const locked = APP.raw.columns.filter(col => lockedExcludedReason(col));
-      APP.setup.excluded = new Set(locked);
-      if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
-      refreshSetupAfterExclusion();
-      const lockedCount = APP.setup.excluded.size;
-      showToast(`Reset exclusions (kept ${lockedCount} locked).`, "good");
     }
 
     function listDateColumns() {
@@ -5302,6 +5301,7 @@ function invertTargetIfNeeded(yPred, artifact){
         forceCont: "",
         excludeCols: "",
         excluded: new Set(),
+        autoExcludedReasons: {},
         forcedTypes: {
           date: new Set(),
           categorical: new Set(),
@@ -5413,6 +5413,8 @@ function invertTargetIfNeeded(yPred, artifact){
       if ($("maxFeatures")) delete $("maxFeatures").dataset.userSet;
       if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
       if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
+      if ($("colFilterField")) $("colFilterField").classList.add("hidden");
+      if ($("colFilter")) $("colFilter").value = "";
 
       if ($("advancedTargetDetails")) $("advancedTargetDetails").classList.add("hidden");
       if ($("multiClassSummaryCallout")) $("multiClassSummaryCallout").innerHTML = "";
@@ -5462,6 +5464,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.setup.maxRows = Math.max(0, prefs.maxRows);
       APP.setup.maxCard = prefs.maxCard;
       APP.setup.excluded = new Set();
+      APP.setup.autoExcludedReasons = {};
       APP.setup.forcedTypes = { date: new Set(), categorical: new Set(), continuous: new Set() };
       syncHiddenTypingLists();
 
@@ -5493,6 +5496,8 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 1);
       renderStepper();
 
+      recomputeColumnMeta();
+      applyDefaultColumnExclusions();
       recomputeColumnMeta();
 
       $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
@@ -5840,23 +5845,12 @@ function invertTargetIfNeeded(yPred, artifact){
     $("colFilter").addEventListener("input", () => {
       renderColumnTable();
     });
-
-    $("excludeIdLikeBtn").addEventListener("click", () => {
-      const meta = APP.raw.colMeta || {};
-      const cols = APP.raw.columns.filter(col => meta[col]?.flags?.idLike);
-      applyBulkExclusion(cols, "ID-like");
-    });
-
-    $("excludeMissingBtn").addEventListener("click", () => {
-      const cut = Math.max(0, Math.min(100, parseNum($("missCut").value) || 0));
-      $("missCut").value = String(cut);
-      const meta = APP.raw.colMeta || {};
-      const cols = APP.raw.columns.filter(col => ((meta[col]?.missingFrac ?? 0) * 100) >= cut);
-      applyBulkExclusion(cols, `≥${cut}% missing`);
-    });
-
-    $("resetExcludedBtn").addEventListener("click", () => {
-      resetExcludedColumns();
+    $("toggleColFilterBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const field = $("colFilterField");
+      if (!field) return;
+      field.classList.remove("hidden");
+      $("colFilter").focus();
     });
 
     $("maxCard").addEventListener("input", scheduleTypingRefresh);

@@ -556,9 +556,13 @@
               <div class="field">
                 <label for="taskMode">Predict mode</label>
                 <select id="taskMode">
+                  <option value="auto" selected>Auto (recommended)</option>
                   <option value="regression">Regression</option>
                   <option value="classification">Classification</option>
                 </select>
+                <div class="row" style="margin-top:6px;">
+                  <span class="pill hidden" id="taskModeDetectedPill" title="Based on target column inferred type + sample uniqueness.">—</span>
+                </div>
               </div>
             </div>
 
@@ -1994,7 +1998,19 @@
       const hasTarget = !!APP.raw.targetCol;
       $("continueToTrainBtn").disabled = !hasTarget;
 
-      const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
+      const decidedTask = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
+
+      const taskPill = $("taskModeDetectedPill");
+      if (taskPill) {
+        const mode = $("taskMode")?.value || APP.setup.taskMode || "auto";
+        if (mode === "auto" && decidedTask) {
+          taskPill.textContent = `Detected: ${decidedTask === "regression" ? "Regression" : "Classification"}`;
+          taskPill.classList.remove("hidden");
+        } else {
+          taskPill.textContent = "—";
+          taskPill.classList.add("hidden");
+        }
+      }
 
       const dateCols = listDateColumns();
       const splitMode = effectiveSplitMode();
@@ -2802,7 +2818,7 @@
       const nRows = (maxRows > 0) ? Math.min(rawN, maxRows) : rawN;
       const nFeatures = estimateDerivedFeatureCount();
 
-      const task = APP.setup.taskMode || "classification";
+      const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
 
       const mfEl = $("maxFeatures");
       const mdEl = $("maxDepth");
@@ -5333,7 +5349,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("maxDepth").value = "20";
       $("minNumSamples").value = "10";
       $("replacement").value = "false";
-      $("taskMode").value = "classification";
+      $("taskMode").value = "auto";
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";
       $("splitStrategy").value = "random";
@@ -5363,12 +5379,17 @@ function invertTargetIfNeeded(yPred, artifact){
     }
 
     function resetForNewFile() {
+      const taskModeRaw = $("taskMode").value;
+      const taskMode =
+        (taskModeRaw === "auto" || taskModeRaw === "regression" || taskModeRaw === "classification")
+          ? taskModeRaw
+          : "auto";
       const prefs = {
         testFrac: parseNum($("testFrac").value) || 0.1,
         splitMethod: $("splitMethod").value || "cutoff",
         cutoffDate: $("cutoffDate").value || "",
         splitStrategy: $("splitStrategy").value || "random",
-        taskMode: $("taskMode").value,
+        taskMode,
         targetTransform: $("targetTransform").value,
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
         maxCard: Math.max(1, Math.floor(parseNum($("maxCard").value) || 50)),
@@ -5398,7 +5419,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("splitMethod").value = APP.setup.splitMethod;
       $("cutoffDate").value = APP.setup.cutoffDate;
       $("splitStrategy").value = APP.setup.splitStrategy;
-      $("taskMode").value = prefs.taskMode;
+      $("taskMode").value = taskMode;
       $("targetTransform").value = prefs.targetTransform;
       $("maxRows").value = String(APP.setup.maxRows);
       $("maxCard").value = String(APP.setup.maxCard);
@@ -5635,8 +5656,13 @@ function invertTargetIfNeeded(yPred, artifact){
       }
       recomputeColumnMeta();
       if (APP.raw.targetCol) {
-        APP.setup.taskMode = defaultTaskModeForTarget(APP.raw.rows, APP.raw.targetCol, APP.raw.colMeta);
-        $("taskMode").value = APP.setup.taskMode;
+        const taskModeRaw = $("taskMode")?.value || APP.setup.taskMode || "auto";
+        const taskMode =
+          (taskModeRaw === "auto" || taskModeRaw === "regression" || taskModeRaw === "classification")
+            ? taskModeRaw
+            : "auto";
+        APP.setup.taskMode = taskMode;
+        $("taskMode").value = taskMode;
       }
       applyAutoTrainDefaults();
       refreshSplitDateCol();

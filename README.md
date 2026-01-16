@@ -1,89 +1,87 @@
 # RandomForestGenerator
 
-Single-page, in-browser Random Forest trainer for CSV datasets. Everything runs client-side: upload a CSV, pick a target, train a Random Forest, inspect results/diagnostics, then export a reusable artifact.
+Single-page, in-browser Random Forest trainer for CSV datasets. Everything runs client-side: upload a CSV, pick a target, train, inspect results/diagnostics, then export a portable artifact.
 
 ## Quick Start
 - Open `RFG.html` in a modern browser.
-- If the browser blocks ES module imports when using `file://`, run a tiny local server:
+- If your browser blocks ES module imports when opening via `file://`, run a tiny local server:
 ```sh
-python -m http.server
+python3 -m http.server  # or: python -m http.server
 ```
 - Navigate to `http://localhost:8000/RFG.html`.
-- Load the included sample dataset `titanic.csv` to smoke-test the flow.
+- For a smoke test:
+  - Click “Use a sample CSV” (built-in synthetic dataset with a date column; good for regression/time-split demos), or
+  - Upload `titanic.csv` and set target to `Survived` (classification).
 
-## Features
-- CSV parsing + basic inspection (types, missingness, uniqueness hints).
-- Classification or regression with random or time-based split.
-- Automatic preprocessing for mixed tabular data (continuous/categorical/date).
-- Training progress UI with early stop support.
-- Results: metrics + charts, feature importance, shift diagnostics, and uncertainty.
-- Export: a zip containing a serialized model + preprocessing pipeline + example loader + predictions CSV.
+## Dependencies (CDN / esm.sh)
+This app loads the following in the browser at runtime:
+- PapaParse `5.4.1` (CSV parsing)
+- Chart.js `4.4.1` (charts)
+- JSZip `3.10.1` (zip export)
+- `ml-random-forest` `2.1.0` (model) via `esm.sh` ESM import
+- `ml-cart` `^2.1.1`, `ml-matrix` `^6.8.2`, `random-js` `^2.1.0` via `esm.sh` ESM imports
+
+For offline/airgapped use, self-host/vendor these dependencies and update the script/import URLs in `RFG.html`.
 
 ## Workflow (in the UI)
-- **Upload**: drop in a CSV; preview rows and inferred column metadata.
-- **Target**: choose the target column; optionally set task mode and target transform.
-- **Train**: configure RF settings (trees, maxFeatures, seed, replacement) and split strategy.
-- **Results**: inspect metrics, feature importance, shift detector, and prediction diagnostics.
-- **Export**: download `rf_artifact.zip` for reuse/sharing.
+- **Upload**: drop a CSV anywhere on the page (or browse). Preview the first rows; click a column header to quickly set it as the target.
+- **Target**: confirm task type (regression/classification), split strategy, and typing/exclusions in “Review columns”.
+- **Train**: configure RF settings (trees, `maxFeatures`, depth, min samples, seed) and start training (progress + Stop supported).
+- **Results**: metrics + charts, feature importance, shift detector, pruning helpers, and a predictions explorer (download predictions CSV).
+- **Export**: download `rf_artifact.zip` (model + preprocessing + sample loader + predictions).
 
-## Modeling details
-### Task types
-- **Regression**: target is numeric (optionally with `log1p` transform).
-- **Classification**: target is treated as discrete labels and encoded to integer class IDs.
+## Features (What the app actually does)
+- **Column typing + review**: infers `continuous` / `categorical` / `date`, flags “ID-like” columns, and lets you exclude columns or override inferred types.
+  - `max_card` controls when integer-ish numeric columns are treated as categorical.
+- **Splits**:
+  - **Random** train/test split (seeded).
+  - **Time-based** split (shown only if date columns exist): pick a date column and either supply a cutoff date or fall back to test-fraction splitting.
+  - `maxRows` subsamples for speed; for time-based splits it keeps the last N rows in file order.
+- **Targets**:
+  - Regression supports optional `log1p` training transform (predictions inverted back with `expm1`).
+  - Classification supports advanced multi-class helpers:
+    - Keep top N classes (map the rest → `RARE`).
+    - Derive a new boolean target column from a small “pythonic” expression language (evaluated against the current target cell value only).
+- **Results + diagnostics**:
+  - Regression: RMSE/MAE/R²/RMSLE + predicted-vs-true scatter.
+  - Classification: accuracy/macro-F1 + confusion matrix (shows top classes for high-cardinality targets).
+  - Feature importance (aggregate-by-column or show derived features like date parts and missing indicators).
+  - OOB (out-of-bag) scoring when available (coverage shown).
+  - Shift detector (“is_valid” model) to distinguish train vs test; shows top shift drivers.
+  - Uncertainty via per-tree disagreement (fastai-style), plus error vs uncertainty scatter.
+- **Pruning loop**:
+  - “Prune low-importance → retrain”, “Prune top shift driver → retrain”, and “Undo prune” for quick iteration.
+- **Export**:
+  - `rf_artifact.json`: preprocessing pipeline + serialized `ml-random-forest` model (`toJSON()`).
+  - `use_model.js`: sample code for loading the artifact and running predictions (browser ESM + Node).
+  - `test_predictions.csv`: the test split with predictions + uncertainty columns.
+  - `README.md`: notes and compatibility info for the artifact.
 
-### Derived boolean target (pythonic expression)
-The UI can create a new binary target column from a small “pythonic” expression language evaluated per-row on the current target cell value.
+## Derived boolean target (pythonic expression)
+Creates a new binary target column from a small expression language evaluated per-row on the current target cell value.
 
-- **Value variable**: use the identifier shown in the UI (derived from the selected target column name; if the column name isn’t a valid identifier, it’s sanitized). `o` is also accepted for backward compatibility.
-- **Value type/coercion**: the target cell is converted to a **trimmed string** before evaluation.
-- **Numeric vs string comparison**: for `<`, `<=`, `>`, `>=` the app compares numerically only if **both sides** parse as numbers; otherwise it compares as strings.
-- **Supported syntax**: `and`, `or`, `not`, parentheses, `len(x)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), and membership (`x in ( ... )`, `x not in ( ... )`) where the collection contains only literals (`number`, quoted `string`, `true`, `false`, `none`).
+- **Value variable**: use the identifier shown in the UI (derived from the selected target column name; if the column name isn’t a valid identifier, it’s sanitized). `o` is also accepted.
+- **Value type/coercion**: the target cell is converted to a trimmed string before evaluation.
+- **Numeric vs string comparisons**: for `<`, `<=`, `>`, `>=` the app compares numerically only if both sides parse as numbers; otherwise it compares as strings.
+- **Supported syntax**: `and`, `or`, `not`, parentheses, `len(x)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), and membership (`x in ( ... )`, `x not in ( ... )`) over literal lists (`number`, quoted `string`, `true`, `false`, `none`).
 - **Not supported**: regex, arithmetic, or referencing other columns/row fields.
 
-### Split strategies
-- **Random split**: standard train/test split using a fixed seed for reproducibility.
-- **Time-based split**: uses a chosen date column to split chronologically (useful for leakage/shift checks).
-
-### Preprocessing (fit on train split only)
+## Preprocessing (fit on train split only)
 - **Continuous columns**: median imputation + a missing-indicator feature (`_na`).
-- **Categorical columns**: label encoding; missing/unknown categories map to ID `0`.
+- **Categorical columns**: label encoding; missing/unknown categories map to an “unknown” ID (0).
 - **Date columns**: expanded into date parts (year/month/week/day/etc.) + a missing-indicator (`_na`).
 
-## Diagnostics
-### OOB (out-of-bag) metrics
-When available, the app computes OOB predictions and reports OOB metrics (regression: RMSE/RMSLE; classification: accuracy/macro-F1). OOB vs test gaps can be a quick generalization sanity check.
-
-### Shift detector (“is_valid” model)
-Trains a classifier to distinguish train vs test rows (balanced 50/50). Strong performance suggests distribution shift between the splits; the UI shows feature importance to help identify the drivers.
-
-### Uncertainty (fastai-style tree disagreement)
-Uses per-tree predictions via `ml-random-forest`’s `predictionValues(toPredict)`:
-- **Regression**: per-row standard deviation across tree predictions (`tree_std`). Higher = trees disagree more.
-- **Classification**: agreement-based measures, including `vote_frac_mode` (fraction of trees voting for the modal class), plus `vote_margin` and `vote_entropy`. The primary uncertainty signal shown is `uncertainty = 1 - vote_frac_mode`.
-
-In Results → Predictions explorer:
-- **Worst errors**: top-k rows by absolute error.
-- **Highest uncertainty**: top-k rows by tree disagreement.
-- **Scatter**: `abs(error)` vs `uncertainty` (a useful leakage/shift sniff-test: highly uncertain + highly wrong rows often indicate problematic segments).
-
-## Predictions CSV
-The “Download predictions CSV” button (and the export zip) includes your **test split** with extra columns:
+## Predictions CSV columns
+The “Download predictions CSV” button (and the export zip) includes your test split with extra columns:
 - Always: `y_true`, `y_pred`, `err`, `abs_err`, `uncertainty`
 - Regression: `tree_std`
 - Classification: `vote_frac_mode`, `vote_margin`, `vote_entropy`
 
-## Export artifact
-The exported `rf_artifact.zip` contains:
-- `rf_artifact.json`: preprocessing pipeline + serialized `ml-random-forest` model (`toJSON()`).
-- `use_model.js`: example code for loading the artifact and running predictions.
-- `test_predictions.csv`: the test split with predictions + uncertainty columns.
-- `README.md`: notes and compatibility info for the artifact.
-
 ## Files
 - `RFG.html`: UI, styling, and JavaScript logic (single-file app).
-- `titanic.csv`: sample dataset for demos.
+- `titanic.csv`: sample dataset for classification demos.
 
 ## Notes
-- Dependencies (PapaParse, Chart.js, JSZip, `ml-random-forest`, etc.) are loaded from CDNs at runtime. A network connection is required unless you vendor those scripts locally.
-- All processing happens in your browser. Your data is not uploaded by this app, but CDN-hosted scripts are executed; for sensitive environments, vendor dependencies locally.
-- Very large datasets may hit browser memory/CPU limits; reduce max rows or increase test fraction for faster iteration.
+- Your CSV data stays in the browser tab; the page still executes CDN-hosted scripts unless you self-host.
+- Very large datasets may hit browser memory/CPU limits; reduce `maxRows` for faster iteration.
+- In classification, some test rows can be dropped if their label never appears in the training split (train-only label encoding).

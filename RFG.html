@@ -629,6 +629,7 @@
             <div class="hr"></div>
 
             <div id="setupCallout" class="callout hidden"></div>
+            <div id="splitPreview" class="callout" style="margin-top:10px;"></div>
 
             <details id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
               <summary>Advanced (multi-class target)</summary>
@@ -2071,6 +2072,7 @@
         show(c);
       }
 
+      updateSplitPreview();
       syncAdvancedTargetUI();
     }
 
@@ -2654,6 +2656,8 @@
           statusEl.textContent = "—";
         }
       }
+
+      updateSplitPreview();
     }
 
     function renderTargetSelect() {
@@ -3218,6 +3222,187 @@
       const dateCols = APP.raw.columns.filter(c => APP.raw.colMeta[c]?.include && APP.raw.colMeta[c]?.inferredType === "date");
       const strategy = $("splitStrategy")?.value || "random";
       return (dateCols.length && strategy === "time") ? "time" : "random";
+    }
+
+    function formatPreviewDate(d) {
+      if (!d) return "—";
+      return d.toISOString().slice(0, 10);
+    }
+
+    function summarizeDateRange(rowRefs, idxList, dateCol) {
+      if (!dateCol) return { min: null, max: null };
+      let min = null;
+      let max = null;
+      for (const i of idxList) {
+        const d = parseDate(rowRefs[i]?.[dateCol]);
+        if (!d) continue;
+        const t = d.getTime();
+        if (min === null || t < min) min = t;
+        if (max === null || t > max) max = t;
+      }
+      return {
+        min: (min === null) ? null : new Date(min),
+        max: (max === null) ? null : new Date(max),
+      };
+    }
+
+    function updateSplitPreview() {
+      const el = $("splitPreview");
+      if (!el) return;
+
+      const rows = APP.raw.rows;
+      const targetCol = APP.raw.targetCol;
+      if (!rows.length) {
+        el.className = "callout";
+        el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
+                        <div class="muted2">Upload a dataset to preview the train/test split.</div>`;
+        return;
+      }
+      if (!targetCol) {
+        el.className = "callout";
+        el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
+                        <div class="muted2">Pick a target column to preview the split.</div>`;
+        return;
+      }
+
+      const splitMode = effectiveSplitMode();
+      const previewMax = Math.min(10000, rows.length);
+      const previewSeed = 1337;
+      const previewIdx = sampleRowIndices(rows.length, previewMax, previewSeed, splitMode);
+      const sampledRows = previewIdx.map(i => rows[i]);
+
+      const task = decideTaskFromTarget(sampledRows, targetCol, APP.setup.taskMode, APP.raw.colMeta);
+      const targetTransform = APP.setup.targetTransform;
+
+      const rowRefs = [];
+      const yAll = [];
+      for (const r of sampledRows) {
+        const tv = getRowTargetValue(r, targetCol, task, targetTransform, APP.raw.colMeta);
+        if (!tv) continue;
+        rowRefs.push(r);
+        yAll.push(tv.y);
+      }
+
+      if (!rowRefs.length) {
+        el.className = "callout warn";
+        el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
+                        <div class="muted2">No usable target rows in the preview sample. Check target parsing or filters.</div>`;
+        return;
+      }
+
+      const testFracRaw = parseNum($("testFrac")?.value);
+      let testFrac = Number.isFinite(testFracRaw) ? testFracRaw : APP.setup.testFrac;
+      if (!Number.isFinite(testFrac)) testFrac = 0.1;
+      testFrac = Math.max(0.01, Math.min(0.99, testFrac));
+
+      let split;
+      if (splitMode === "time") {
+        const splitDateCol = APP.setup.splitDateCol;
+        const method = $("splitMethod")?.value || "cutoff";
+        const cutoffStr = $("cutoffDate")?.value || "";
+        let cutoffMs = null;
+        if (method === "cutoff" && cutoffStr) {
+          const d = new Date(`${cutoffStr}T00:00:00`);
+          cutoffMs = Number.isFinite(d.getTime()) ? d.getTime() : null;
+        }
+
+        if (method === "cutoff" && cutoffMs !== null) {
+          split = splitTimeBasedCutoff(rowRefs, splitDateCol, cutoffMs);
+          if (!split.trainIdx.length || !split.testIdx.length) {
+            split = splitTimeBased(rowRefs, splitDateCol, testFrac);
+          }
+        } else {
+          split = splitTimeBased(rowRefs, splitDateCol, testFrac);
+        }
+      } else {
+        split = splitRandom(rowRefs.length, testFrac, previewSeed);
+      }
+
+      const trainCount = split.trainIdx.length;
+      const testCount = split.testIdx.length;
+
+      const lines = [];
+      lines.push(`<div style="font-weight:650;margin-bottom:6px;">Split preview</div>`);
+      lines.push(`<div class="muted2">Train rows ≈ <span class="mono">${trainCount}</span> / Test rows ≈ <span class="mono">${testCount}</span> (sampled ${rowRefs.length})</div>`);
+
+      let hasMissingLabels = false;
+
+      if (splitMode === "time") {
+        const splitDateCol = APP.setup.splitDateCol;
+        const trainRange = summarizeDateRange(rowRefs, split.trainIdx, splitDateCol);
+        const testRange = summarizeDateRange(rowRefs, split.testIdx, splitDateCol);
+        lines.push(`<div class="muted2" style="margin-top:6px;">Train dates: <span class="mono">${formatPreviewDate(trainRange.min)} → ${formatPreviewDate(trainRange.max)}</span></div>`);
+        lines.push(`<div class="muted2">Test dates: <span class="mono">${formatPreviewDate(testRange.min)} → ${formatPreviewDate(testRange.max)}</span></div>`);
+      }
+
+      if (task === "classification") {
+        const topN = APP.setup.multiClass?.topN || null;
+        const derivedActive = isDerivedTargetActive();
+        let normalizeLabel = (label) => normStr(label) || "#na#";
+
+        if (topN?.enabled && !derivedActive) {
+          const keepN = Math.max(1, Math.floor(topN.keep || 1));
+          const rareLabel = normStr(topN.rareLabel) || "RARE";
+          const counts = new Map();
+          for (const i of split.trainIdx) {
+            const s = normStr(yAll[i]) || "#na#";
+            if (s === "#na#") continue;
+            counts.set(s, (counts.get(s) || 0) + 1);
+          }
+          const entries = Array.from(counts.entries())
+            .sort((a, b) => (b[1] - a[1]) || String(a[0]).localeCompare(String(b[0])));
+          const kept = entries.slice(0, Math.min(keepN, entries.length)).map(([k]) => k);
+          const topSet = new Set(kept);
+          let hasRare = false;
+          for (const y of yAll) {
+            const s = normStr(y) || "#na#";
+            if (s === "#na#") continue;
+            if (!topSet.has(s)) { hasRare = true; break; }
+          }
+          normalizeLabel = (label) => {
+            const s = normStr(label) || "#na#";
+            if (s === "#na#") return "#na#";
+            if (topSet.has(s)) return s;
+            return hasRare ? rareLabel : s;
+          };
+        }
+
+        const labelCounts = new Map();
+        const bump = (label, bucket) => {
+          const key = label || "#na#";
+          if (!labelCounts.has(key)) labelCounts.set(key, { train: 0, test: 0, total: 0 });
+          const entry = labelCounts.get(key);
+          entry[bucket] += 1;
+          entry.total += 1;
+        };
+        for (const i of split.trainIdx) bump(normalizeLabel(yAll[i]), "train");
+        for (const i of split.testIdx) bump(normalizeLabel(yAll[i]), "test");
+
+        const sorted = Array.from(labelCounts.entries())
+          .sort((a, b) => (b[1].total - a[1].total) || String(a[0]).localeCompare(String(b[0])));
+        const top = sorted.slice(0, 5);
+        const topText = top.length
+          ? top.map(([label, entry]) => `${escapeHtml(truncate(label, 30))}: ${entry.train}/${entry.test}`).join(", ")
+          : "—";
+
+        for (const entry of labelCounts.values()) {
+          if (!entry.train || !entry.test) {
+            hasMissingLabels = true;
+            break;
+          }
+        }
+
+        lines.push(`<div class="muted2" style="margin-top:6px;">Top classes (train/test): <span class="mono">${topText}</span></div>`);
+      }
+
+      if (hasMissingLabels) {
+        lines.push(`<div class="muted2" style="margin-top:6px;">Some labels may be absent from train/test. Consider stratified split or adjust cutoff.</div>`);
+        el.className = "callout warn";
+      } else {
+        el.className = "callout";
+      }
+
+      el.innerHTML = lines.join("");
     }
 
     // ----------------------------

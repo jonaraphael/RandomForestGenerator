@@ -1796,9 +1796,9 @@
         if (!m) continue;
         const colReasons = [];
 
-        if (m.flags?.idLike) colReasons.push("Auto: ID-like");
+        if (m.flags?.idLike) colReasons.push("ID-like");
         if ((m.missingFrac ?? 0) * 100 > AUTO_EXCLUDE_MISSING_PCT) {
-          colReasons.push(`Auto: >${AUTO_EXCLUDE_MISSING_PCT}% missing`);
+          colReasons.push(`>${AUTO_EXCLUDE_MISSING_PCT}% missing`);
         }
 
         if (colReasons.length) {
@@ -1915,10 +1915,13 @@
           `;
 
           const flags = [];
-          if (m.flags?.idLike) flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          const autoReasons = (!m.include && APP.setup.autoExcludedReasons?.[col]) || [];
+          const hasAutoIdLike = autoReasons.includes("ID-like");
+          if (m.flags?.idLike && !hasAutoIdLike) {
+            flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          }
           if (forced) flags.push(`<span class="pill" title="Manually overridden">Forced</span>`);
           if (locked) flags.push(`<span class="pill warn" title="${escapeHtml(lockedReason)}">Locked</span>`);
-          const autoReasons = (!m.include && APP.setup.autoExcludedReasons?.[col]) || [];
           for (const reason of autoReasons) {
             flags.push(`<span class="pill warn tiny" title="Excluded by default">${escapeHtml(reason)}</span>`);
           }

@@ -180,9 +180,6 @@
     .pill.good{border-color:rgba(50,213,131,0.35);background:rgba(50,213,131,0.08);color:rgba(50,213,131,0.95)}
     .pill.warn{border-color:rgba(253,176,34,0.35);background:rgba(253,176,34,0.08);color:rgba(253,176,34,0.95)}
     .pill.bad {border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
-    .pill.clickable{cursor:pointer;transition:120ms ease}
-    .pill.clickable:hover{transform:translateY(-1px);border-color:rgba(139,92,246,0.65);color:rgba(234,240,255,0.95)}
-
     .hr{height:1px;background:var(--border2);margin:12px 0}
 
     .drop{
@@ -540,11 +537,8 @@
           <div class="field" style="margin-bottom:8px;">
             <label for="targetSearch">Search target column</label>
             <input id="targetSearch" type="text" placeholder="Search columns…" />
-            <div class="muted2">Type to quickly pick a target from large schemas.</div>
-            <div id="targetSearchResults" class="row" style="margin-top:6px;"></div>
+            <div class="muted2">Type to filter the preview columns below.</div>
           </div>
-          <div class="muted2" style="margin-top:6px;">Recommended targets</div>
-          <div id="targetRecs" class="row" style="margin-top:6px;"></div>
           <div class="muted2" style="margin-top:10px;">Preview (first 12 rows)</div>
           <div class="scroll" style="margin-top:8px;max-height:320px;">
             <table id="previewTable"></table>
@@ -1159,6 +1153,7 @@
         parseSeq: 0,
         predPage: 0,
         predFilter: "",
+        previewFilter: "",
         colSort: { key: "name", dir: "asc" },
         maxUnlockedStep: 0,
         shiftAutoExpandedRunSeq: 0,
@@ -1645,47 +1640,6 @@
       };
     }
 
-    function computeTargetCandidates() {
-      const meta = APP.raw.colMeta || {};
-      const totalRows = APP.raw.rows.length || 0;
-      const maxCardValue = Math.max(1, Math.floor(APP.setup.maxCard || 50));
-
-      const scored = APP.raw.columns.map(col => {
-        const m = meta[col];
-        if (!m || m.flags?.idLike) return null;
-
-        const missingFrac = m.missingFrac ?? 0;
-        const nonEmpty = Math.max(0, Math.round(totalRows * (1 - missingFrac)));
-        const uniqueSample = m.uniqueSample ?? 0;
-        const uniqueRatio = nonEmpty ? (uniqueSample / nonEmpty) : 0;
-
-        let score = 0;
-        score += (1 - missingFrac) * 3.2;
-        if (missingFrac >= 0.6) score -= 1.2;
-        if (nonEmpty < 25) score -= 1.0;
-
-        if (uniqueRatio >= 0.98) score -= 2.5;
-        else if (uniqueRatio >= 0.9) score -= 1.5;
-
-        if (m.inferredType === "categorical") {
-          if (uniqueSample >= 2 && uniqueSample <= maxCardValue) score += 2.4;
-          else if (uniqueSample <= maxCardValue * 3) score += 0.6;
-          else score -= 0.6;
-        } else if (m.inferredType === "continuous") {
-          score += 1.8;
-          if (uniqueRatio >= 0.85) score -= 0.8;
-        } else if (m.inferredType === "date") {
-          score += 1.4;
-          if (uniqueRatio >= 0.9) score -= 0.6;
-        }
-
-        return { col, score };
-      }).filter(Boolean);
-
-      scored.sort((a, b) => b.score - a.score);
-      return scored.slice(0, Math.min(5, Math.max(3, scored.length))).map(s => s.col);
-    }
-
     function setTargetFromPicker(col, { advanceStep = true } = {}) {
       if (!col) return;
       APP.raw.targetCol = col;
@@ -1703,60 +1657,20 @@
       }
     }
 
-    function renderTargetRecommendations() {
-      const recs = computeTargetCandidates();
-      const container = $("targetRecs");
-      if (!container) return;
-
-      if (!recs.length) {
-        container.innerHTML = `<span class="muted2">No recommendations yet.</span>`;
-        return;
-      }
-
-      container.innerHTML = recs.map(col => (
-        `<button class="pill clickable" data-target-rec="${escapeHtml(col)}">⭐ target_candidate: ${escapeHtml(col)}</button>`
-      )).join("");
-
-      container.querySelectorAll("[data-target-rec]").forEach(el => {
-        el.addEventListener("click", () => {
-          const col = el.getAttribute("data-target-rec");
-          setTargetFromPicker(col, { advanceStep: true });
-        });
-      });
-    }
-
-    function renderTargetSearchResults(query) {
-      const resultsEl = $("targetSearchResults");
-      if (!resultsEl) return;
-      const q = normStr(query).toLowerCase();
-      if (!q) {
-        resultsEl.innerHTML = "";
-        return;
-      }
-
-      const matches = APP.raw.columns.filter(col => col.toLowerCase().includes(q)).slice(0, 8);
-      if (!matches.length) {
-        resultsEl.innerHTML = `<span class="muted2">No matches.</span>`;
-        return;
-      }
-
-      resultsEl.innerHTML = matches.map(col => (
-        `<button class="pill clickable" data-target-search="${escapeHtml(col)}">${escapeHtml(col)}</button>`
-      )).join("");
-
-      resultsEl.querySelectorAll("[data-target-search]").forEach(el => {
-        el.addEventListener("click", () => {
-          const col = el.getAttribute("data-target-search");
-          setTargetFromPicker(col, { advanceStep: true });
-        });
-      });
-    }
-
     // ----------------------------
     // Rendering: Upload preview
     // ----------------------------
     function renderPreviewTable(rows, columns) {
-      const cols = columns.slice(0, Math.min(columns.length, 12));
+      const filter = normStr(APP.ui.previewFilter).toLowerCase();
+      const cols = filter
+        ? columns.filter(c => c.toLowerCase().includes(filter))
+        : columns.slice();
+      if (!cols.length) {
+        $("previewTable").innerHTML =
+          `<tbody><tr><td class="muted2">No columns match the search.</td></tr></tbody>`;
+        return;
+      }
+
       const head = "<thead><tr>" + cols.map((c, i) => (
         `<th class="previewPick" data-preview-col="${escapeHtml(c)}" data-preview-idx="${i}">${escapeHtml(c)}</th>`
       )).join("") + "</tr></thead>";
@@ -5409,6 +5323,7 @@ function invertTargetIfNeeded(yPred, artifact){
       };
       APP.ui.predPage = 0;
       APP.ui.predFilter = "";
+      APP.ui.previewFilter = "";
       APP.ui.prevRunSummary = null;
       APP.ui.pruneUndoExcluded = null;
       APP.ui.pruneUndoReason = "";
@@ -5428,8 +5343,6 @@ function invertTargetIfNeeded(yPred, artifact){
       $("uploadStatus").innerHTML = "";
       $("previewTable").innerHTML = "";
       if ($("targetSearch")) $("targetSearch").value = "";
-      if ($("targetSearchResults")) $("targetSearchResults").innerHTML = "";
-      if ($("targetRecs")) $("targetRecs").innerHTML = "";
       $("predTable").innerHTML = "";
       $("worstErrTable").innerHTML = "";
       $("highUncTable").innerHTML = "";
@@ -5554,11 +5467,11 @@ function invertTargetIfNeeded(yPred, artifact){
       renderStepper();
 
       recomputeColumnMeta();
-      renderTargetRecommendations();
 
       $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
       $("dsShapePill").textContent = `${rows.length} rows · ${cols.length} cols`;
 
+      APP.ui.previewFilter = "";
       renderPreviewTable(rows, cols);
       bindPreviewTargetPicker();
 
@@ -5566,10 +5479,9 @@ function invertTargetIfNeeded(yPred, artifact){
       show($("uploadSummary"));
       $("uploadStatus").innerHTML =
         `<span class="pill">Pick a target</span>` +
-        `<span class="muted2">Pick the column you want to predict (click a header, use search, or choose a recommendation).</span>`;
+        `<span class="muted2">Pick the column you want to predict (click a header or use search).</span>`;
 
       $("targetSearch").value = "";
-      renderTargetSearchResults("");
 
       $("continueToSetupBtn").disabled = false;
 
@@ -5788,16 +5700,8 @@ function invertTargetIfNeeded(yPred, artifact){
     });
 
     $("targetSearch").addEventListener("input", () => {
-      renderTargetSearchResults($("targetSearch").value);
-    });
-
-    $("targetSearch").addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
-      const query = $("targetSearch").value;
-      const q = normStr(query).toLowerCase();
-      if (!q) return;
-      const match = APP.raw.columns.find(col => col.toLowerCase().includes(q));
-      if (match) setTargetFromPicker(match, { advanceStep: true });
+      APP.ui.previewFilter = $("targetSearch").value;
+      renderPreviewTable(APP.raw.rows, APP.raw.columns);
     });
 
     $("taskMode").addEventListener("change", () => {

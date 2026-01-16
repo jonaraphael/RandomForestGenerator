@@ -570,6 +570,7 @@
               <span class="pill" id="rowsPill">Rows: —</span>
               <span class="pill" id="colsPill">Columns: —</span>
               <span class="pill" id="reviewPill">Needs review: —</span>
+              <span class="pill hidden" id="splitStrategyPill">Split: —</span>
             </div>
 
             <div class="hr"></div>
@@ -2013,7 +2014,6 @@
       }
 
       const dateCols = listDateColumns();
-      const splitMode = effectiveSplitMode();
       const splitMethod = $("splitMethod").value || "cutoff";
       const cutoff = $("cutoffDate").value || "";
       APP.setup.splitMethod = splitMethod;
@@ -2022,13 +2022,21 @@
       const splitSel = $("splitStrategy");
       if (splitSel) {
         const cur = splitSel.value || "random";
-        const options = [`<option value="random">Random</option>`]
-          .concat(hasDates ? [`<option value="time">Time-based</option>`] : []);
+        const options = [`<option value="random">Random</option>`];
+        if (decidedTask === "classification") {
+          options.push(`<option value="stratified">Stratified (classification)</option>`);
+        }
+        if (hasDates) {
+          options.push(`<option value="time">Time-based</option>`);
+        }
         splitSel.innerHTML = options.join("");
-        splitSel.value = (cur === "time" && hasDates) ? "time" : "random";
-        splitSel.disabled = !hasDates;
+        if (cur === "time" && hasDates) splitSel.value = "time";
+        else if (cur === "stratified" && decidedTask === "classification") splitSel.value = "stratified";
+        else splitSel.value = "random";
+        splitSel.disabled = options.length <= 1;
       }
       APP.setup.splitStrategy = $("splitStrategy")?.value || "random";
+      const splitMode = effectiveSplitMode();
 
       $("splitDateCol").innerHTML = dateCols.length
         ? dateCols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")
@@ -2042,6 +2050,17 @@
       $("cutoffDate").disabled = !(splitMode === "time" && splitMethod === "cutoff");
       $("testFrac").disabled = !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
 
+      const splitPill = $("splitStrategyPill");
+      if (splitPill) {
+        if (splitMode === "random" && APP.setup.splitStrategy === "stratified" && decidedTask === "classification") {
+          splitPill.textContent = "Split: stratified";
+          splitPill.classList.remove("hidden");
+        } else {
+          splitPill.textContent = "Split: —";
+          splitPill.classList.add("hidden");
+        }
+      }
+
       const c = $("setupCallout");
       if (!hasTarget) {
         c.className = "callout";
@@ -2053,7 +2072,9 @@
           ? (splitMethod === "cutoff" && cutoff
             ? `Time-based split: train &lt; <span class="mono">${escapeHtml(cutoff)}</span>, valid ≥ cutoff (column <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span>).`
             : `Time-based split using <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span> (fraction fallback).`)
-          : `Random split.`;
+          : (APP.setup.splitStrategy === "stratified" && decidedTask === "classification")
+            ? `Stratified split (classification).`
+            : `Random split.`;
 
         const idLike = APP.raw.columns.filter(cc => APP.raw.colMeta[cc]?.include && APP.raw.colMeta[cc]?.flags?.idLike);
         const idHint = idLike.length
@@ -2701,7 +2722,10 @@
         const details = (method === "cutoff" && cutoff) ? `cutoff ${cutoff}` : `test ${Math.round(APP.setup.testFrac * 100)}%`;
         add("Split", `time (${APP.setup.splitDateCol || "—"}) · ${details}`);
       }
-      else add("Split", "random");
+      else {
+        const splitStrategy = $("splitStrategy")?.value || "random";
+        add("Split", splitStrategy === "stratified" ? "stratified" : "random");
+      }
       if (splitMode === "random") add("Test", `${Math.round(APP.setup.testFrac * 100)}%`);
 
       add("Max rows", String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows);
@@ -2930,6 +2954,7 @@
 
       const task = decideTaskFromTarget(sampledRows, targetCol, APP.setup.taskMode, meta);
       const targetTransform = APP.setup.targetTransform;
+      const splitStrategy = $("splitStrategy")?.value || "random";
 
       // derived feature schema
       const DATE_PARTS = [
@@ -2998,7 +3023,13 @@
           split = splitTimeBased(rowRefs, splitDateCol, testFrac);
         }
       }
-      else split = splitRandom(rowRefs.length, testFrac, seed);
+      else {
+        if (task === "classification" && splitStrategy === "stratified") {
+          split = splitStratified(yAll, testFrac, seed);
+        } else {
+          split = splitRandom(rowRefs.length, testFrac, seed);
+        }
+      }
 
       const trainRows = split.trainIdx.map(i => rowRefs[i]);
       const testRows = split.testIdx.map(i => rowRefs[i]);
@@ -3184,6 +3215,28 @@
       const nTest = Math.max(1, Math.floor(n * testFrac));
       const testIdx = idx.slice(0, nTest);
       const trainIdx = idx.slice(nTest);
+      return { trainIdx, testIdx };
+    }
+
+    function splitStratified(y, testFrac, seed) {
+      const groups = new Map();
+      for (let i = 0; i < y.length; i++) {
+        const label = y[i];
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(i);
+      }
+
+      const rng = mulberry32(seed);
+      const trainIdx = [];
+      const testIdx = [];
+
+      for (const idxs of groups.values()) {
+        shuffleInPlace(idxs, rng);
+        const nTest = Math.max(1, Math.floor(idxs.length * testFrac));
+        testIdx.push(...idxs.slice(0, nTest));
+        trainIdx.push(...idxs.slice(nTest));
+      }
+
       return { trainIdx, testIdx };
     }
 

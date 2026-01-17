@@ -781,6 +781,23 @@
             </div>
           </div>
 
+          <div class="two" style="margin-top:10px;">
+            <div class="field">
+              <label class="row" style="gap:8px;align-items:center;margin:0;">
+                <input id="doShiftDiag" type="checkbox" checked />
+                <span>Run shift diagnostic (is_valid model)</span>
+              </label>
+              <div class="muted2">Trains a background model to flag train/validation drift.</div>
+            </div>
+            <div class="field">
+              <label class="row" style="gap:8px;align-items:center;margin:0;">
+                <input id="doUncertainty" type="checkbox" checked />
+                <span>Run uncertainty diagnostic (tree disagreement)</span>
+              </label>
+              <div class="muted2">Computes tree disagreement for each test prediction.</div>
+            </div>
+          </div>
+
           <div class="muted2" style="margin-top:10px;">
             Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
           </div>
@@ -881,6 +898,10 @@
 
         <div class="hr"></div>
 
+        <div class="muted2 hidden" id="shiftDisabledNote" style="margin-bottom:10px;">
+          Shift diagnostic disabled (enable in Train settings).
+        </div>
+
         <details id="shiftDetails">
           <summary>
             <div class="row space">
@@ -914,6 +935,10 @@
             <input id="predTopK" type="number" min="10" step="10" value="30" style="width:90px;" />
             <button class="btn" id="downloadPredCsvBtn">Download predictions CSV</button>
           </div>
+        </div>
+
+        <div class="muted2 hidden" id="uncertaintyDisabledNote" style="margin-bottom:10px;">
+          Uncertainty diagnostic disabled (enable in Train settings).
         </div>
 
         <details id="predInsightsDetails">
@@ -3738,7 +3763,11 @@
       }
 
       const st = APP.train.uncertaintyStatus || "none";
-      if (st === "running") {
+      if (st === "disabled") {
+        p.className = "pill";
+        p.textContent = "Uncertainty: disabled";
+        p.title = "Enable in Train settings to compute tree disagreement.";
+      } else if (st === "running") {
         p.className = "pill warn";
         p.textContent = `Uncertainty: computing (${metric})`;
         p.title = "Computing how much the trees disagree for each test row.";
@@ -4145,6 +4174,17 @@
     function renderPredInsights() {
       if (!APP.train.model || !APP.train.pipeline) return;
       updateUncertaintyPills();
+      const uncStatus = APP.train.uncertaintyStatus || "none";
+      const uncDisabled = uncStatus === "disabled";
+      const note = $("uncertaintyDisabledNote");
+      const details = $("predInsightsDetails");
+      if (uncDisabled) {
+        if (details) hide(details);
+        if (note) show(note);
+        return;
+      }
+      if (details) show(details);
+      if (note) hide(note);
 
       const targetCol = APP.raw.targetCol;
       const featureCols = APP.raw.columns.filter(c => c !== targetCol);
@@ -4210,7 +4250,6 @@
       };
 
       renderRankTable("worstErrTable", idxWorst, "No rows.");
-      const uncStatus = APP.train.uncertaintyStatus || "none";
       const uncEmpty = uncReady
         ? "No rows."
         : (uncStatus === "error")
@@ -4224,6 +4263,13 @@
     function renderErrVsUncChart() {
       const pl = APP.train.pipeline;
       if (!pl) return;
+
+      if (APP.train.uncertaintyStatus === "disabled") {
+        $("errUncPill").className = "pill";
+        $("errUncPill").textContent = "uncertainty disabled";
+        APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+        return;
+      }
 
       const n = APP.train.testRowRefs.length;
       const uncReady = Array.isArray(APP.train.uncertainty) && APP.train.uncertainty.length === n;
@@ -4717,10 +4763,12 @@
       APP.train.fiDerived = fiDerived;
       APP.train.fiBase = fiBase;
       APP.train.dropped = dropped;
-      APP.train.shift = { status: "running" };
+      const doShiftDiag = $("doShiftDiag").checked;
+      const doUncertainty = $("doUncertainty").checked;
+      APP.train.shift = doShiftDiag ? { status: "running" } : { status: "disabled" };
       APP.train.uncertainty = null;
       APP.train.uncertaintyDetails = null;
-      APP.train.uncertaintyStatus = "running";
+      APP.train.uncertaintyStatus = doUncertainty ? "running" : "disabled";
       APP.train.uncertaintyError = "";
 
       if (pipeline.task === "classification") {
@@ -4802,54 +4850,58 @@
       setTrainingUi(false);
 
       // Background: shift diagnostic
-      (async () => {
-        try {
-          await yieldToBrowserPaint();
-          const shift = await computeShiftDiagnostics({
-            trainRows: trainRowRefs,
-            testRows: testRowRefs,
-            pipeline,
-            featureNames,
-            baseForDerived,
-            seed,
-            signal: diagSignal,
-          });
-          if (runSeq !== APP.ui.training.runSeq) return;
-          APP.train.shift = shift || null;
-          renderShiftSection();
-        } catch {
-          if (runSeq !== APP.ui.training.runSeq) return;
-          APP.train.shift = null;
-          renderShiftSection();
-        }
-      })();
+      if ($("doShiftDiag").checked) {
+        (async () => {
+          try {
+            await yieldToBrowserPaint();
+            const shift = await computeShiftDiagnostics({
+              trainRows: trainRowRefs,
+              testRows: testRowRefs,
+              pipeline,
+              featureNames,
+              baseForDerived,
+              seed,
+              signal: diagSignal,
+            });
+            if (runSeq !== APP.ui.training.runSeq) return;
+            APP.train.shift = shift || null;
+            renderShiftSection();
+          } catch {
+            if (runSeq !== APP.ui.training.runSeq) return;
+            APP.train.shift = null;
+            renderShiftSection();
+          }
+        })();
+      }
 
       // Background: uncertainty via tree disagreement (predictionValues)
-      (async () => {
-        try {
-          await yieldToBrowserPaint();
-          const out = await computeTreeDisagreementUncertainty({
-            model,
-            X: Xtest,
-            pipeline,
-            ensemblePred: (pipeline.task === "classification") ? ypred : null,
-            signal: diagSignal,
-          });
-          if (runSeq !== APP.ui.training.runSeq) return;
-          APP.train.uncertainty = out.uncertainty || null;
-          APP.train.uncertaintyDetails = out.details || null;
-          APP.train.uncertaintyStatus = "ready";
-          APP.train.uncertaintyError = "";
-        } catch (e) {
-          if (runSeq !== APP.ui.training.runSeq) return;
-          APP.train.uncertainty = null;
-          APP.train.uncertaintyDetails = null;
-          APP.train.uncertaintyStatus = "error";
-          APP.train.uncertaintyError = e?.message || String(e);
-        }
-        renderPredInsights();
-        renderPredTable();
-      })();
+      if ($("doUncertainty").checked) {
+        (async () => {
+          try {
+            await yieldToBrowserPaint();
+            const out = await computeTreeDisagreementUncertainty({
+              model,
+              X: Xtest,
+              pipeline,
+              ensemblePred: (pipeline.task === "classification") ? ypred : null,
+              signal: diagSignal,
+            });
+            if (runSeq !== APP.ui.training.runSeq) return;
+            APP.train.uncertainty = out.uncertainty || null;
+            APP.train.uncertaintyDetails = out.details || null;
+            APP.train.uncertaintyStatus = "ready";
+            APP.train.uncertaintyError = "";
+          } catch (e) {
+            if (runSeq !== APP.ui.training.runSeq) return;
+            APP.train.uncertainty = null;
+            APP.train.uncertaintyDetails = null;
+            APP.train.uncertaintyStatus = "error";
+            APP.train.uncertaintyError = e?.message || String(e);
+          }
+          renderPredInsights();
+          renderPredTable();
+        })();
+      }
     }
 
     // ----------------------------
@@ -4857,6 +4909,16 @@
     // ----------------------------
     function renderShiftSection() {
       const shift = APP.train.shift;
+      const shiftDisabled = shift?.status === "disabled";
+      const shiftNote = $("shiftDisabledNote");
+      const shiftDetails = $("shiftDetails");
+      if (shiftDisabled) {
+        if (shiftDetails) hide(shiftDetails);
+        if (shiftNote) show(shiftNote);
+        return;
+      }
+      if (shiftDetails) show(shiftDetails);
+      if (shiftNote) hide(shiftNote);
       const isRunning = Boolean(shift && shift.status === "running");
       const shiftScore = shift?.oobBalAcc ?? shift?.oobAcc ?? null;
 
@@ -5338,6 +5400,8 @@ function invertTargetIfNeeded(yPred, artifact){
       $("shiftPill").className = "pill";
       $("shiftSummary").textContent = "—";
       if ($("shiftDetails")) $("shiftDetails").open = false;
+      hide($("shiftDisabledNote"));
+      hide($("uncertaintyDisabledNote"));
 
       $("testFrac").value = "0.1";
       $("cutoffDate").value = "";
@@ -5349,6 +5413,8 @@ function invertTargetIfNeeded(yPred, artifact){
       $("maxDepth").value = "20";
       $("minNumSamples").value = "10";
       $("replacement").value = "false";
+      $("doShiftDiag").checked = true;
+      $("doUncertainty").checked = true;
       $("taskMode").value = "auto";
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";

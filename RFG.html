@@ -2683,6 +2683,13 @@
       const el = $("stateChips");
       if (!el) return;
 
+      if (!APP.raw.rows.length) {
+        el.innerHTML = "";
+        el.classList.add("hidden");
+        return;
+      }
+      el.classList.remove("hidden");
+
       const chips = [];
       const add = (label, value) => {
         if (value === null || value === undefined || value === "") return;
@@ -2699,42 +2706,44 @@
         add("Task", task);
       }
 
-      const splitMode = effectiveSplitMode();
-      if (splitMode === "time") {
-        const method = $("splitMethod")?.value || "cutoff";
-        const cutoff = $("cutoffDate")?.value || "";
-        const details = (method === "cutoff" && cutoff) ? `cutoff ${cutoff}` : `test ${Math.round(APP.setup.testFrac * 100)}%`;
-        add("Split", `time (${APP.setup.splitDateCol || "—"}) · ${details}`);
+      if (APP.ui.maxUnlockedStep >= 2) {
+        const splitMode = effectiveSplitMode();
+        if (splitMode === "time") {
+          const method = $("splitMethod")?.value || "cutoff";
+          const cutoff = $("cutoffDate")?.value || "";
+          const details = (method === "cutoff" && cutoff) ? `cutoff ${cutoff}` : `test ${Math.round(APP.setup.testFrac * 100)}%`;
+          add("Split", `time (${APP.setup.splitDateCol || "—"}) · ${details}`);
+        }
+        else {
+          const splitStrategy = $("splitStrategy")?.value || "random";
+          add("Split", splitStrategy === "stratified" ? "stratified" : "random");
+        }
+        if (splitMode === "random") add("Test", `${Math.round(APP.setup.testFrac * 100)}%`);
+
+        add("Max rows", String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows);
+
+        const { counts, maxCard } = computeTypeCounts();
+        add("Typing", `cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date}`);
+        add("max_card", maxCard);
+
+        const topNState = APP.setup.multiClass?.topN || null;
+        if (topNState?.enabled && !isDerivedTargetActive()) {
+          add("TopN", `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`);
+        }
+
+        const dt = APP.setup.multiClass?.derivedTarget || null;
+        if (dt?.enabled && dt.sourceCol && dt.derivedCol && APP.raw.targetCol === dt.derivedCol) {
+          add("Derived", `${dt.sourceCol} → ${dt.derivedCol}`);
+        }
+
+        const excludedCount = APP.setup.excluded?.size || 0;
+        const forcedCount =
+          (APP.setup.forcedTypes?.date?.size || 0) +
+          (APP.setup.forcedTypes?.categorical?.size || 0) +
+          (APP.setup.forcedTypes?.continuous?.size || 0);
+        if (excludedCount) add("Excluded", excludedCount);
+        if (forcedCount) add("Forced", forcedCount);
       }
-      else {
-        const splitStrategy = $("splitStrategy")?.value || "random";
-        add("Split", splitStrategy === "stratified" ? "stratified" : "random");
-      }
-      if (splitMode === "random") add("Test", `${Math.round(APP.setup.testFrac * 100)}%`);
-
-      add("Max rows", String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows);
-
-      const { counts, maxCard } = computeTypeCounts();
-      add("Typing", `cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date}`);
-      add("max_card", maxCard);
-
-      const topNState = APP.setup.multiClass?.topN || null;
-      if (topNState?.enabled && !isDerivedTargetActive()) {
-        add("TopN", `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`);
-      }
-
-      const dt = APP.setup.multiClass?.derivedTarget || null;
-      if (dt?.enabled && dt.sourceCol && dt.derivedCol && APP.raw.targetCol === dt.derivedCol) {
-        add("Derived", `${dt.sourceCol} → ${dt.derivedCol}`);
-      }
-
-      const excludedCount = APP.setup.excluded?.size || 0;
-      const forcedCount =
-        (APP.setup.forcedTypes?.date?.size || 0) +
-        (APP.setup.forcedTypes?.categorical?.size || 0) +
-        (APP.setup.forcedTypes?.continuous?.size || 0);
-      if (excludedCount) add("Excluded", excludedCount);
-      if (forcedCount) add("Forced", forcedCount);
 
       el.innerHTML = chips.length ? chips.join(" ") : `<span class="muted2">Pick a target to preview settings.</span>`;
     }

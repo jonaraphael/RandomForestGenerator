@@ -24,19 +24,20 @@ This app loads the following in the browser at runtime:
 For offline/airgapped use, self-host/vendor these dependencies and update the script/import URLs in `RFG.html`.
 
 ## Workflow (in the UI)
-- **Upload**: drop a CSV anywhere on the page (or browse). Preview the first rows; click a column header to quickly set it as the target.
-- **Target**: confirm task type (regression/classification), split strategy, and typing/exclusions in “Review columns”.
-- **Train**: configure RF settings (trees, `maxFeatures`, depth, min samples, seed) and start training (progress + Stop supported).
-- **Results**: metrics + charts, feature importance, shift detector, pruning helpers, and a predictions explorer (download predictions CSV).
-- **Export**: download `rf_artifact.zip` (model + preprocessing + sample loader + predictions).
+- **Upload**: drop a CSV anywhere on the page (or browse). Preview the first rows; click a column name to set it as the target.
+- **Settings**: review column typing/exclusions, choose split strategy, and pick a training preset (advanced hyperparameters are behind “Show Advanced”).
+- **Results**: training runs locally with progress + Stop / Retrain; view metrics, feature importance, shift diagnostics, pruning tools, and a predictions explorer (download predictions CSV).
+- **Export**: download `rf_artifact.zip` (model + preprocessing + sample code + test predictions).
 
 ## Features (What the app actually does)
-- **Column typing + review**: infers `continuous` / `categorical` / `date`, flags “ID-like” columns, and lets you exclude columns or override inferred types.
-  - `max_card` controls when integer-ish numeric columns are treated as categorical.
+- **Column typing + review**: infers `continuous` / `categorical` / `date`, flags “ID-like” / “High-cardinality”, and lets you exclude columns or override inferred types.
+  - `maxCard` controls when integer-ish numeric columns are treated as categorical (by unique-count threshold).
+  - Columns are auto-excluded by default if they look ID-like, are very high-cardinality, or are >50% missing (you can re-include them).
 - **Splits**:
   - **Random** train/test split (seeded).
-  - **Time-based** split (shown only if date columns exist): pick a date column and either supply a cutoff date or fall back to test-fraction splitting.
-  - `maxRows` subsamples for speed; for time-based splits it keeps the last N rows in file order.
+  - **Stratified** split for classification (keeps per-class proportions; ensures at least 1 test row per class when possible).
+  - **Time-based** split (only shown if date columns exist): pick a date column and split by cutoff date or by a “latest rows” fraction (a cutoff picker UI is provided).
+  - `maxRows` subsamples for speed (randomly for random/stratified; last N rows for time split).
 - **Targets**:
   - Regression supports optional `log1p` training transform (predictions inverted back with `expm1`).
   - Classification supports advanced multi-class helpers:
@@ -53,7 +54,8 @@ For offline/airgapped use, self-host/vendor these dependencies and update the sc
   - “Prune low-importance → retrain”, “Prune top shift driver → retrain”, and “Undo prune” for quick iteration.
 - **Export**:
   - `rf_artifact.json`: preprocessing pipeline + serialized `ml-random-forest` model (`toJSON()`).
-  - `use_model.js`: sample code for loading the artifact and running predictions (browser ESM + Node).
+  - `use_model.js`: sample code for loading the artifact and running predictions (browser ESM via `esm.sh`; Node requires swapping the import to an npm install).
+  - `use_model.py`: metadata / inspection starter (there is no built-in Python loader for the JS model JSON).
   - `test_predictions.csv`: the test split with predictions + uncertainty columns.
   - `README.md`: notes and compatibility info for the artifact.
 
@@ -65,6 +67,7 @@ Creates a new binary target column from a small expression language evaluated pe
 - **Numeric vs string comparisons**: for `<`, `<=`, `>`, `>=` the app compares numerically only if both sides parse as numbers; otherwise it compares as strings.
 - **Supported syntax**: `and`, `or`, `not`, parentheses, `len(x)`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), and membership (`x in ( ... )`, `x not in ( ... )`) over literal lists (`number`, quoted `string`, `true`, `false`, `none`).
 - **Not supported**: regex, arithmetic, or referencing other columns/row fields.
+- **Leakage guard**: when a derived target is active, the original target column is automatically excluded/locked to prevent leakage.
 
 ## Preprocessing (fit on train split only)
 - **Continuous columns**: median imputation + a missing-indicator feature (`_na`).
@@ -76,15 +79,18 @@ The “Download predictions CSV” button (and the export zip) includes your tes
 - Always: `y_true`, `y_pred`, `err`, `abs_err`, `uncertainty`
 - Regression: `tree_std`
 - Classification: `vote_frac_mode`, `vote_margin`, `vote_entropy`
+It also appends all original CSV columns (excluding the target column). For classification, `y_true`/`y_pred` are labels; `err` is `0/1`.
 
 ## Files
 - `RFG.html`: UI, styling, and JavaScript logic (single-file app).
 - `titanic.csv`: sample dataset for classification demos.
+- `FASTAI GUIDELINES fastbook 09 Tabular.ipynb`: reference notes (not used by the app).
 
 ## Notes
 - Your CSV data stays in the browser tab; the page still executes CDN-hosted scripts unless you self-host.
 - Very large datasets may hit browser memory/CPU limits; reduce `maxRows` for faster iteration.
 - In classification, some test rows can be dropped if their label never appears in the training split (train-only label encoding).
+- Time-based splits evaluate on “future” rows; tree ensembles are poor at extrapolating trends, so treat scores as a baseline (the UI shows an extrapolation warning for time splits).
 
 ## License
 MIT — see `LICENSE`.

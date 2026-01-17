@@ -58,24 +58,69 @@
       max-width:1200px;margin:0 auto;
     }
 
-    h1{margin:0;font-size:18px;letter-spacing:0.2px}
+    h1{margin:0;font-size:24px;font-weight:750;letter-spacing:0.2px;line-height:1.15}
+    .heroKicker{
+      font-size:12px;
+      letter-spacing:0.18em;
+      text-transform:uppercase;
+      color:rgba(234,240,255,0.60);
+      margin-bottom:8px;
+    }
     .sub{
-      margin-top:6px;color:var(--muted);font-size:13px;line-height:1.35;
-      max-width:760px;
+      margin-top:10px;
+      color:rgba(234,240,255,0.78);
+      font-size:14px;
+      line-height:1.4;
+      max-width:840px;
     }
-
-    .badges{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .badge{
-      display:inline-flex;align-items:center;gap:8px;
-      padding:7px 10px;border-radius:999px;
-      border:1px solid var(--border);
-      background:rgba(255,255,255,0.03);
-      color:var(--muted);font-size:12px;white-space:nowrap;
+    .heroPoints{
+      margin-top:10px;
+      color:rgba(234,240,255,0.62);
+      font-size:12px;
+      line-height:1.35;
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
     }
+    .heroPoints span{
+      padding:6px 10px;
+      border:1px solid rgba(234,240,255,0.10);
+      border-radius:999px;
+      background:rgba(255,255,255,0.02);
+    }
+    .heroNote{
+      margin-top:10px;
+      color:rgba(234,240,255,0.55);
+      font-size:12px;
+      line-height:1.35;
+      max-width:840px;
+    }
+    .textLinkBtn{
+      border:0;
+      background:transparent;
+      padding:0;
+      color:rgba(139,92,246,0.95);
+      font-size:12px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .textLinkBtn:hover{ text-decoration: underline; }
+    .textLinkBtn:focus{ outline: 2px solid rgba(139,92,246,0.55); outline-offset: 3px; border-radius: 6px; }
 
+    .stepbar{
+      max-width:1200px;
+      margin:14px auto 0;
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
     .stepper{
-      max-width:1200px;margin:14px auto 0;
-      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      flex:1;
+      min-width:0;
     }
     .step{
       display:flex;align-items:center;gap:10px;
@@ -287,6 +332,7 @@
 
     .two{display:grid;grid-template-columns: 1fr 1fr;gap:12px;align-items:start}
     .three{display:grid;grid-template-columns: 1.2fr 0.8fr;gap:12px;align-items:start}
+    .span2{grid-column:1 / -1}
     @media(max-width:980px){.two,.three{grid-template-columns:1fr}}
 
     .field{display:grid;gap:6px}
@@ -301,8 +347,10 @@
       outline:none;
     }
 
-    .kpiGrid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px}
+    .kpiGrid{display:grid;grid-template-columns:1fr;gap:12px}
     @media(max-width:980px){.kpiGrid{grid-template-columns:1fr}}
+    .resultsTopGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+    @media(max-width:980px){.resultsTopGrid{grid-template-columns:1fr}}
     .kpi{
       border:1px solid var(--border2);
       background:rgba(255,255,255,0.03);
@@ -311,6 +359,20 @@
     .kpi .big{font-size:22px;font-weight:650;letter-spacing:0.2px;margin-top:6px}
     .kpi .lbl{color:var(--muted);font-size:12px}
     .kpi .small{color:var(--muted);font-size:12px;margin-top:8px}
+
+    .groupBox{
+      border:1px solid var(--border2);
+      background:rgba(255,255,255,0.02);
+      border-radius:14px;
+      padding:12px;
+    }
+    .groupTitle{
+      font-weight:650;
+      letter-spacing:0.2px;
+      margin-bottom:10px;
+      color:rgba(234,240,255,0.92);
+      font-size:13px;
+    }
 
     .callout{
       border:1px solid rgba(234,240,255,0.14);
@@ -394,6 +456,27 @@
       color:rgba(234,240,255,0.86);
     }
 
+    .segmented{
+      display:inline-flex;
+      border:1px solid var(--border2);
+      border-radius:999px;
+      overflow:hidden;
+      background:rgba(255,255,255,0.03);
+    }
+    .segmented button{
+      border:0;
+      background:transparent;
+      color:var(--muted2);
+      padding:6px 10px;
+      font-size:12px;
+      line-height:1;
+      cursor:pointer;
+    }
+    .segmented button.active{
+      background:rgba(139,92,246,0.18);
+      color:rgba(234,240,255,0.92);
+    }
+
     .hidden{display:none!important}
 
     /* Chart sizing: prevent runaway growth */
@@ -402,6 +485,20 @@
       position: relative;
       width: 100%;
       height: 320px;
+    }
+    .chartPlaceholder{
+      position:absolute;
+      inset:0;
+      display:grid;
+      place-items:center;
+      padding:12px;
+      border:1px dashed rgba(234,240,255,0.14);
+      border-radius:14px;
+      background:rgba(255,255,255,0.02);
+      color:var(--muted2);
+      font-size:12px;
+      pointer-events:none;
+      text-align:center;
     }
     .chartBox canvas {
       display: block;
@@ -490,26 +587,32 @@
       <div class="hint">You can drop a file anywhere on this page.</div>
     </div>
   </div>
-  <div class="topbar">
-    <div class="topline">
-      <div>
-        <h1>Train a Random Forest on a CSV — locally</h1>
-        <div class="sub">
-          Drop a CSV, pick the column you want to predict, and train a strong baseline model. Your CSV data stays in this browser tab — the page fetches JS libraries from CDNs unless you self-host.
-        </div>
-      </div>
-      <div class="badges">
-        <div class="badge" title="Your CSV data stays in this browser tab. This page loads JS libraries from CDNs unless you self-host.">🔒 Data stays local</div>
-        <div class="badge" title="Dependencies are fetched from CDNs (PapaParse, Chart.js, JSZip, ml-random-forest via esm.sh). Self-host for offline/airgapped use.">🌐 CDN deps</div>
-        <div class="badge" id="hwBadge">🧠 CPU threads: ?</div>
-        <button class="btn danger" id="resetAllBtn">Reset</button>
-      </div>
-    </div>
+	  <div class="topbar">
+	    <div class="topline">
+	      <div>
+	        <div class="heroKicker">CSV to ML Model in a Single Click</div>
+	        <h1>Random Forest Generator</h1>
+	        <div class="sub">
+	          No uploads, no sign-up, results in realtime, export your model and go.
+	        </div>
+	        <div class="heroNote">
+	          Everything runs in this browser tab--no data leaves your computer.
+	        </div>
+	      </div>
+	    </div>
 
-    <div class="stepper" id="stepper"></div>
-  </div>
+		    <div class="stepbar">
+		      <div class="stepper" id="stepper"></div>
+		      <div class="row" style="gap:10px;flex-wrap:nowrap;">
+		        <button class="btn" id="globalBackBtn" type="button">Back</button>
+		        <button class="btn danger hidden" id="globalStopBtn" type="button" disabled>Stop</button>
+		        <button class="btn primary" id="globalContinueBtn" type="button" disabled>Continue</button>
+		      </div>
+		    </div>
+		  </div>
 
   <div class="wrap">
+    <div class="row" id="stateChips" style="margin:12px 0 16px;"></div>
     <div class="grid">
 
       <!-- STEP 1: UPLOAD -->
@@ -518,332 +621,270 @@
 
 	        <div class="drop" id="dropZone">
 	          <div>
-	            <div style="font-weight:650;margin-bottom:6px;">Drop a CSV to start</div>
-	            <div class="muted">or <button class="btn" id="browseBtn">Browse…</button> <button class="btn ghost" id="sampleBtn">Use a sample CSV</button></div>
-	            <input id="fileInput" type="file" accept=".csv,text/csv" />
+	            <div style="font-weight:650;margin-bottom:6px;">Drop a CSV here to start</div>
 	            <div class="muted2" style="margin-top:10px;">First row must be column headers.</div>
+	            <div class="muted2" style="margin-top:10px;"></div>
+	            <div class="muted"><button class="btn" id="browseBtn">Browse…</button> <button class="btn ghost" id="sampleBtn">Use a premade example</button></div>
+	            <input id="fileInput" type="file" accept=".csv,text/csv" />
 	          </div>
 	        </div>
 
-        <div id="uploadStatus" class="row" style="margin-top:12px;"></div>
-
-        <div id="uploadSummary" class="hidden" style="margin-top:12px;">
-          <div class="row space">
-            <div class="row">
-              <span class="pill good" id="dsLoadedPill">Loaded</span>
-              <span class="pill" id="dsShapePill">—</span>
-              <span class="pill" id="dsPreviewPill">Preview</span>
-            </div>
-            <button class="btn primary" id="continueToSetupBtn" disabled>Continue</button>
-          </div>
-
-          <div class="hr"></div>
-          <div class="field" style="margin-bottom:8px;">
-            <label for="targetSearch">Search target column</label>
-            <input id="targetSearch" type="text" placeholder="Search columns…" />
-            <div class="muted2">Type to filter the preview columns below.</div>
-          </div>
-          <div class="muted2" style="margin-top:10px;">Preview (first 12 rows)</div>
-          <div class="scroll" style="margin-top:8px;max-height:320px;">
-            <table id="previewTable"></table>
-          </div>
-        </div>
+	        <div id="uploadSummary" class="hidden" style="margin-top:12px;">
+	          <div class="hr"></div>
+	          <div class="row space" style="margin-top:10px;align-items:center;">
+	            <div class="muted">Preview (first 12 rows)</div>
+	            <input id="targetSearch" type="text" placeholder="Filter columns…" aria-label="Filter preview columns" style="width:260px;max-width:45vw;" />
+	          </div>
+	          <div class="muted2">Click a column to set the target.</div>
+	          <div class="scroll" style="margin-top:8px;max-height:320px;">
+	            <table id="previewTable"></table>
+	          </div>
+	        </div>
       </section>
 
-      <!-- STEP 2: SETUP -->
-      <section class="card hidden" id="panelSetup">
-        <h2>Choose target & confirm setup</h2>
+	      <!-- STEP 2: SETUP -->
+	      <section class="card hidden" id="panelSetup">
+	        <div class="row" style="align-items:baseline;gap:10px;">
+	          <h2 style="margin:0;">Settings</h2>
+	          <button class="textLinkBtn" id="toggleAdvancedSettingsBtn" type="button">[Show Advanced]</button>
+	        </div>
 
-        <div class="three">
-          <div>
-            <div class="two">
-              <div class="field">
-                <label for="targetSelect">What do you want to predict?</label>
-                <select id="targetSelect"></select>
-              </div>
-              <div class="field">
-                <label for="taskMode">Predict mode</label>
-                <select id="taskMode">
-                  <option value="auto" selected>Auto (recommended)</option>
-                  <option value="regression">Regression</option>
-                  <option value="classification">Classification</option>
-                </select>
-                <div class="row" style="margin-top:6px;">
-                  <span class="pill hidden" id="taskModeDetectedPill" title="Based on target column inferred type + sample uniqueness.">—</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="row" style="margin-top:10px;">
-              <span class="pill" id="rowsPill">Rows: —</span>
-              <span class="pill" id="colsPill">Columns: —</span>
-              <span class="pill" id="reviewPill">Needs review: —</span>
-            </div>
-
-            <div class="hr"></div>
-
-            <div class="two">
-              <div class="field">
-                <label for="maxRows">Max rows (0 = all)</label>
-                <input id="maxRows" type="number" min="0" step="1000" value="50000" />
-                <div class="muted2">Useful for quick iteration on huge CSVs. For time splits, we take the last N rows (file order).</div>
-              </div>
-
-              <div class="field">
-                <label for="testFrac">Test fraction</label>
-                <input id="testFrac" type="number" value="0.1" />
-                <div class="muted2">What fraction [0-1] of the data to use for testing.</div>
-              </div>
-            </div>
-
-            <div class="two" style="margin-top:10px;">
-              <div class="field">
-                <label>Split strategy</label>
-                <select id="splitStrategy">
-                  <option value="random" selected>Random</option>
-                </select>
-              </div>
-
-              <div class="field">
-                <label for="targetTransform">Target transform</label>
-                <select id="targetTransform">
-                  <option value="none" selected>None</option>
-                  <option value="log1p">log1p (for non-negative targets)</option>
-                </select>
-                <div class="muted2">If enabled, we train on transformed targets and invert predictions back.</div>
-              </div>
-            </div>
-
-            <div id="timeSplitSettings" class="two hidden" style="margin-top:10px;">
-              <div class="field">
-                <label for="splitDateCol">Time column</label>
-                <select id="splitDateCol"></select>
-              </div>
-
-              <div class="field">
-                <label for="splitMethod">Validation rule</label>
-                <select id="splitMethod">
-                  <option value="cutoff" selected>Cutoff date (recommended)</option>
-                  <option value="fraction">Test fraction</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="field hidden" id="cutoffField" style="margin-top:10px;">
-              <label for="cutoffDate">Cutoff date (train &lt; cutoff, valid ≥ cutoff)</label>
-              <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
-            </div>
-
-            <div class="hr"></div>
-
-            <div id="setupCallout" class="callout hidden"></div>
-
-            <details id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
-              <summary>Advanced (multi-class target)</summary>
-              <div class="hr"></div>
-
-              <div class="muted2" style="margin-bottom:10px;">
-                These options are off by default and only apply if enabled.
-              </div>
-
-              <div class="callout" id="multiClassSummaryCallout"></div>
-
-              <div class="hr"></div>
-
-              <div class="callout">
-                <div style="font-weight:650;margin-bottom:6px;">1) Keep top N classes (map the rest → <span class="mono">RARE</span>)</div>
-                <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">
-                  <label class="row" style="gap:8px;align-items:center;margin:0;">
-                    <input type="checkbox" id="topNEnable" />
-                    <span>Enable</span>
-                  </label>
-                  <div class="row" style="gap:8px;align-items:center;">
-                    <span class="muted2">Keep</span>
-                    <input id="topNKeep" type="number" min="1" step="1" value="5" style="width:110px;" />
-                    <span class="muted2">most frequent classes</span>
-                  </div>
-                </div>
-                <div class="muted2" id="topNSummary" style="margin-top:8px;">—</div>
-              </div>
-
-              <div class="hr"></div>
-
-	              <div class="callout">
-	                <div style="font-weight:650;margin-bottom:6px;">2) Derived boolean target (binary) from a pythonic expression</div>
-	                <div class="muted2">
-	                  Use <span class="mono" id="derivedTargetValueIdent">target</span> for the target-cell value. Examples:
-	                  <span class="mono" id="derivedTargetExprExample1">target in (6,7,8)</span>,
-	                  <span class="mono" id="derivedTargetExprExample2">len(target) &gt; 5</span>.
+	        <div class="three">
+	          <div>
+	            <div class="groupBox">
+	              <div class="groupTitle">Target</div>
+	              <div class="two">
+	                <div class="field span2" id="targetSelectField">
+	                  <label for="targetSelect">What do you want to predict?</label>
+	                  <select id="targetSelect"></select>
 	                </div>
-	                <div class="muted2" style="margin-top:6px;">
-	                  Assumptions: the value is converted to a trimmed string; comparisons (<span class="mono">&lt;</span>, <span class="mono">&gt;=</span>, etc.) use numeric compare only if both sides parse as numbers, otherwise string compare; <span class="mono">in (...) </span> / <span class="mono">not in (...) </span> accept only literal lists (numbers/strings/true/false/none). No regex, arithmetic, or access to other columns.
+	                <div class="field hidden" id="taskModeField">
+	                  <label for="taskMode">Predict mode</label>
+	                  <select id="taskMode">
+	                    <option value="regression" selected>Regression</option>
+	                    <option value="classification">Classification</option>
+	                  </select>
 	                </div>
+	              </div>
 
-                <div class="two" style="margin-top:10px;">
-                  <div class="field" style="margin:0;">
-                    <label for="derivedTargetColName">New column name</label>
-                    <input id="derivedTargetColName" type="text" placeholder="e.g. is_positive" />
-                  </div>
-                  <div class="field" style="margin:0;">
-                    <label for="derivedTargetExpr">Expression</label>
-	                    <input id="derivedTargetExpr" type="text" placeholder='e.g. target in (6,7,8) or len(target) > 5' />
+	              <div class="field hidden" id="targetTransformField" style="margin-top:10px;">
+	                <label for="targetTransform">Target transform</label>
+	                <select id="targetTransform">
+	                  <option value="none" selected>None</option>
+	                  <option value="log1p">log1p (for non-negative targets)</option>
+	                </select>
+	                <div class="muted2">If enabled, we train on transformed targets and invert predictions back.</div>
+	              </div>
+
+	              <div id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
+	                <div class="hr"></div>
+	                <div class="muted" style="margin-bottom:8px;">Advanced (classification)</div>
+
+	                <div class="callout" id="multiClassSummaryCallout"></div>
+
+	                <div class="hr"></div>
+
+	                <div class="callout">
+	                  <div style="font-weight:650;margin-bottom:6px;">Keep top N classes (map the rest → <span class="mono">RARE</span>)</div>
+	                  <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">
+	                    <label class="row" style="gap:8px;align-items:center;margin:0;">
+	                      <input type="checkbox" id="topNEnable" />
+	                      <span>Enable</span>
+	                    </label>
+	                    <div class="row" style="gap:8px;align-items:center;">
+	                      <span class="muted2">Keep</span>
+	                      <input id="topNKeep" type="number" min="1" step="1" value="5" style="width:110px;" />
+	                      <span class="muted2">most frequent classes</span>
+	                    </div>
 	                  </div>
+	                  <div class="muted2" id="topNSummary" style="margin-top:8px;">—</div>
 	                </div>
 
-                <div class="row" style="margin-top:10px;">
-                  <button class="btn primary" id="applyDerivedTargetBtn">Create column + use as target</button>
-                  <button class="btn ghost" id="undoDerivedTargetBtn">Undo</button>
-                </div>
+	                <div class="hr"></div>
 
-                <div class="muted2" id="derivedTargetStatus" style="margin-top:8px;">—</div>
-              </div>
-            </details>
+	                <div class="callout">
+	                  <div style="font-weight:650;margin-bottom:6px;">Derived boolean target (binary) from a pythonic expression</div>
+	                  <div class="muted2">
+	                    Use <span class="mono" id="derivedTargetValueIdent">target</span> for the target-cell value. Examples:
+	                    <span class="mono" id="derivedTargetExprExample1">target in (6,7,8)</span>,
+	                    <span class="mono" id="derivedTargetExprExample2">len(target) &gt; 5</span>.
+	                  </div>
+	                  <div class="muted2" style="margin-top:6px;">
+	                    Assumptions: the value is converted to a trimmed string; comparisons (<span class="mono">&lt;</span>, <span class="mono">&gt;=</span>, etc.) use numeric compare only if both sides parse as numbers, otherwise string compare; <span class="mono">in (...) </span> / <span class="mono">not in (...) </span> accept only literal lists (numbers/strings/true/false/none). No regex, arithmetic, or access to other columns.
+	                  </div>
 
-            <div class="row space" style="margin-top:12px;">
-              <button class="btn" id="backToUploadBtn">Back</button>
-              <button class="btn primary" id="continueToTrainBtn" disabled>Continue</button>
-            </div>
-          </div>
+	                  <div class="two" style="margin-top:10px;">
+	                    <div class="field" style="margin:0;">
+	                      <label for="derivedTargetColName">New column name</label>
+	                      <input id="derivedTargetColName" type="text" placeholder="e.g. is_positive" />
+	                    </div>
+	                    <div class="field" style="margin:0;">
+	                      <label for="derivedTargetExpr">Expression</label>
+	                      <input id="derivedTargetExpr" type="text" placeholder='e.g. target in (6,7,8) or len(target) > 5' />
+	                    </div>
+	                  </div>
 
-          <div>
-            <details id="reviewDetails" open>
-              <summary>Review columns</summary>
-              <div class="hr"></div>
+	                  <div class="row" style="margin-top:10px;">
+	                    <button class="btn primary" id="applyDerivedTargetBtn">Create column + use as target</button>
+	                    <button class="btn ghost" id="undoDerivedTargetBtn">Undo</button>
+	                  </div>
 
-              <div style="margin-bottom:10px;">
-                <div class="field">
-                  <label for="maxCard">max_card (cat vs cont threshold)</label>
-                  <input id="maxCard" type="number" min="1" step="1" value="50" />
-                  <div class="muted2">If an integer column has ≤ max_card unique values, treat it as categorical.</div>
-                </div>
-              </div>
+	                  <div class="muted2" id="derivedTargetStatus" style="margin-top:8px;">—</div>
+	                </div>
+	              </div>
+	            </div>
 
-              <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
-                <div class="field hidden" id="colFilterField" style="margin:0;min-width:240px;">
-                  <label for="colFilter">Search columns</label>
-                  <input id="colFilter" type="text" placeholder="Filter by column name" />
-                </div>
-              </div>
+	            <div class="groupBox" style="margin-top:12px;">
+	              <div class="groupTitle">Data split</div>
+	              <div class="two">
+	                <div class="field">
+	                  <label for="maxRows">Max rows (0 = all)</label>
+	                  <input id="maxRows" type="number" min="0" step="1000" value="1000" />
+	                </div>
 
-              <div class="scroll" style="max-height:420px;">
-                <table id="reviewColumnsTable">
-                  <thead>
-                    <tr>
-                      <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="name">
-                        Column <span class="sort-indicator"></span>
-                        <button class="btn ghost" id="toggleColFilterBtn" type="button" aria-label="Filter columns" style="padding:2px 8px;font-size:11px;margin-left:6px;">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" width="12" height="12" style="display:block" fill="currentColor">
-                            <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
-                          </svg>
-                        </button>
-                      </th>
-                      <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
-                    </tr>
-                  </thead>
-                  <tbody id="colConfigBody"></tbody>
-                </table>
-              </div>
-            </details>
-          </div>
-        </div>
-      </section>
+	                <div class="field hidden" id="testFracField">
+	                  <label for="testFrac">Test fraction</label>
+	                  <input id="testFrac" type="number" value="0.1" />
+	                  <div class="muted2">What fraction [0-1] of the data to use for testing.</div>
+	                </div>
+	              </div>
 
-      <!-- STEP 3: TRAIN -->
-      <section class="card hidden" id="panelTrain">
-        <h2>Train</h2>
+	              <div class="field hidden" id="splitStrategyField" style="margin-top:10px;">
+	                <label>Split strategy</label>
+	                <select id="splitStrategy">
+	                  <option value="random" selected>Random</option>
+	                </select>
+	              </div>
 
-        <div class="muted" style="margin-bottom:10px;">
-          Defaults are tuned for a solid baseline. Adjust if you want faster iteration or more thorough training.
-        </div>
+	              <div id="timeSplitSettings" class="two hidden" style="margin-top:10px;">
+	                <div class="field">
+	                  <label for="splitDateCol">Time column</label>
+	                  <select id="splitDateCol"></select>
+	                </div>
 
-        <div class="row" id="trainChips" style="margin-bottom:10px;"></div>
+	                <div class="field">
+	                  <label for="splitMethod">Validation rule</label>
+	                  <select id="splitMethod">
+	                    <option value="cutoff" selected>Cutoff date (recommended)</option>
+	                    <option value="fraction">Test fraction</option>
+	                  </select>
+	                </div>
+	              </div>
 
-        <details id="advancedTrainDetails" style="margin-top:12px;" open>
-          <summary>Settings</summary>
-          <div class="hr"></div>
+	              <div class="field hidden" id="cutoffField" style="margin-top:10px;">
+	                <label for="cutoffDate">Cutoff date (train &lt; cutoff, valid ≥ cutoff)</label>
+	                <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
+	              </div>
+	            </div>
 
-          <div class="two">
-            <div class="field">
-              <label for="seed">Random seed</label>
-              <input id="seed" type="number" value="42" />
-            </div>
-            <div class="field">
-              <label for="replacement">Feature sampling replacement</label>
-              <select id="replacement">
-                <option value="false" selected>false</option>
-                <option value="true">true</option>
-              </select>
-            </div>
-          </div>
+	            <div class="groupBox hidden" id="modelGroupBox" style="margin-top:12px;">
+	              <div class="groupTitle">Model (random forest)</div>
+	              <div class="two">
+	                <div class="field">
+	                  <label for="nEstimators">Trees</label>
+	                  <input id="nEstimators" type="number" min="10" step="10" value="100" />
+	                </div>
+	                <div class="field">
+	                  <label for="maxFeatures">maxFeatures</label>
+	                  <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. sqrt, log2, 0.33, or 12" />
+	                </div>
+	              </div>
 
-          <div class="two" style="margin-top:10px;">
-            <div class="field">
-              <label for="nEstimators">Trees</label>
-              <input id="nEstimators" type="number" min="10" step="10" value="100" />
-            </div>
-            <div class="field">
-              <label for="maxFeatures">maxFeatures</label>
-              <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. sqrt, log2, 0.33, or 12" />
-            </div>
-          </div>
+	              <div class="two" style="margin-top:10px;">
+	                <div class="field">
+	                  <label for="maxDepth">maxDepth</label>
+	                  <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
+	                </div>
+	                <div class="field">
+	                  <label for="minNumSamples">minNumSamples</label>
+	                  <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
+	                </div>
+	              </div>
 
-          <div class="two" style="margin-top:10px;">
-            <div class="field">
-              <label for="maxDepth">maxDepth</label>
-              <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
-            </div>
-            <div class="field">
-              <label for="minNumSamples">minNumSamples</label>
-              <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
-            </div>
-          </div>
+	              <div class="two" style="margin-top:10px;">
+	                <div class="field">
+	                  <label for="seed">Random seed</label>
+	                  <input id="seed" type="number" value="42" />
+	                </div>
+	                <div class="field">
+	                  <label for="replacement">Feature sampling replacement</label>
+	                  <select id="replacement">
+	                    <option value="false" selected>false</option>
+	                    <option value="true">true</option>
+	                  </select>
+	                </div>
+	              </div>
 
-          <div class="muted2" style="margin-top:10px;">
-            Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
-          </div>
-        </details>
+	              <div class="muted2" style="margin-top:10px;">
+	                Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
+	              </div>
+	            </div>
 
-        <div class="hr"></div>
+	            <div id="setupCallout" class="callout hidden" style="margin-top:12px;"></div>
 
-        <div class="row space">
-          <button class="btn" id="backToSetupBtn">Back</button>
-          <div class="row">
-            <div id="trainStatus" class="muted2"></div>
-            <button class="btn danger" id="stopBtn" disabled>Stop</button>
-            <button class="btn primary" id="trainBtn" disabled>Train model</button>
-          </div>
-        </div>
-      </section>
+	          </div>
 
-      <!-- STEP 4: RESULTS -->
+	          <div>
+	            <div class="groupBox" id="reviewDetails">
+	              <div class="groupTitle">Review columns</div>
+	              <div style="margin-bottom:10px;" class="hidden" id="maxCardFieldWrap">
+	                <div class="field">
+	                  <label for="maxCard">max_card (cat vs cont threshold)</label>
+	                  <input id="maxCard" type="number" min="1" step="1" value="50" />
+	                  <div class="muted2">If an integer column has ≤ max_card unique values, treat it as categorical.</div>
+	                </div>
+	              </div>
+
+	              <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
+	                <div class="field hidden" id="colFilterField" style="margin:0;min-width:240px;">
+	                  <label for="colFilter">Search columns</label>
+	                  <input id="colFilter" type="text" placeholder="Filter by column name" />
+	                </div>
+	              </div>
+
+	              <div class="scroll" style="max-height:420px;">
+	                <table id="reviewColumnsTable">
+	                  <thead>
+	                    <tr>
+	                      <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
+	                      <th class="sortable" data-sort="name">
+	                        Column <span class="sort-indicator"></span>
+	                        <button class="btn ghost" id="toggleColFilterBtn" type="button" aria-label="Filter columns" style="padding:2px 8px;font-size:11px;margin-left:6px;">
+	                          <svg aria-hidden="true" viewBox="0 0 24 24" width="12" height="12" style="display:block" fill="currentColor">
+	                            <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+	                          </svg>
+	                        </button>
+	                      </th>
+	                      <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
+	                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
+	                      <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
+	                      <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
+	                      <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
+	                    </tr>
+	                  </thead>
+	                  <tbody id="colConfigBody"></tbody>
+	                </table>
+	              </div>
+	            </div>
+	          </div>
+	        </div>
+	      </section>
+
+      <!-- STEP 3: RESULTS -->
       <section class="card hidden" id="panelResults">
         <h2>Results</h2>
 
-        <div class="kpiGrid">
+        <div id="trainStatus" class="hidden"></div>
+
+        <div class="resultsTopGrid">
           <div class="kpi">
             <div class="lbl" id="primaryMetricLabel">—</div>
             <div class="big mono" id="primaryMetricValue">—</div>
             <div class="small" id="primaryMetricSub">—</div>
           </div>
-
-          <div class="kpi">
-            <div class="lbl">Setup</div>
-            <div class="small mono" id="setupSummary">—</div>
-            <div class="small mono" id="featureSummary">—</div>
-          </div>
-
-          <div class="kpi">
-            <div class="lbl">Next</div>
-            <div class="small">Export a portable artifact (model + preprocessing + sample loader).</div>
-            <div class="row" style="margin-top:10px;">
-              <button class="btn primary" id="jumpToExportBtn">Export</button>
-              <button class="btn" id="backToTrainBtn">Back</button>
-            </div>
+          <div class="callout hidden" id="resultsSidePanel">
+            <div style="font-weight:650;margin-bottom:6px;" id="resultsSideTitle">—</div>
+            <div class="muted2" id="resultsSideBody">—</div>
           </div>
         </div>
 
@@ -866,6 +907,7 @@
             </div>
             <div class="chartBox">
               <canvas id="fiChart"></canvas>
+              <div id="fiChartPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
             </div>
             <div class="muted2" style="margin-top:8px;">
               Aggregation groups derived features (e.g. date parts + missing indicators) back to their original column.
@@ -896,6 +938,7 @@
             <div class="chartBox">
               <canvas id="secondaryChart"></canvas>
               <div id="secondaryMatrix" class="hidden"></div>
+              <div id="secondaryPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
             </div>
             <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
           </div>
@@ -1028,24 +1071,17 @@
         </div>
       </section>
 
-      <!-- STEP 5: EXPORT -->
+      <!-- STEP 4: EXPORT -->
       <section class="card hidden" id="panelExport">
         <h2>Export</h2>
 
-        <div class="row space">
-          <div class="row">
-            <span class="pill" id="artifactPill">Artifact: not ready</span>
-            <span class="pill" id="artifactDetailPill">—</span>
-          </div>
-          <div class="row">
-            <button class="btn" id="backToResultsBtn">Back</button>
-            <button class="btn primary" id="downloadZipBtn" disabled>Download rf_artifact.zip</button>
+        <div class="row space" style="margin-bottom:8px;">
+          <div class="muted2">Example loader code</div>
+          <div class="segmented" role="tablist" aria-label="Example code language">
+            <button id="exportLangJsBtn" type="button" role="tab" aria-selected="true">JS</button>
+            <button id="exportLangPyBtn" type="button" role="tab" aria-selected="false">Python</button>
           </div>
         </div>
-
-        <div class="hr"></div>
-
-        <div class="muted" style="margin-bottom:8px;">Sample loader</div>
         <pre class="code" id="sampleCode"></pre>
 
         <div class="hr"></div>
@@ -1074,8 +1110,7 @@
     // ----------------------------
     const STEPS = [
       { key: "upload",  title: "Upload" },
-      { key: "setup",   title: "Target" },
-      { key: "train",   title: "Train" },
+      { key: "setup",   title: "Settings" },
       { key: "results", title: "Results" },
       { key: "export",  title: "Export" },
     ];
@@ -1094,11 +1129,11 @@
         splitDateCol: null,
         splitMethod: "cutoff",
         cutoffDate: "",
-        splitStrategy: "random",
+        splitStrategy: "stratified",
         testFrac: 0.1,
-        taskMode: "auto",
+        taskMode: "regression",
         targetTransform: "none",
-        maxRows: 50000,
+        maxRows: 1000,
         maxCard: 50,
         forceDate: "",
         forceCat: "",
@@ -1160,6 +1195,42 @@
           shift: null,
           errUnc: null,
         },
+	        chips: {
+	          order: [
+	            "file",
+	            "data",
+	            "target",
+	            "targetWarn",
+	            "task",
+	            "extrapolation",
+	            "split",
+	            "test",
+	            "maxRows",
+	            "typing",
+	            "maxCard",
+            "topN",
+            "derived",
+            "excluded",
+            "forced",
+          ],
+	          items: {
+	            file: { label: "File", value: "", visible: false, kind: "", title: "", setByStep: null },
+	            data: { label: "Data", value: "", visible: false, kind: "", title: "", setByStep: null },
+	            target: { label: "Target", value: "", visible: false, kind: "", title: "", setByStep: null },
+	            targetWarn: { label: "Target warn", value: "", visible: false, kind: "warn", title: "", setByStep: null },
+	            task: { label: "Task", value: "", visible: false, kind: "", title: "", setByStep: null },
+	            extrapolation: { label: "Extrapolation", value: "", visible: false, kind: "warn", title: "", setByStep: null },
+	            split: { label: "Split", value: "", visible: false, kind: "", title: "", setByStep: null },
+	            test: { label: "Test", value: "", visible: false, kind: "", title: "", setByStep: null },
+	            maxRows: { label: "Max rows", value: "", visible: false, kind: "", title: "", setByStep: null },
+	            typing: { label: "Typing", value: "", visible: false, kind: "", title: "", setByStep: null },
+            maxCard: { label: "max_card", value: "", visible: false, kind: "", title: "", setByStep: null },
+            topN: { label: "TopN", value: "", visible: false, kind: "", title: "", setByStep: null },
+            derived: { label: "Derived", value: "", visible: false, kind: "", title: "", setByStep: null },
+            excluded: { label: "Excluded", value: "", visible: false, kind: "", title: "", setByStep: null },
+            forced: { label: "Forced", value: "", visible: false, kind: "", title: "", setByStep: null },
+          },
+        },
         training: {
           startMs: 0,
           totalUnits: 0,
@@ -1169,11 +1240,14 @@
           abortController: null,
           diagAbortController: null,
           runSeq: 0,
+          autoStartOnResults: false,
         },
-        parseSeq: 0,
-        predPage: 0,
-        predFilter: "",
-        previewFilter: "",
+	        exportLang: "js",
+	        showAdvancedSettings: false,
+	        parseSeq: 0,
+	        predPage: 0,
+	        predFilter: "",
+	        previewFilter: "",
         colSort: { key: "name", dir: "asc" },
         maxUnlockedStep: 0,
         shiftAutoExpandedRunSeq: 0,
@@ -1190,6 +1264,15 @@
     const $ = (id) => document.getElementById(id);
     const show = (el) => el.classList.remove("hidden");
     const hide = (el) => el.classList.add("hidden");
+
+    function disableChartAnimations() {
+      if (!window.Chart) return;
+      try {
+        Chart.defaults.animation = false;
+        if (Chart.defaults.transitions?.active?.animation) Chart.defaults.transitions.active.animation.duration = 0;
+        if (Chart.defaults.transitions?.resize?.animation) Chart.defaults.transitions.resize.animation.duration = 0;
+      } catch {}
+    }
 
     function showToast(message, kind = "") {
       const host = $("toastHost");
@@ -1461,11 +1544,19 @@
       return msg.toLowerCase().includes("abort");
     }
 
+    function isModelReady() {
+      return Boolean(APP.train.model && APP.train.pipeline && APP.train.runSummary);
+    }
+
     function setTrainingUi(isTraining) {
       APP.ui.training.isTraining = Boolean(isTraining);
-      const canTrain = Boolean(APP.raw.targetCol) && !APP.ui.training.isTraining;
-      $("trainBtn").disabled = !canTrain;
-      $("stopBtn").disabled = !APP.ui.training.isTraining;
+      syncGlobalContinueBtn();
+      syncGlobalBackBtn();
+      syncGlobalStopBtn();
+      if (!APP.ui.training.isTraining && APP.step === 2) {
+        const task = APP.train.pipeline?.task || "";
+        renderResultsSidePanel(task);
+      }
     }
 
     function requestStopTraining() {
@@ -1473,7 +1564,7 @@
       if (APP.ui.training.stopRequested) return;
       APP.ui.training.stopRequested = true;
       try { APP.ui.training.abortController?.abort(); } catch {}
-      $("stopBtn").disabled = true;
+      syncGlobalStopBtn();
       $("trainStatus").innerHTML =
         `<span class="spinner"></span> Stopping… <span class="muted2">Will stop after the current tree finishes, then score a partial model.</span>`;
     }
@@ -1581,9 +1672,8 @@
       const panels = {
         0: $("panelUpload"),
         1: $("panelSetup"),
-        2: $("panelTrain"),
-        3: $("panelResults"),
-        4: $("panelExport"),
+        2: $("panelResults"),
+        3: $("panelExport"),
       };
 
       Object.entries(panels).forEach(([k, el]) => {
@@ -1592,6 +1682,24 @@
       });
 
       syncButtons();
+
+      if (APP.step === 2 && isModelReady() && !APP.ui.training.isTraining && !APP.ui.training.autoStartOnResults) {
+        renderResults();
+      }
+
+      if (APP.step === 2 && APP.ui.training.autoStartOnResults && !APP.ui.training.isTraining) {
+        APP.ui.training.autoStartOnResults = false;
+        if (isModelReady()) {
+          renderResults();
+          return;
+        }
+        renderResultsPlaceholders();
+        setTimeout(() => {
+          if (APP.step !== 2) return;
+          if (APP.ui.training.isTraining) return;
+          trainModel();
+        }, 0);
+      }
     }
 
     // ----------------------------
@@ -1669,8 +1777,6 @@
       $("targetSelect").dispatchEvent(new Event("change"));
 
       if (advanceStep) {
-        $("uploadStatus").innerHTML =
-          `<span class="pill good">Target selected</span><span class="muted2">Proceed to configure split & training.</span>`;
         APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
         renderStepper();
         gotoStep(1);
@@ -2065,47 +2171,43 @@
       return decideTaskFromTarget(rows, targetCol, null, meta);
     }
 
-    function syncSetupUI() {
-      $("rowsPill").textContent = `Rows: ${APP.raw.rows.length}`;
-      $("colsPill").textContent = `Columns: ${APP.raw.columns.length}`;
+	    function syncSetupUI() {
+	      const hasTarget = !!APP.raw.targetCol;
+	      const showAdv = Boolean(APP.ui.showAdvancedSettings);
 
-      const { counts, maxCard } = computeTypeCounts();
-      $("reviewPill").textContent = `Typing: cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date} · max_card=${maxCard}`;
+	      const decidedTask = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
 
-      const hasTarget = !!APP.raw.targetCol;
-      $("continueToTrainBtn").disabled = !hasTarget;
-
-      const decidedTask = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
-
-      const taskPill = $("taskModeDetectedPill");
-      if (taskPill) {
-        const mode = $("taskMode")?.value || APP.setup.taskMode || "auto";
-        if (mode === "auto" && decidedTask) {
-          taskPill.textContent = `Detected: ${decidedTask === "regression" ? "Regression" : "Classification"}`;
-          taskPill.classList.remove("hidden");
+	      const dateCols = listDateColumns();
+	      const splitMethod = $("splitMethod").value || "cutoff";
+	      const cutoff = $("cutoffDate").value || "";
+	      APP.setup.splitMethod = splitMethod;
+	      APP.setup.cutoffDate = cutoff;
+	      const hasDates = dateCols.length > 0;
+	      const splitSel = $("splitStrategy");
+	      if (splitSel) {
+	        const cur = APP.setup.splitStrategy || splitSel.value || "random";
+	        const userSet = splitSel.dataset.userSet === "true";
+	        const options = [`<option value="random">Random</option>`];
+	        if (decidedTask === "classification") {
+	          options.push(`<option value="stratified">Stratified (classification)</option>`);
+	        }
+	        if (hasDates) {
+	          options.push(`<option value="time">Time-based</option>`);
+	        }
+	        splitSel.innerHTML = options.join("");
+        if (userSet && cur === "time" && hasDates) {
+          splitSel.value = "time";
+        } else if ((userSet && cur === "stratified") || (!userSet && decidedTask === "classification")) {
+          splitSel.value = (decidedTask === "classification") ? "stratified" : "random";
+        } else if (userSet && cur === "random") {
+          splitSel.value = "random";
         } else {
-          taskPill.textContent = "—";
-          taskPill.classList.add("hidden");
+          splitSel.value = "random";
         }
-      }
-
-      const dateCols = listDateColumns();
-      const splitMode = effectiveSplitMode();
-      const splitMethod = $("splitMethod").value || "cutoff";
-      const cutoff = $("cutoffDate").value || "";
-      APP.setup.splitMethod = splitMethod;
-      APP.setup.cutoffDate = cutoff;
-      const hasDates = dateCols.length > 0;
-      const splitSel = $("splitStrategy");
-      if (splitSel) {
-        const cur = splitSel.value || "random";
-        const options = [`<option value="random">Random</option>`]
-          .concat(hasDates ? [`<option value="time">Time-based</option>`] : []);
-        splitSel.innerHTML = options.join("");
-        splitSel.value = (cur === "time" && hasDates) ? "time" : "random";
-        splitSel.disabled = !hasDates;
-      }
-      APP.setup.splitStrategy = $("splitStrategy")?.value || "random";
+	        splitSel.disabled = !showAdv || options.length <= 1;
+	      }
+	      APP.setup.splitStrategy = $("splitStrategy")?.value || "random";
+	      const splitMode = effectiveSplitMode();
 
       $("splitDateCol").innerHTML = dateCols.length
         ? dateCols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")
@@ -2114,42 +2216,37 @@
       if (!APP.setup.splitDateCol && dateCols.length) APP.setup.splitDateCol = dateCols[0];
       if (APP.setup.splitDateCol && dateCols.includes(APP.setup.splitDateCol)) $("splitDateCol").value = APP.setup.splitDateCol;
 
-      $("timeSplitSettings").classList.toggle("hidden", !(hasDates && splitMode === "time"));
-      $("cutoffField").classList.toggle("hidden", !(splitMode === "time" && splitMethod === "cutoff"));
-      $("cutoffDate").disabled = !(splitMode === "time" && splitMethod === "cutoff");
-      $("testFrac").disabled = !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
+	      $("timeSplitSettings").classList.toggle("hidden", !(showAdv && hasDates && splitMode === "time"));
+	      $("cutoffField").classList.toggle("hidden", !(showAdv && splitMode === "time" && splitMethod === "cutoff"));
+	      $("cutoffDate").disabled = !(showAdv && splitMode === "time" && splitMethod === "cutoff");
+	      $("testFrac").disabled = !showAdv || !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
 
-      const c = $("setupCallout");
-      if (!hasTarget) {
-        c.className = "callout";
-        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Click a column name to select the target</div>
-                       <div class="muted2">Or use the dropdown on the left.</div>`;
-        show(c);
-      } else {
-        const splitText = (splitMode === "time")
-          ? (splitMethod === "cutoff" && cutoff
-            ? `Time-based split: train &lt; <span class="mono">${escapeHtml(cutoff)}</span>, valid ≥ cutoff (column <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span>).`
-            : `Time-based split using <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span> (fraction fallback).`)
-          : `Random split.`;
+	      if ($("targetTransformField")) $("targetTransformField").classList.toggle("hidden", !showAdv);
+	      if ($("taskModeField")) $("taskModeField").classList.toggle("hidden", !showAdv);
+	      if ($("targetSelectField")) $("targetSelectField").classList.toggle("span2", !showAdv);
+	      if ($("maxCardFieldWrap")) $("maxCardFieldWrap").classList.toggle("hidden", !showAdv);
+	      if ($("testFracField")) $("testFracField").classList.toggle("hidden", !showAdv);
+	      if ($("splitStrategyField")) $("splitStrategyField").classList.toggle("hidden", !showAdv);
+	      if ($("modelGroupBox")) $("modelGroupBox").classList.toggle("hidden", !showAdv);
+	      const advBtn = $("toggleAdvancedSettingsBtn");
+	      if (advBtn) {
+	        advBtn.textContent = showAdv ? "[Hide Advanced]" : "[Show Advanced]";
+	        advBtn.setAttribute("aria-label", showAdv ? "Hide advanced settings" : "Show advanced settings");
+	      }
 
-        const idLike = APP.raw.columns.filter(cc => APP.raw.colMeta[cc]?.include && APP.raw.colMeta[cc]?.flags?.idLike);
-        const idHint = idLike.length
-          ? `<div class="muted2" style="margin-top:6px;">We flagged ${idLike.length} ID-like column(s). Consider excluding them in “Review columns” if you care about robustness.</div>`
-          : ``;
+	      const c = $("setupCallout");
+	      if (!hasTarget) {
+	        c.className = "callout";
+	        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Click a column name to select the target</div>
+	                       <div class="muted2">Or use the dropdown on the left.</div>`;
+	        show(c);
+	      } else {
+	        c.innerHTML = "";
+	        hide(c);
+	      }
 
-        const extrapolationWarn = (splitMode === "time")
-          ? `<div class="muted2" style="margin-top:8px;"><span class="pill warn">Extrapolation warning</span>
-               Forests can’t extrapolate beyond the target range. If your target trends over time, expect systematic underprediction on future rows.</div>`
-          : "";
-
-        c.className = (splitMode === "time") ? "callout warn" : "callout";
-        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Ready</div>
-                       <div class="muted2">${splitText} You can train immediately.</div>${extrapolationWarn}${idHint}`;
-        show(c);
-      }
-
-      syncAdvancedTargetUI();
-    }
+	      syncAdvancedTargetUI();
+	    }
 
     // ----------------------------
     // Advanced target options (multi-class classification)
@@ -2619,36 +2716,33 @@
       if (statusEl) statusEl.textContent = "—";
     }
 
-	    function syncAdvancedTargetUI() {
-	      const details = $("advancedTargetDetails");
-	      if (!details) return;
+		    function syncAdvancedTargetUI() {
+		      const details = $("advancedTargetDetails");
+		      if (!details) return;
 
-      const topNState = APP.setup.multiClass?.topN || { enabled: false, keep: 5, rareLabel: "RARE" };
-      const dt = APP.setup.multiClass?.derivedTarget || { enabled: false, sourceCol: null, derivedCol: "", expr: "", lastStatus: "", lastError: "" };
+	      const topNState = APP.setup.multiClass?.topN || { enabled: false, keep: 5, rareLabel: "RARE" };
+	      const dt = APP.setup.multiClass?.derivedTarget || { enabled: false, sourceCol: null, derivedCol: "", expr: "", lastStatus: "", lastError: "" };
 
-      const targetCol = APP.raw.targetCol;
-      const hasTarget = Boolean(targetCol);
-      const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
+	      const targetCol = APP.raw.targetCol;
+	      const hasTarget = Boolean(targetCol);
+	      const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
 
-      const sourceCol = (dt.enabled && dt.sourceCol) ? dt.sourceCol : targetCol;
-      const canShow = Boolean(hasTarget && task === "classification" && sourceCol);
+	      const sourceCol = (dt.enabled && dt.sourceCol) ? dt.sourceCol : targetCol;
+	      const canShow = Boolean(APP.ui.showAdvancedSettings && hasTarget && task === "classification" && sourceCol);
 
-      if (!canShow) {
-        details.classList.add("hidden");
-        return;
-      }
+	      if (!canShow) {
+	        details.classList.add("hidden");
+	        return;
+	      }
 
-      const info = computeCategoricalCounts(APP.raw.rows, sourceCol, { maxSample: 8000, seed: 1337 });
-      const numClasses = info.counts.size;
-      const isMultiClass = numClasses > 2;
-      const showDetails = isMultiClass || topNState.enabled || dt.enabled;
-      details.classList.toggle("hidden", !showDetails);
-      if (!showDetails) return;
+	      const info = computeCategoricalCounts(APP.raw.rows, sourceCol, { maxSample: 8000, seed: 1337 });
+	      const numClasses = info.counts.size;
+	      details.classList.remove("hidden");
 
-      const callout = $("multiClassSummaryCallout");
-      if (callout) {
-        const top = sortedCountEntries(info.counts).slice(0, 6);
-        const topText = top.length
+	      const callout = $("multiClassSummaryCallout");
+	      if (callout) {
+	        const top = sortedCountEntries(info.counts).slice(0, 6);
+	        const topText = top.length
           ? top.map(([k, v]) => `${escapeHtml(truncate(k, 30))} (${v})`).join(", ")
           : "—";
         const missTxt = info.nMissing ? ` · missing=${info.nMissing}` : "";
@@ -2741,61 +2835,165 @@
       if (APP.raw.targetCol) $("targetSelect").value = APP.raw.targetCol;
     }
 
-    function renderTrainChips() {
-      const el = $("trainChips");
-      if (!el) return;
+    function resetStateChips({ clearValues = false } = {}) {
+      const items = APP.ui?.chips?.items;
+      if (!items) return;
+      Object.values(items).forEach(item => {
+        item.visible = false;
+        item.kind = "";
+        item.title = "";
+        if (clearValues) {
+          item.value = "";
+          item.setByStep = null;
+        }
+      });
+    }
 
-      const chips = [];
-      const add = (label, value) => {
-        if (value === null || value === undefined || value === "") return;
-        chips.push(`<span class="pill">${escapeHtml(label)}: <span class="mono">${escapeHtml(String(value))}</span></span>`);
-      };
-
-      if (APP.raw.fileName) add("File", APP.raw.fileName);
-      if (APP.raw.rows.length && APP.raw.columns.length) add("Data", `${APP.raw.rows.length} rows · ${APP.raw.columns.length} cols`);
-
-      if (APP.raw.targetCol) add("Target", APP.raw.targetCol);
-
-      if (APP.raw.targetCol) {
-        const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
-        add("Task", task);
+    function updateStateChip(key, { value, visible = true, kind = "", title = "", setByStep = null } = {}) {
+      const item = APP.ui?.chips?.items?.[key];
+      if (!item) return;
+      if (value !== undefined) {
+        const prev = (item.value === null || item.value === undefined) ? "" : String(item.value);
+        const next = (value === null || value === undefined) ? "" : String(value);
+        if (prev !== next) {
+          item.value = value;
+          item.setByStep = (setByStep === null || setByStep === undefined) ? (APP.step || 0) : setByStep;
+        }
       }
+      item.visible = Boolean(visible);
+      item.kind = kind || "";
+      item.title = title || "";
+    }
+
+    function syncStateChips() {
+      resetStateChips();
+
+      const hasData = APP.raw.rows.length && APP.raw.columns.length;
+      if (!hasData) return;
+
+      updateStateChip("file", { value: APP.raw.fileName || "—", visible: true, setByStep: 0 });
+      updateStateChip("data", { value: `${APP.raw.rows.length} rows · ${APP.raw.columns.length} cols`, visible: true, setByStep: 0 });
+
+      const step = APP.step || 0;
+      const hasTarget = Boolean(APP.raw.targetCol);
+      if (hasTarget) {
+        const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
+        updateStateChip("target", { value: APP.raw.targetCol, visible: true });
+        updateStateChip("task", { value: task, visible: true });
+
+        const tm = APP.raw.colMeta?.[APP.raw.targetCol] || null;
+        const isIdLike = Boolean(tm?.flags?.idLike);
+        const missingFrac = Number(tm?.missingFrac ?? 0);
+        const presentFrac = Math.max(0, Math.min(1, 1 - missingFrac));
+        const isSparse = presentFrac < 0.5;
+        if (isIdLike || isSparse) {
+          const parts = [];
+          if (isIdLike) parts.push("ID-like");
+          if (isSparse) parts.push("<50% present");
+          const targetSetBy = APP.ui?.chips?.items?.target?.setByStep;
+          const titleParts = [];
+          if (isIdLike) {
+            titleParts.push("This target looks like an identifier, which usually isn’t a meaningful outcome to predict. Fix: choose a real outcome column (e.g. price, churn, label), or derive a meaningful target from this ID (e.g. is_vip) and use that instead.");
+          }
+          if (isSparse) {
+            titleParts.push(`This target is missing in many rows (present≈${Math.round(presentFrac * 100)}% in the sample). Fix: pick a better-populated target, filter to rows where the target is present, or derive a proxy/label you can reliably compute.`);
+          }
+          updateStateChip("targetWarn", {
+            value: parts.join(" · "),
+            visible: true,
+            kind: "warn",
+            title: titleParts.join(" "),
+            setByStep: Number.isFinite(targetSetBy) ? targetSetBy : null,
+          });
+        }
+      }
+
+      if (step < 1 || !hasTarget) return;
+
+      const splitMode = effectiveSplitMode();
+      if (splitMode === "time") {
+        updateStateChip("extrapolation", {
+          value: "warning",
+          visible: true,
+          kind: "warn",
+          title: "Time split evaluates on future rows. Tree ensembles are poor at extrapolating trends, so scores can look good while future errors grow. Fix: if you want a general-purpose estimate, switch to Random split; if you truly need forecasting, treat results as a baseline and consider time-aware features and/or a forecasting model.",
+          setByStep: 1,
+        });
+        const method = $("splitMethod")?.value || "cutoff";
+        const cutoff = $("cutoffDate")?.value || "";
+        const details = (method === "cutoff" && cutoff) ? `cutoff ${cutoff}` : `test ${Math.round(APP.setup.testFrac * 100)}%`;
+        updateStateChip("split", { value: `time (${APP.setup.splitDateCol || "—"}) · ${details}`, visible: true, setByStep: 1 });
+      } else {
+        const splitStrategy = $("splitStrategy")?.value || "random";
+        updateStateChip("split", { value: splitStrategy === "stratified" ? "stratified" : "random", visible: true, setByStep: 1 });
+      }
+      if (splitMode === "random") updateStateChip("test", { value: `${Math.round(APP.setup.testFrac * 100)}%`, visible: true, setByStep: 1 });
+
+      updateStateChip("maxRows", { value: String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows, visible: true, setByStep: 1 });
+
+      const { counts, maxCard } = computeTypeCounts();
+      updateStateChip("typing", { value: `cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date}`, visible: true, setByStep: 1 });
+      updateStateChip("maxCard", { value: maxCard, visible: true, setByStep: 1 });
 
       const topNState = APP.setup.multiClass?.topN || null;
       if (topNState?.enabled && !isDerivedTargetActive()) {
-        add("TopN", `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`);
+        updateStateChip("topN", { value: `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`, visible: true, setByStep: 1 });
       }
 
       const dt = APP.setup.multiClass?.derivedTarget || null;
       if (dt?.enabled && dt.sourceCol && dt.derivedCol && APP.raw.targetCol === dt.derivedCol) {
-        add("Derived", `${dt.sourceCol} → ${dt.derivedCol}`);
+        updateStateChip("derived", { value: `${dt.sourceCol} → ${dt.derivedCol}`, visible: true, setByStep: 1 });
       }
-
-      const splitMode = effectiveSplitMode();
-      if (splitMode === "time") {
-        const method = $("splitMethod")?.value || "cutoff";
-        const cutoff = $("cutoffDate")?.value || "";
-        const details = (method === "cutoff" && cutoff) ? `cutoff ${cutoff}` : `test ${Math.round(APP.setup.testFrac * 100)}%`;
-        add("Split", `time (${APP.setup.splitDateCol || "—"}) · ${details}`);
-      }
-      else add("Split", "random");
-      if (splitMode === "random") add("Test", `${Math.round(APP.setup.testFrac * 100)}%`);
-
-      add("Max rows", String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows);
-
-      const { counts, maxCard } = computeTypeCounts();
-      add("Typing", `cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date}`);
-      add("max_card", maxCard);
 
       const excludedCount = APP.setup.excluded?.size || 0;
       const forcedCount =
         (APP.setup.forcedTypes?.date?.size || 0) +
         (APP.setup.forcedTypes?.categorical?.size || 0) +
         (APP.setup.forcedTypes?.continuous?.size || 0);
-      if (excludedCount) add("Excluded", excludedCount);
-      if (forcedCount) add("Forced", forcedCount);
+      if (excludedCount) updateStateChip("excluded", { value: excludedCount, visible: true, setByStep: 1 });
+      if (forcedCount) updateStateChip("forced", { value: forcedCount, visible: true, setByStep: 1 });
+    }
 
-      el.innerHTML = chips.length ? chips.join(" ") : `<span class="muted2">Pick a target to preview training settings.</span>`;
+    function renderStateChips() {
+      const el = $("stateChips");
+      if (!el) return;
+
+      syncStateChips();
+
+      const sc = APP.ui?.chips;
+      const items = sc?.items;
+      const order = sc?.order;
+      if (!items || !Array.isArray(order)) {
+        el.innerHTML = "";
+        el.classList.add("hidden");
+        return;
+      }
+
+      const chips = [];
+      const step = APP.step || 0;
+      for (const key of order) {
+        const item = items[key];
+        if (!item?.visible) continue;
+        if (item.value === null || item.value === undefined || item.value === "") continue;
+        const setBy = Number.isFinite(item.setByStep) ? item.setByStep : null;
+        if (setBy !== null && step <= setBy && item.kind !== "warn") continue;
+        const cls = ["pill", item.kind].filter(Boolean).join(" ");
+        const titleAttr = item.title ? ` title="${escapeHtml(item.title)}"` : "";
+        chips.push(
+          `<span class="${cls}"${titleAttr}>` +
+            `${escapeHtml(item.label)}: <span class="mono">${escapeHtml(String(item.value))}</span>` +
+          `</span>`
+        );
+      }
+
+      if (!chips.length) {
+        el.innerHTML = "";
+        el.classList.add("hidden");
+        return;
+      }
+
+      el.classList.remove("hidden");
+      el.innerHTML = chips.join(" ");
     }
 
     function refreshSplitDateCol() {
@@ -3007,6 +3205,7 @@
 
       const task = decideTaskFromTarget(sampledRows, targetCol, APP.setup.taskMode, meta);
       const targetTransform = APP.setup.targetTransform;
+      const splitStrategy = $("splitStrategy")?.value || "random";
 
       // derived feature schema
       const DATE_PARTS = [
@@ -3075,7 +3274,13 @@
           split = splitTimeBased(rowRefs, splitDateCol, testFrac);
         }
       }
-      else split = splitRandom(rowRefs.length, testFrac, seed);
+      else {
+        if (task === "classification" && splitStrategy === "stratified") {
+          split = splitStratified(yAll, testFrac, seed);
+        } else {
+          split = splitRandom(rowRefs.length, testFrac, seed);
+        }
+      }
 
       const trainRows = split.trainIdx.map(i => rowRefs[i]);
       const testRows = split.testIdx.map(i => rowRefs[i]);
@@ -3264,6 +3469,28 @@
       return { trainIdx, testIdx };
     }
 
+    function splitStratified(y, testFrac, seed) {
+      const groups = new Map();
+      for (let i = 0; i < y.length; i++) {
+        const label = y[i];
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(i);
+      }
+
+      const rng = mulberry32(seed);
+      const trainIdx = [];
+      const testIdx = [];
+
+      for (const idxs of groups.values()) {
+        shuffleInPlace(idxs, rng);
+        const nTest = Math.max(1, Math.floor(idxs.length * testFrac));
+        testIdx.push(...idxs.slice(0, nTest));
+        trainIdx.push(...idxs.slice(nTest));
+      }
+
+      return { trainIdx, testIdx };
+    }
+
     function splitTimeBased(rowRefs, dateCol, testFrac) {
       const keys = rowRefs.map((r, i) => {
         const d = parseDate(r[dateCol]);
@@ -3381,6 +3608,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           indexAxis: "y",
           plugins: { legend: { display: false } },
           scales: {
@@ -3415,6 +3643,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           indexAxis: "y",
           plugins: { legend: { display: false } },
           scales: {
@@ -3595,6 +3824,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           plugins: { legend: { display: false } },
           scales: {
             x: { title: { display: true, text: "true" }, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
@@ -4342,6 +4572,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           plugins: { legend: { display: false } },
           scales: {
             x: { title: { display: true, text: "abs(error)" }, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
@@ -4417,6 +4648,110 @@
         `<span class="muted2">${prog} · Elapsed <span class="mono">${formatDuration(elapsedMs)}</span> · ETA <span class="mono">${etaText}</span></span>`;
     }
 
+    function trainingCalloutBodyHtml(task, completedUnits, totalUnits, startMs) {
+      const elapsedMs = performance.now() - startMs;
+      let etaText = "estimating…";
+      if (completedUnits > 0 && totalUnits > 0) {
+        const msPerUnit = elapsedMs / Math.max(1, completedUnits);
+        const remainingMs = msPerUnit * Math.max(0, totalUnits - completedUnits);
+        etaText = formatDuration(remainingMs);
+      }
+
+      const prog = (totalUnits > 0)
+        ? `Tree <span class="mono">${completedUnits}</span>/<span class="mono">${totalUnits}</span>`
+        : `Tree <span class="mono">${completedUnits}</span>`;
+
+      return `<span class="spinner"></span> ` +
+        `<span class="mono">${escapeHtml(task)}</span> · ` +
+        `<span class="muted2">${prog} · Elapsed <span class="mono">${formatDuration(elapsedMs)}</span> · ETA <span class="mono">${etaText}</span></span>`;
+    }
+
+    function setResultsSidePanel({ visible, title, bodyHtml, cls }) {
+      const panel = $("resultsSidePanel");
+      const titleEl = $("resultsSideTitle");
+      const bodyEl = $("resultsSideBody");
+      if (!panel || !titleEl || !bodyEl) return;
+      if (!visible) {
+        panel.className = "callout hidden";
+        titleEl.textContent = "—";
+        bodyEl.textContent = "—";
+        return;
+      }
+      panel.className = `callout ${cls || ""}`.trim();
+      titleEl.textContent = title || "";
+      bodyEl.innerHTML = bodyHtml || "";
+    }
+
+    function renderResultsSidePanel(task) {
+      const isTraining = Boolean(APP.ui.training.isTraining);
+      const trained = Math.max(0, Math.floor(APP.ui.training.completedUnits || 0));
+      const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
+
+      if (isTraining) {
+        setResultsSidePanel({
+          visible: true,
+          title: "Training",
+          bodyHtml: trainingCalloutBodyHtml(task, trained, total, APP.ui.training.startMs),
+          cls: "",
+        });
+        return;
+      }
+
+      const prev = APP.ui.prevRunSummary;
+      const cur = APP.train.runSummary;
+      if (prev && prev.runId && cur && cur.runId && prev.runId !== cur.runId && prev.task === cur.task) {
+        const betterIsLower = (cur.task === "regression");
+        const a = Number(prev.test?.primary);
+        const b = Number(cur.test?.primary);
+        const delta = (Number.isFinite(a) && Number.isFinite(b)) ? (b - a) : null;
+        const improved = (delta !== null)
+          ? (betterIsLower ? (delta < 0) : (delta > 0))
+          : null;
+
+        const cls = (improved === null) ? "" : (improved ? "good" : "warn");
+        const deltaTxt = (delta === null) ? "n/a" : `${delta >= 0 ? "+" : ""}${formatNum(delta, 6)}`;
+        const prevTxt = Number.isFinite(a) ? formatNum(a, 6) : "n/a";
+        const curTxt = Number.isFinite(b) ? formatNum(b, 6) : "n/a";
+
+        const oA = Number(prev.oob?.value);
+        const oB = Number(cur.oob?.value);
+        const oDelta = (Number.isFinite(oA) && Number.isFinite(oB)) ? (oB - oA) : null;
+        const oDeltaTxt = (oDelta === null) ? "n/a" : `${oDelta >= 0 ? "+" : ""}${formatNum(oDelta, 6)}`;
+
+        const body =
+          `${escapeHtml(cur.test?.primaryLabel || "Test metric")}: <span class="mono">${escapeHtml(curTxt)}</span> (prev <span class="mono">${escapeHtml(prevTxt)}</span>, Δ <span class="mono">${escapeHtml(deltaTxt)}</span>)` +
+          (prev.oob?.label && cur.oob?.label
+            ? `<div style="margin-top:6px;">${escapeHtml(cur.oob.label)}: <span class="mono">${escapeHtml(Number.isFinite(oB) ? formatNum(oB, 6) : "n/a")}</span> (prev <span class="mono">${escapeHtml(Number.isFinite(oA) ? formatNum(oA, 6) : "n/a")}</span>, Δ <span class="mono">${escapeHtml(oDeltaTxt)}</span>)</div>`
+            : "") +
+          `<div style="margin-top:6px;">Columns: included <span class="mono">${cur.includedCols}</span> (prev <span class="mono">${prev.includedCols}</span>) · excluded <span class="mono">${cur.excludedCols}</span> (prev <span class="mono">${prev.excludedCols}</span>)</div>`;
+
+        setResultsSidePanel({ visible: true, title: "Compare to previous run", bodyHtml: body, cls });
+        return;
+      }
+
+      if (isModelReady()) {
+        setResultsSidePanel({
+          visible: true,
+          title: "Done",
+          bodyHtml: `Model trained locally. <span class="muted2">Use <span class="mono">Retrain</span> to run again.</span>`,
+          cls: "good",
+        });
+        return;
+      }
+
+      setResultsSidePanel({
+        visible: true,
+        title: "Not trained",
+        bodyHtml: `Continue to <span class="mono">Results</span> from <span class="mono">Settings</span> to train a model.`,
+        cls: "",
+      });
+    }
+
+    function updateTrainingCallout(task, completedUnits, totalUnits) {
+      if (APP.step !== 2) return;
+      renderResultsSidePanel(task);
+    }
+
     function isFrac01(x) {
       return x > 0 && x <= 1;
     }
@@ -4434,8 +4769,28 @@
     function yieldToBrowserPaint() {
       return new Promise(resolve => {
         const raf = window.requestAnimationFrame || ((cb) => setTimeout(cb, 16));
-        setTimeout(() => raf(() => resolve()), 0);
+        setTimeout(() => raf(() => setTimeout(resolve, 0)), 0);
       });
+    }
+
+    function withTemporaryTrainedEstimators(model, trainedEstimators, fn) {
+      if (!model) return fn();
+      const k = Math.max(0, Math.floor(trainedEstimators || 0));
+      const hasEstimators = Array.isArray(model.estimators);
+      const hasIndexes = Array.isArray(model.indexes);
+      const prevNE = model.nEstimators;
+      const prevEstLen = hasEstimators ? model.estimators.length : null;
+      const prevIdxLen = hasIndexes ? model.indexes.length : null;
+      try {
+        if (hasEstimators) model.estimators.length = k;
+        if (hasIndexes) model.indexes.length = k;
+        model.nEstimators = k;
+        return fn();
+      } finally {
+        if (hasEstimators && prevEstLen !== null) model.estimators.length = prevEstLen;
+        if (hasIndexes && prevIdxLen !== null) model.indexes.length = prevIdxLen;
+        model.nEstimators = prevNE;
+      }
     }
 
     function sampleWithBagging(X, y, seed, includeOob) {
@@ -4561,6 +4916,8 @@
       const includeOob = Boolean(!model.noOOB && model.useSampleBagging);
       const oobEntries = includeOob ? new Array(nEstimators) : null;
       const yieldEvery = Math.max(1, Math.floor(nEstimators / 100));
+      const MIN_YIELD_MS = 2000;
+      let lastYieldMs = performance.now();
 
       let trainedEstimators = 0;
       for (let t = 0; t < nEstimators; t++) {
@@ -4586,8 +4943,12 @@
         trainedEstimators = t + 1;
         onProgress(trainedEstimators, nEstimators);
 
-        if ((t + 1) < nEstimators && ((t + 1) % yieldEvery === 0)) {
+        const now = performance.now();
+        const shouldYieldByCount = ((t + 1) < nEstimators && ((t + 1) % yieldEvery === 0));
+        const shouldYieldByTime = ((t + 1) < nEstimators && (now - lastYieldMs) >= MIN_YIELD_MS);
+        if (shouldYieldByCount || shouldYieldByTime) {
           await new Promise(r => setTimeout(r, 0));
+          lastYieldMs = performance.now();
         }
       }
 
@@ -4691,11 +5052,98 @@
       let trainInfo;
       try {
         model = (task === "regression") ? new RandomForestRegression(rfOptions) : new RandomForestClassifier(rfOptions);
+
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
+        if (APP.step === 2) renderResultsPlaceholders();
+
+        const invTarget = buildInverseMapping(pipeline.target.mapping);
+        APP.train.rfOptions = rfOptions;
+        APP.train.model = model;
+        APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
+        APP.train.featureNames = featureNames;
+        APP.train.baseForDerived = baseForDerived;
+        APP.train.derivedTypeByFeature = buildDerivedTypeByFeature(featureNames, baseForDerived);
+        APP.train.split = {
+          trainIdx: Array.from({ length: Xtrain.length }, (_, i) => i),
+          testIdx: Array.from({ length: Xtest.length }, (_, i) => i)
+        };
+        APP.train.testRowRefs = testRowRefs;
+        APP.train.dropped = dropped;
+        APP.train.shift = null;
+
+        const transform = pipeline.targetTransform;
+        const ytestRaw = (pipeline.task === "regression" && transform === "log1p")
+          ? ytest.map(v => Math.expm1(v))
+          : ytest.slice();
+        APP.train.yTest = ytestRaw;
+        APP.train.yPred = [];
+        APP.train.fiDerived = [];
+        APP.train.fiBase = [];
+
+        const LIVE_MIN_MS = 2000;
+        let liveLastMs = performance.now();
+        let liveTimer = null;
+        let liveRefreshing = false;
+        let livePending = false;
+        let liveErrorCount = 0;
+
+        const runSeqForLive = runSeq;
+        const queueLiveUpdate = (force = false) => {
+          if (runSeqForLive !== APP.ui.training.runSeq) return;
+          if (!APP.ui.training.isTraining) return;
+          const now = performance.now();
+          const dueIn = force ? 0 : Math.max(0, (liveLastMs + LIVE_MIN_MS) - now);
+          if (liveTimer) return;
+          liveTimer = setTimeout(async () => {
+            liveTimer = null;
+            if (runSeqForLive !== APP.ui.training.runSeq) return;
+            if (!APP.ui.training.isTraining) return;
+            if (liveRefreshing) { livePending = true; return; }
+            if (APP.ui.training.completedUnits <= 0) return;
+            liveRefreshing = true;
+            try {
+              const trainedNow = Math.max(1, Math.floor(APP.ui.training.completedUnits || 1));
+              const ypredNow = withTemporaryTrainedEstimators(model, trainedNow, () => model.predict(Xtest));
+              const ypredRaw = (pipeline.task === "regression" && transform === "log1p")
+                ? ypredNow.map(v => Math.expm1(v))
+                : (pipeline.task === "regression")
+                  ? ypredNow.slice()
+                  : ypredNow.map(v => Number(v));
+
+              APP.train.yPred = ypredRaw;
+
+              let fi = null;
+              try { fi = withTemporaryTrainedEstimators(model, trainedNow, () => model.featureImportance()); } catch { fi = null; }
+              APP.train.fiDerived = (fi && fi.length === featureNames.length)
+                ? featureNames.map((name, i) => ({ name, imp: Number.isFinite(fi[i]) ? fi[i] : 0 }))
+                    .sort((a,b)=>b.imp-a.imp)
+                : [];
+              APP.train.fiBase = (fi && fi.length === featureNames.length)
+                ? aggregateFI(fi, featureNames, baseForDerived)
+                : [];
+
+              if (APP.step === 2) {
+                renderResultsLivePartial();
+                await yieldToBrowserPaint();
+              }
+              liveLastMs = performance.now();
+            } catch (e) {
+              liveErrorCount++;
+              if (liveErrorCount <= 3) console.warn("Live results update failed", e);
+            }
+            liveRefreshing = false;
+            if (livePending) { livePending = false; queueLiveUpdate(true); }
+          }, dueIn);
+        };
+
         trainInfo = await trainForestWithProgress(model, Xtrain, ytrain, {
           onProgress: (completedUnits, totalUnits) => {
             APP.ui.training.completedUnits = completedUnits;
             APP.ui.training.totalUnits = totalUnits;
             $("trainStatus").innerHTML = trainingStatusHtml(task, completedUnits, totalUnits, APP.ui.training.startMs);
+            updateTrainingCallout(task, completedUnits, totalUnits);
+            queueLiveUpdate(false);
           },
           signal: abortController.signal,
         });
@@ -4775,7 +5223,7 @@
       APP.train.rfOptions = rfOptions;
       APP.train.model = model;
       APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
-      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 3);
+      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
       renderStepper();
       APP.train.featureNames = featureNames;
       APP.train.baseForDerived = baseForDerived;
@@ -4870,7 +5318,7 @@
 
       // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
       renderResults();
-      gotoStep(3);
+      gotoStep(2);
 
       $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
       showToast("Training complete", "good");
@@ -4986,20 +5434,173 @@
       updatePruneMiniUi();
     }
 
+    function renderResultsPlaceholders() {
+      const targetCol = APP.raw.targetCol || "—";
+      const splitMode = effectiveSplitMode();
+      const splitText = splitMode === "time" ? `time-based (${APP.setup.splitDateCol || "—"})` : "random";
+      const testText = `${Math.round((APP.setup.testFrac || 0.1) * 100)}%`;
+      const maxRowsTxt = String(APP.setup.maxRows || 0) === "0" ? "all" : String(APP.setup.maxRows || "—");
+      const estFeatures = estimateDerivedFeatureCount();
+
+      if ($("setupSummary")) $("setupSummary").textContent = `Target=${targetCol} · Split=${splitText} · Test=${testText}`;
+      if ($("featureSummary")) $("featureSummary").textContent = `Max rows=${maxRowsTxt} · Est. features≈${estFeatures || "—"}`;
+
+      $("primaryMetricLabel").textContent = "Test metric";
+      $("primaryMetricValue").textContent = "—";
+      $("primaryMetricSub").textContent = "Training will start and update automatically.";
+
+      const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
+      const totalTxt = total ? `/${total}` : "";
+      $("resultsCallouts").innerHTML = "";
+      setResultsSidePanel({
+        visible: true,
+        title: "Training",
+        bodyHtml: `<span class="spinner"></span> Starting… Trees <span class="mono">0${escapeHtml(totalTxt)}</span>`,
+        cls: "",
+      });
+
+      $("secondaryChartTitle").textContent = "Test chart";
+      $("secondaryChartPill").textContent = "—";
+      $("secondaryChartHint").textContent = "Charts will populate as trees finish.";
+
+      clearSecondaryViz();
+      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+      $("secondaryPlaceholder").classList.remove("hidden");
+      $("fiChartPlaceholder").classList.remove("hidden");
+    }
+
+    function renderResultsLivePartial() {
+      const pl = APP.train.pipeline;
+      if (!pl) return;
+
+      const task = pl.task;
+      const splitMode = effectiveSplitMode();
+      const splitText = splitMode === "time"
+        ? `time-based (${APP.setup.splitDateCol})`
+        : "random";
+
+      if ($("setupSummary")) {
+        $("setupSummary").textContent =
+          `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+      }
+
+      if ($("featureSummary")) {
+        $("featureSummary").textContent =
+          `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+      }
+
+      const trained = Math.max(0, Math.floor(APP.ui.training.completedUnits || 0));
+      const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
+
+      renderResultsSidePanel(task);
+
+      $("resultsCallouts").innerHTML = "";
+      const addCallout = (cls, title, body) => {
+        const el = document.createElement("div");
+        el.className = `callout ${cls || ""}`.trim();
+        el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">${escapeHtml(title)}</div>
+                        <div class="muted2">${body}</div>`;
+        $("resultsCallouts").appendChild(el);
+      };
+
+      if (APP.train.dropped?.unusableTargetRows) {
+        addCallout("warn", "Some rows were dropped (target not usable)",
+          `Dropped <span class="mono">${APP.train.dropped.unusableTargetRows}</span> rows due to missing/invalid target values (or incompatible log1p).`
+        );
+      }
+      if (APP.train.dropped?.unseenTestLabels) {
+        addCallout("warn", "Some test rows were dropped (unseen labels)",
+          `Dropped <span class="mono">${APP.train.dropped.unseenTestLabels}</span> test rows because their label never appeared in the training split (train-only label encoding).`
+        );
+      }
+
+      const hasPred = Array.isArray(APP.train.yPred) && APP.train.yPred.length;
+      const hasFi = (Array.isArray(APP.train.fiBase) && APP.train.fiBase.length) || (Array.isArray(APP.train.fiDerived) && APP.train.fiDerived.length);
+      $("secondaryPlaceholder").classList.toggle("hidden", Boolean(hasPred));
+      $("fiChartPlaceholder").classList.toggle("hidden", Boolean(hasFi));
+
+      const hasFullPred = Boolean(
+        Array.isArray(APP.train.yTest) &&
+        Array.isArray(APP.train.yPred) &&
+        APP.train.yTest.length > 0 &&
+        APP.train.yPred.length === APP.train.yTest.length
+      );
+      if (!hasFullPred) {
+        $("primaryMetricLabel").textContent = (task === "regression") ? "Test RMSE" : "Test Accuracy";
+        $("primaryMetricValue").textContent = "—";
+        $("primaryMetricSub").textContent = "Waiting for first live prediction…";
+        $("secondaryChartTitle").textContent = (task === "regression") ? "Predicted vs true (scatter)" : "Confusion matrix (top classes)";
+        $("secondaryChartPill").textContent = `trees=${trained}${total ? `/${total}` : ""}`;
+        $("secondaryChartHint").textContent = "Updates periodically during training.";
+        clearSecondaryViz();
+        return;
+      }
+
+      if (task === "regression") {
+        const yTrue = APP.train.yTest;
+        const yPred = APP.train.yPred;
+
+        const rm = rmse(yTrue, yPred);
+        const ma = mae(yTrue, yPred);
+        const r = r2(yTrue, yPred);
+        const rl = rmsle(yTrue, yPred);
+
+        $("primaryMetricLabel").textContent = "Test RMSE";
+        $("primaryMetricValue").textContent = formatNum(rm, 6);
+        $("primaryMetricSub").textContent = `MAE=${formatNum(ma,6)} · R²=${formatNum(r,6)} · RMSLE=${rl===null?"n/a":formatNum(rl,6)}`;
+
+        $("secondaryChartTitle").textContent = "Predicted vs true (scatter)";
+        $("secondaryChartPill").textContent = `trees=${trained}${total ? `/${total}` : ""}`;
+        $("secondaryChartHint").textContent = "Updates periodically during training.";
+        renderRegressionScatter(APP.train.yTest, APP.train.yPred);
+
+      } else {
+        const yTrue = APP.train.yTest.map(v => Number(v));
+        const yPred = APP.train.yPred.map(v => Number(v));
+
+        const acc = accuracy(yTrue, yPred);
+        const f1 = f1Macro(yTrue, yPred, pl.target.numClasses || 2);
+
+        $("primaryMetricLabel").textContent = "Test Accuracy";
+        $("primaryMetricValue").textContent = formatNum(acc, 6);
+        $("primaryMetricSub").textContent = `Macro-F1=${formatNum(f1,6)} · Classes=${pl.target.numClasses}`;
+
+        $("secondaryChartTitle").textContent = "Confusion matrix (top classes)";
+        $("secondaryChartPill").textContent = `trees=${trained}${total ? `/${total}` : ""}`;
+        $("secondaryChartHint").textContent = "Updates periodically during training.";
+        renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 15);
+      }
+
+      const mode = $("importanceMode").value;
+      if (hasFi) {
+        if (mode === "derived") renderFIChart(APP.train.fiDerived || [], "importance", "derived");
+        else renderFIChart(APP.train.fiBase || [], "importance", "base");
+      }
+    }
+
     function renderResults() {
       const pl = APP.train.pipeline;
       const task = pl.task;
+
+      $("secondaryPlaceholder").classList.add("hidden");
+      $("fiChartPlaceholder").classList.add("hidden");
 
       const splitMode = effectiveSplitMode();
       const splitText = splitMode === "time"
         ? `time-based (${APP.setup.splitDateCol})`
         : "random";
 
-      $("setupSummary").textContent =
-        `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+      if ($("setupSummary")) {
+        $("setupSummary").textContent =
+          `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+      }
 
-      $("featureSummary").textContent =
-        `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+      if ($("featureSummary")) {
+        $("featureSummary").textContent =
+          `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+      }
+
+      renderResultsSidePanel(task);
 
       $("resultsCallouts").innerHTML = "";
 
@@ -5025,35 +5626,6 @@
       const cur = APP.train.runSummary;
       if (cur?.pruneReason) {
         addCallout("", "Prune applied", escapeHtml(cur.pruneReason));
-      }
-
-      const prev = APP.ui.prevRunSummary;
-      if (prev && prev.runId && cur && cur.runId && prev.runId !== cur.runId && prev.task === cur.task) {
-        const betterIsLower = (cur.task === "regression");
-        const a = Number(prev.test?.primary);
-        const b = Number(cur.test?.primary);
-        const delta = (Number.isFinite(a) && Number.isFinite(b)) ? (b - a) : null;
-        const improved = (delta !== null)
-          ? (betterIsLower ? (delta < 0) : (delta > 0))
-          : null;
-
-        const cls = (improved === null) ? "" : (improved ? "good" : "warn");
-        const deltaTxt = (delta === null) ? "n/a" : `${delta >= 0 ? "+" : ""}${formatNum(delta, 6)}`;
-        const prevTxt = Number.isFinite(a) ? formatNum(a, 6) : "n/a";
-        const curTxt = Number.isFinite(b) ? formatNum(b, 6) : "n/a";
-
-        const oA = Number(prev.oob?.value);
-        const oB = Number(cur.oob?.value);
-        const oDelta = (Number.isFinite(oA) && Number.isFinite(oB)) ? (oB - oA) : null;
-        const oDeltaTxt = (oDelta === null) ? "n/a" : `${oDelta >= 0 ? "+" : ""}${formatNum(oDelta, 6)}`;
-
-        addCallout(cls, "Compare to previous run",
-          `${escapeHtml(cur.test?.primaryLabel || "Test metric")}: <span class="mono">${escapeHtml(curTxt)}</span> (prev <span class="mono">${escapeHtml(prevTxt)}</span>, Δ <span class="mono">${escapeHtml(deltaTxt)}</span>)` +
-          (prev.oob?.label && cur.oob?.label
-            ? `<div style="margin-top:6px;">${escapeHtml(cur.oob.label)}: <span class="mono">${escapeHtml(Number.isFinite(oB) ? formatNum(oB, 6) : "n/a")}</span> (prev <span class="mono">${escapeHtml(Number.isFinite(oA) ? formatNum(oA, 6) : "n/a")}</span>, Δ <span class="mono">${escapeHtml(oDeltaTxt)}</span>)</div>`
-            : "") +
-          `<div style="margin-top:6px;">Columns: included <span class="mono">${cur.includedCols}</span> (prev <span class="mono">${prev.includedCols}</span>) · excluded <span class="mono">${cur.excludedCols}</span> (prev <span class="mono">${prev.excludedCols}</span>)</div>`
-        );
       }
 
       if (task === "regression") {
@@ -5113,6 +5685,7 @@
     // Export
     // ----------------------------
     function buildArtifact() {
+      if (APP.ui.training.isTraining) return null;
       const model = APP.train.model;
       const pipeline = APP.train.pipeline;
       if (!model || !pipeline) return null;
@@ -5270,35 +5843,165 @@ function invertTargetIfNeeded(yPred, artifact){
 `;
     }
 
-    async function updateExportUI() {
+    function buildSampleCodePy(artifact) {
+      const task = String(artifact.task || "unknown");
+      const targetCol = String(artifact.targetCol || artifact.target?.col || "unknown");
+      const transform = String(artifact.targetTransform || "none");
+      const nFeatures = Array.isArray(artifact.derivedFeatureNames) ? artifact.derivedFeatureNames.length : 0;
+      return `"""
+RFG export: rf_artifact.json
+
+This artifact contains:
+- preprocessing metadata (label encoders, medians, date expansion)
+- a random forest model serialized for the JavaScript library:
+    ml-random-forest (trees from ml-cart)
+
+Python note:
+There is no built-in Python loader for this JS model JSON. Use the JS example for
+inference, or retrain an equivalent model in Python (e.g. scikit-learn).
+"""
+
+import json
+from pathlib import Path
+
+# Generated metadata:
+# task=${task}
+# targetCol=${targetCol}
+# targetTransform=${transform}
+# n_features=${nFeatures}
+
+artifact = json.loads(Path("rf_artifact.json").read_text(encoding="utf-8"))
+
+print("task:", artifact.get("task"))
+print("targetCol:", artifact.get("targetCol"))
+print("targetTransform:", artifact.get("targetTransform"))
+print("n_features:", len(artifact.get("derivedFeatureNames", [])))
+
+if artifact.get("task") == "classification":
+  mapping = (artifact.get("target", {}) or {}).get("mapping", {}) or {}
+  print("numClasses:", (artifact.get("target", {}) or {}).get("numClasses"))
+  print("example label mapping:", list(mapping.items())[:5])
+
+raise NotImplementedError(
+  "Model is serialized for ml-random-forest (JavaScript). "
+  "Use the JS example for predictions, or retrain in Python."
+)
+`;
+    }
+
+    function renderExportSampleCode() {
       const artifact = buildArtifact();
       if (!artifact) {
-        $("artifactPill").className = "pill";
-        $("artifactPill").textContent = "Artifact: not ready";
-        $("artifactDetailPill").textContent = "Train a model first";
-        $("downloadZipBtn").disabled = true;
         $("sampleCode").textContent = "";
         return;
       }
+      const lang = (APP.ui.exportLang === "py") ? "py" : "js";
+      $("sampleCode").textContent = (lang === "py") ? buildSampleCodePy(artifact) : buildSampleCode(artifact);
+    }
 
-      $("artifactPill").className = "pill good";
-      $("artifactPill").textContent = "Artifact: ready";
-      $("artifactDetailPill").textContent = `task=${artifact.task} · features=${artifact.derivedFeatureNames.length}`;
-      $("downloadZipBtn").disabled = false;
-      $("sampleCode").textContent = buildSampleCode(artifact);
-      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 4);
+    async function updateExportUI() {
+      const artifact = buildArtifact();
+      if (!artifact) { renderExportSampleCode(); return; }
+      renderExportSampleCode();
+      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 3);
       renderStepper();
     }
 
     // ----------------------------
     // App wiring
     // ----------------------------
+    function syncGlobalContinueBtn() {
+      const btn = $("globalContinueBtn");
+      if (!btn) return;
+
+      const step = APP.step || 0;
+      if (step === 3) {
+        btn.classList.remove("hidden");
+        btn.textContent = "Download";
+        btn.title = "Download rf_artifact.zip";
+        btn.setAttribute("aria-label", "Download rf_artifact.zip");
+        btn.disabled = !Boolean(buildArtifact());
+        return;
+      }
+
+      const next = step + 1;
+      if (next >= STEPS.length) {
+        btn.classList.add("hidden");
+        btn.disabled = true;
+        btn.title = "";
+        btn.setAttribute("aria-label", "Continue");
+        return;
+      }
+
+      btn.classList.remove("hidden");
+      btn.textContent = "Continue";
+      btn.title = `Continue to ${STEPS[next].title}`;
+      btn.setAttribute("aria-label", `Continue to ${STEPS[next].title}`);
+
+      let canContinue = true;
+      if (step === 0) canContinue = (APP.raw.rows.length && APP.raw.columns.length);
+      if (step === 1) canContinue = Boolean(APP.raw.targetCol);
+      if (step === 2) canContinue = Boolean(buildArtifact());
+
+      btn.disabled = !canContinue;
+    }
+
+    function syncGlobalBackBtn() {
+      const btn = $("globalBackBtn");
+      if (!btn) return;
+
+      const step = APP.step || 0;
+      if (step <= 0) {
+        btn.classList.add("hidden");
+        btn.disabled = true;
+        btn.title = "";
+        btn.setAttribute("aria-label", "Back");
+        return;
+      }
+
+      btn.classList.remove("hidden");
+      btn.title = `Back to ${STEPS[step - 1].title}`;
+      btn.setAttribute("aria-label", `Back to ${STEPS[step - 1].title}`);
+      btn.disabled = Boolean(APP.ui.training.isTraining);
+    }
+
+    function syncGlobalStopBtn() {
+      const btn = $("globalStopBtn");
+      if (!btn) return;
+      const isTraining = Boolean(APP.ui.training.isTraining);
+      const showRetrain = (!isTraining && (APP.step === 2) && isModelReady());
+      btn.classList.toggle("hidden", !(isTraining || showRetrain));
+
+      if (isTraining) {
+        btn.className = "btn danger";
+        btn.textContent = "Stop";
+        btn.disabled = Boolean(APP.ui.training.stopRequested);
+        btn.title = "Stop training";
+        btn.setAttribute("aria-label", "Stop training");
+      } else {
+        if (APP.step !== 2) {
+          btn.classList.add("hidden");
+          btn.disabled = true;
+          btn.title = "";
+          btn.setAttribute("aria-label", "Retrain model");
+          return;
+        }
+        btn.className = "btn";
+        btn.textContent = "Retrain";
+        btn.disabled = false;
+        btn.title = "Retrain model";
+        btn.setAttribute("aria-label", "Retrain model");
+      }
+    }
+
     function syncButtons() {
-      $("continueToSetupBtn").disabled = !(APP.raw.rows.length && APP.raw.columns.length);
-      $("continueToTrainBtn").disabled = !APP.raw.targetCol;
       setTrainingUi(APP.ui.training.isTraining);
       updateExportUI();
-      renderTrainChips();
+      if ($("jumpToExportBtn")) $("jumpToExportBtn").disabled = APP.ui.training.isTraining || !APP.train.model || !APP.train.pipeline;
+      syncGlobalContinueBtn();
+      syncGlobalBackBtn();
+      syncGlobalStopBtn();
+      renderStateChips();
     }
 
 	    function hardReset() {
@@ -5308,6 +6011,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.ui.training.diagAbortController = null;
       APP.ui.training.isTraining = false;
       APP.ui.training.stopRequested = false;
+      APP.ui.training.autoStartOnResults = false;
       APP.ui.training.runSeq = 0;
       APP.ui.shiftAutoExpandedRunSeq = 0;
 
@@ -5318,11 +6022,11 @@ function invertTargetIfNeeded(yPred, artifact){
         splitDateCol: null,
         splitMethod: "cutoff",
         cutoffDate: "",
-        splitStrategy: "random",
+        splitStrategy: "stratified",
         testFrac: 0.1,
-        taskMode: "auto",
+	        taskMode: "regression",
         targetTransform: "none",
-        maxRows: 50000,
+        maxRows: 1000,
         maxCard: 50,
         forceDate: "",
         forceCat: "",
@@ -5351,6 +6055,7 @@ function invertTargetIfNeeded(yPred, artifact){
           },
         },
       };
+      resetStateChips({ clearValues: true });
       syncHiddenTypingLists();
       APP.train = {
         rfOptions: null,
@@ -5378,11 +6083,12 @@ function invertTargetIfNeeded(yPred, artifact){
         shift: null,
         dropped: { unusableTargetRows: 0, unseenTestLabels: 0, sampledRows: 0, usableRows: 0 }
       };
-      APP.ui.predPage = 0;
-      APP.ui.predFilter = "";
-      APP.ui.previewFilter = "";
-      APP.ui.prevRunSummary = null;
-      APP.ui.pruneUndoExcluded = null;
+	      APP.ui.predPage = 0;
+	      APP.ui.predFilter = "";
+	      APP.ui.previewFilter = "";
+	      APP.ui.showAdvancedSettings = false;
+	      APP.ui.prevRunSummary = null;
+	      APP.ui.pruneUndoExcluded = null;
       APP.ui.pruneUndoReason = "";
       APP.ui.pruneJustApplied = false;
       APP.ui.maxUnlockedStep = 0;
@@ -5397,7 +6103,6 @@ function invertTargetIfNeeded(yPred, artifact){
 
       hide($("uploadSummary"));
       show($("dropZone"));
-      $("uploadStatus").innerHTML = "";
       $("previewTable").innerHTML = "";
       if ($("targetSearch")) $("targetSearch").value = "";
       $("predTable").innerHTML = "";
@@ -5422,17 +6127,18 @@ function invertTargetIfNeeded(yPred, artifact){
       $("testFrac").value = "0.1";
       $("cutoffDate").value = "";
       $("seed").value = "42";
-      $("maxRows").value = "50000";
+      $("maxRows").value = "1000";
       $("maxCard").value = "50";
       $("nEstimators").value = "100";
       $("maxFeatures").value = "1.0";
       $("maxDepth").value = "20";
       $("minNumSamples").value = "10";
       $("replacement").value = "false";
-      $("taskMode").value = "auto";
+	      $("taskMode").value = "regression";
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";
-      $("splitStrategy").value = "random";
+      $("splitStrategy").value = "stratified";
+      delete $("splitStrategy").dataset.userSet;
       $("predTopK").value = "30";
       $("predFilter").value = "";
       $("pageSize").value = "50";
@@ -5460,17 +6166,19 @@ function invertTargetIfNeeded(yPred, artifact){
       gotoStep(0);
     }
 
-    function resetForNewFile() {
-      const taskModeRaw = $("taskMode").value;
-      const taskMode =
-        (taskModeRaw === "auto" || taskModeRaw === "regression" || taskModeRaw === "classification")
-          ? taskModeRaw
-          : "auto";
+	    function resetForNewFile() {
+	      const taskModeRaw = $("taskMode").value;
+	      const taskMode =
+	        (taskModeRaw === "regression" || taskModeRaw === "classification")
+	          ? taskModeRaw
+	          : "regression";
+      const splitStrategyUserSet = $("splitStrategy").dataset.userSet === "true";
       const prefs = {
         testFrac: parseNum($("testFrac").value) || 0.1,
         splitMethod: $("splitMethod").value || "cutoff",
         cutoffDate: $("cutoffDate").value || "",
-        splitStrategy: $("splitStrategy").value || "random",
+        splitStrategy: $("splitStrategy").value || "stratified",
+        splitStrategyUserSet,
         taskMode,
         targetTransform: $("targetTransform").value,
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
@@ -5502,6 +6210,8 @@ function invertTargetIfNeeded(yPred, artifact){
       $("splitMethod").value = APP.setup.splitMethod;
       $("cutoffDate").value = APP.setup.cutoffDate;
       $("splitStrategy").value = APP.setup.splitStrategy;
+      if (prefs.splitStrategyUserSet) $("splitStrategy").dataset.userSet = "true";
+      else delete $("splitStrategy").dataset.userSet;
       $("taskMode").value = taskMode;
       $("targetTransform").value = prefs.targetTransform;
       $("maxRows").value = String(APP.setup.maxRows);
@@ -5516,7 +6226,7 @@ function invertTargetIfNeeded(yPred, artifact){
 
     function handleParsed(rows, cols, fileName) {
       if (!rows.length || !cols.length) {
-        $("uploadStatus").innerHTML = `<span class="pill bad">Parse failed</span><span class="muted2">No rows/columns found.</span>`;
+        showToast("Parse failed: no rows/columns found.", "bad");
         return;
       }
 
@@ -5530,22 +6240,14 @@ function invertTargetIfNeeded(yPred, artifact){
       applyDefaultColumnExclusions();
       recomputeColumnMeta();
 
-      $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
-      $("dsShapePill").textContent = `${rows.length} rows · ${cols.length} cols`;
-
       APP.ui.previewFilter = "";
       renderPreviewTable(rows, cols);
       bindPreviewTargetPicker();
 
       hide($("dropZone"));
       show($("uploadSummary"));
-      $("uploadStatus").innerHTML =
-        `<span class="pill">Pick a target</span>` +
-        `<span class="muted2">Pick the column you want to predict (click a header or use search).</span>`;
 
       $("targetSearch").value = "";
-
-      $("continueToSetupBtn").disabled = false;
 
       APP.raw.targetCol = null;
       renderTargetSelect();
@@ -5559,7 +6261,6 @@ function invertTargetIfNeeded(yPred, artifact){
       if (!file) return;
 
       const parseSeq = (APP.ui.parseSeq = (APP.ui.parseSeq || 0) + 1);
-      $("uploadStatus").innerHTML = `<span class="spinner"></span><span class="muted2">Parsing <span class="mono">${escapeHtml(file.name)}</span>…</span>`;
 
       Papa.parse(file, {
         header: true,
@@ -5574,7 +6275,7 @@ function invertTargetIfNeeded(yPred, artifact){
         },
         error: (err) => {
           if (parseSeq !== APP.ui.parseSeq) return;
-          $("uploadStatus").innerHTML = `<span class="pill bad">Parse error</span><span class="mono">${escapeHtml(err?.message || String(err))}</span>`;
+          showToast(`Parse error: ${err?.message || String(err)}`, "bad");
         }
       });
     }
@@ -5645,8 +6346,7 @@ function invertTargetIfNeeded(yPred, artifact){
     // ----------------------------
     // Events
     // ----------------------------
-    $("hwBadge").textContent = `🧠 CPU threads: ${navigator.hardwareConcurrency || "?"}`;
-    $("resetAllBtn").addEventListener("click", hardReset);
+    $("resetAllBtn")?.addEventListener("click", hardReset);
 
     $("browseBtn").addEventListener("click", () => $("fileInput").click());
     $("fileInput").addEventListener("change", (e) => {
@@ -5722,37 +6422,106 @@ function invertTargetIfNeeded(yPred, artifact){
       setGlobalDropOverlayVisible(false);
     });
 
-    $("continueToSetupBtn").addEventListener("click", () => {
-      renderTargetSelect();
-      refreshSplitDateCol();
-      syncSetupUI();
-      renderColumnTable();
-      gotoStep(1);
+    $("globalContinueBtn").addEventListener("click", () => {
+      const btn = $("globalContinueBtn");
+      if (!btn || btn.disabled) return;
+      if (APP.step === 0) {
+        renderTargetSelect();
+        refreshSplitDateCol();
+        syncSetupUI();
+        renderColumnTable();
+        gotoStep(1);
+        return;
+      }
+
+      if (APP.step === 1) {
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
+        if (!isModelReady()) {
+          APP.ui.training.completedUnits = 0;
+          APP.ui.training.totalUnits = 0;
+          APP.ui.training.stopRequested = false;
+          APP.ui.training.autoStartOnResults = true;
+        } else {
+          APP.ui.training.autoStartOnResults = false;
+        }
+        gotoStep(2);
+        return;
+      }
+
+      if (APP.step === 2) {
+        gotoStep(3);
+        return;
+      }
+
+      if (APP.step === 3) {
+        downloadArtifactZip();
+        return;
+      }
     });
 
-    $("backToUploadBtn").addEventListener("click", () => gotoStep(0));
-    $("continueToTrainBtn").addEventListener("click", () => gotoStep(2));
-    $("backToSetupBtn").addEventListener("click", () => gotoStep(1));
-    $("backToTrainBtn").addEventListener("click", () => gotoStep(2));
-    $("jumpToExportBtn").addEventListener("click", () => gotoStep(4));
-    $("backToResultsBtn").addEventListener("click", () => gotoStep(3));
+    $("jumpToExportBtn")?.addEventListener("click", () => gotoStep(3));
+
+    $("globalBackBtn").addEventListener("click", () => {
+      const btn = $("globalBackBtn");
+      if (!btn || btn.disabled) return;
+      const prev = (APP.step || 0) - 1;
+      if (prev < 0) return;
+      gotoStep(prev);
+    });
+
+    $("globalStopBtn").addEventListener("click", () => {
+      const btn = $("globalStopBtn");
+      if (!btn || btn.disabled) return;
+      if (APP.ui.training.isTraining) {
+        requestStopTraining();
+        return;
+      }
+      if (APP.step !== 2) return;
+      if (!isModelReady()) return;
+      APP.ui.training.completedUnits = 0;
+      APP.ui.training.totalUnits = 0;
+      APP.ui.training.stopRequested = false;
+      renderResultsPlaceholders();
+      trainModel();
+    });
+
+    $("toggleAdvancedSettingsBtn")?.addEventListener("click", () => {
+      APP.ui.showAdvancedSettings = !APP.ui.showAdvancedSettings;
+      syncSetupUI();
+      syncButtons();
+    });
+
+    function setExportLang(lang) {
+      APP.ui.exportLang = (lang === "py") ? "py" : "js";
+      const jsBtn = $("exportLangJsBtn");
+      const pyBtn = $("exportLangPyBtn");
+      if (jsBtn) {
+        jsBtn.classList.toggle("active", APP.ui.exportLang === "js");
+        jsBtn.setAttribute("aria-selected", APP.ui.exportLang === "js" ? "true" : "false");
+      }
+      if (pyBtn) {
+        pyBtn.classList.toggle("active", APP.ui.exportLang === "py");
+        pyBtn.setAttribute("aria-selected", APP.ui.exportLang === "py" ? "true" : "false");
+      }
+      renderExportSampleCode();
+    }
+
+    $("exportLangJsBtn")?.addEventListener("click", () => setExportLang("js"));
+    $("exportLangPyBtn")?.addEventListener("click", () => setExportLang("py"));
 
     $("targetSelect").addEventListener("change", () => {
       APP.raw.targetCol = $("targetSelect").value;
       if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
-      if (APP.raw.targetCol) {
-        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
-        renderStepper();
-      }
       recomputeColumnMeta();
       if (APP.raw.targetCol) {
-        const taskModeRaw = $("taskMode")?.value || APP.setup.taskMode || "auto";
-        const taskMode =
-          (taskModeRaw === "auto" || taskModeRaw === "regression" || taskModeRaw === "classification")
-            ? taskModeRaw
-            : "auto";
-        APP.setup.taskMode = taskMode;
-        $("taskMode").value = taskMode;
+        const mode = defaultTaskModeForTarget(APP.raw.rows, APP.raw.targetCol, APP.raw.colMeta);
+        APP.setup.taskMode = mode;
+        if ($("taskMode")) $("taskMode").value = mode;
+        updateStateChip("target", { value: APP.raw.targetCol, visible: true });
+        updateStateChip("task", { value: mode, visible: true });
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
       }
       applyAutoTrainDefaults();
       refreshSplitDateCol();
@@ -5769,7 +6538,7 @@ function invertTargetIfNeeded(yPred, artifact){
     $("taskMode").addEventListener("change", () => {
       APP.setup.taskMode = $("taskMode").value;
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
       applyAutoTrainDefaults();
     });
 
@@ -5785,39 +6554,40 @@ function invertTargetIfNeeded(yPred, artifact){
     });
 
     $("splitStrategy").addEventListener("change", () => {
+      $("splitStrategy").dataset.userSet = "true";
       APP.setup.splitStrategy = $("splitStrategy").value || "random";
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("splitDateCol").addEventListener("change", () => {
       APP.setup.splitDateCol = $("splitDateCol").value;
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("splitMethod").addEventListener("change", () => {
       APP.setup.splitMethod = $("splitMethod").value;
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("cutoffDate").addEventListener("change", () => {
       APP.setup.cutoffDate = $("cutoffDate").value || "";
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("testFrac").addEventListener("change", () => {
       APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("topNEnable").addEventListener("change", () => {
       APP.setup.multiClass.topN.enabled = Boolean($("topNEnable").checked);
       syncAdvancedTargetUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("topNKeep").addEventListener("change", () => {
@@ -5825,7 +6595,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.setup.multiClass.topN.keep = v;
       $("topNKeep").value = String(v);
       syncAdvancedTargetUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("derivedTargetColName").addEventListener("input", () => {
@@ -5852,7 +6622,7 @@ function invertTargetIfNeeded(yPred, artifact){
     $("undoDerivedTargetBtn").addEventListener("click", () => {
       undoDerivedTarget();
       syncAdvancedTargetUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     let typingDebounce = null;
@@ -5904,8 +6674,6 @@ function invertTargetIfNeeded(yPred, artifact){
       });
     });
 
-    $("trainBtn").addEventListener("click", trainModel);
-    $("stopBtn").addEventListener("click", requestStopTraining);
 
     window.addEventListener("pagehide", (e) => {
       if (e.persisted) return;
@@ -5974,11 +6742,13 @@ function invertTargetIfNeeded(yPred, artifact){
       downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "test_predictions.csv");
     });
 
-    $("downloadZipBtn").addEventListener("click", async () => {
+    async function downloadArtifactZip() {
       const artifact = buildArtifact();
       if (!artifact) return;
 
-      const sample = $("sampleCode").textContent || "";
+      const sampleJs = buildSampleCode(artifact);
+      const samplePy = buildSampleCodePy(artifact);
+      if ($("sampleCode") && !$("sampleCode").textContent) renderExportSampleCode();
       const predCsv = APP.train.model ? buildPredictionsCsv() : "";
 
       const readme = `# Random Forest Artifact
@@ -6001,14 +6771,15 @@ Compatibility
 
       const zip = new JSZip();
       zip.file("rf_artifact.json", JSON.stringify(artifact, null, 2));
-      zip.file("use_model.js", sample);
+      zip.file("use_model.js", sampleJs);
+      zip.file("use_model.py", samplePy);
       zip.file("test_predictions.csv", predCsv);
       zip.file("README.md", readme);
 
       const blob = await zip.generateAsync({ type: "blob" });
       downloadBlob(blob, "rf_artifact.zip");
       showToast("Downloading rf_artifact.zip", "good");
-    });
+    }
 
     // Keyboard: Return = "next step" (via training)
     window.addEventListener("keydown", (e) => {
@@ -6020,47 +6791,43 @@ Compatibility
       if (APP.ui.training.isTraining) return;
 
       if (APP.step === 0) {
-        if ($("continueToSetupBtn")?.disabled) return;
+        if ($("globalContinueBtn")?.disabled) return;
         e.preventDefault();
-        gotoStep(1);
+        $("globalContinueBtn").click();
         return;
       }
 
       if (APP.step === 1) {
-        if ($("continueToTrainBtn")?.disabled) return;
+        if ($("globalContinueBtn")?.disabled) return;
         e.preventDefault();
-        gotoStep(2);
+        $("globalContinueBtn").click();
         return;
       }
 
       if (APP.step === 2) {
-        if ($("trainBtn")?.disabled) return;
+        if ($("globalContinueBtn")?.disabled) return;
         e.preventDefault();
-        trainModel();
+        $("globalContinueBtn").click();
         return;
       }
 
       if (APP.step === 3) {
+        if (!buildArtifact()) return;
         e.preventDefault();
-        gotoStep(4);
-        return;
-      }
-
-      if (APP.step === 4) {
-        if ($("downloadZipBtn")?.disabled) return;
-        e.preventDefault();
-        $("downloadZipBtn").click();
+        downloadArtifactZip();
       }
     });
 
     // ----------------------------
     // Init
     // ----------------------------
+    disableChartAnimations();
     renderStepper();
 
     hardReset();
 
     syncButtons();
+    setExportLang(APP.ui.exportLang);
   </script>
 </body>
 </html>

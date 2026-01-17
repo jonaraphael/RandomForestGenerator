@@ -2683,7 +2683,7 @@
       const el = $("stateChips");
       if (!el) return;
 
-      if (!APP.raw.rows.length) {
+      if (!APP.raw.rows.length || APP.step === 0) {
         el.innerHTML = "";
         el.classList.add("hidden");
         return;
@@ -2699,14 +2699,13 @@
       if (APP.raw.fileName) add("File", APP.raw.fileName);
       if (APP.raw.rows.length && APP.raw.columns.length) add("Data", `${APP.raw.rows.length} rows · ${APP.raw.columns.length} cols`);
 
-      if (APP.raw.targetCol) add("Target", APP.raw.targetCol);
-
-      if (APP.raw.targetCol) {
+      if (APP.step > 1 && APP.raw.targetCol) {
+        add("Target", APP.raw.targetCol);
         const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
         add("Task", task);
       }
 
-      if (APP.ui.maxUnlockedStep >= 2) {
+      if (APP.step > 1) {
         const splitMode = effectiveSplitMode();
         if (splitMode === "time") {
           const method = $("splitMethod")?.value || "cutoff";

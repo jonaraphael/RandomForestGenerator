@@ -825,13 +825,26 @@
 	                </div>
 	              </div>
 
-	              <div class="field hidden" id="cutoffField" style="margin-top:10px;">
-	                <label for="cutoffDate" title="For time split with cutoff: rows before this date train the model; rows on/after this date are used for testing.">Cutoff date</label>
-	                <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
-	              </div>
+		              <div class="field hidden" id="cutoffField" style="margin-top:10px;">
+		                <label for="cutoffDate" title="For time split with cutoff: rows before this date train the model; rows on/after this date are used for testing.">Cutoff date</label>
+		                <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
+		              </div>
 
-	              <div id="splitPreview" class="callout hidden" style="margin-top:10px;"></div>
-	            </div>
+		              <div id="timeCutoffPicker" class="hidden" style="margin-top:10px;">
+		                <div class="muted2" style="margin-bottom:8px;">Pick a cutoff date visually</div>
+		                <div class="chartBox" style="height:180px;">
+		                  <canvas id="timeCutoffChart"></canvas>
+		                  <div id="timeCutoffPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Building date histogram…</div>
+		                </div>
+		                <div class="field" style="margin-top:10px;">
+		                  <label for="timeCutoffSlider" title="Choose where to cut the timeline into train (earlier) vs test (later). Higher values mean more training data and a smaller test set.">Cutoff percentile</label>
+		                  <input id="timeCutoffSlider" type="range" min="1" max="99" step="1" value="90" />
+		                  <div class="muted2" id="timeCutoffHint">—</div>
+		                </div>
+		              </div>
+
+		              <div id="splitPreview" class="callout hidden" style="margin-top:10px;"></div>
+		            </div>
 
 	            <div class="groupBox" id="hyperparametersGroupBox" style="margin-top:12px;">
 	              <div class="groupTitle">Hyperparameters</div>
@@ -1286,14 +1299,15 @@
         shift: null,
         dropped: { unusableTargetRows: 0, unseenTestLabels: 0, sampledRows: 0, usableRows: 0 }
       },
-      ui: {
-        charts: {
-          fi: null,
-          secondary: null,
-          shift: null,
-          errUnc: null,
-          targetPreview: null,
-        },
+	      ui: {
+	        charts: {
+	          fi: null,
+	          secondary: null,
+	          shift: null,
+	          errUnc: null,
+	          targetPreview: null,
+	          timeCutoff: null,
+	        },
 	        chips: {
 	          order: [
 	            "file",
@@ -1358,6 +1372,8 @@
         shiftAutoExpandedRunSeq: 0,
         prevRunSummary: null,
         runHistory: [],
+        timeCutoffCache: null,
+        timeCutoffRaf: 0,
         pruneUndoExcluded: null,
         pruneUndoReason: "",
         pruneJustApplied: false,
@@ -1717,12 +1733,14 @@
       APP.train.fiBase = [];
       APP.train.shift = null;
 
-      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
-      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
-      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
-      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
-      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
-    }
+	      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+	      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+	      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+	      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+	      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+	      APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+	      APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+	    }
 
     function downloadBlob(blob, filename) {
       const url = URL.createObjectURL(blob);
@@ -2429,11 +2447,16 @@
 	        hide(c);
 	      }
 
-        renderTrainingPresetButtons();
-	      syncAdvancedTargetUI();
-	      updateSplitPreview();
-        renderTargetPreview();
-	    }
+	        renderTrainingPresetButtons();
+		      syncAdvancedTargetUI();
+		      renderTimeCutoffPicker();
+		      const splitModeAfter = effectiveSplitMode();
+		      const splitMethodAfter = $("splitMethod")?.value || "cutoff";
+		      const cutoffAfter = $("cutoffDate")?.value || "";
+		      $("testFrac").disabled = !showAdv || !(splitModeAfter === "random" || (splitModeAfter === "time" && splitMethodAfter === "fraction") || (splitModeAfter === "time" && splitMethodAfter === "cutoff" && !cutoffAfter));
+		      updateSplitPreview();
+	        renderTargetPreview();
+		    }
 
     // ----------------------------
     // Advanced target options (multi-class classification)
@@ -3866,14 +3889,15 @@
       return d.toISOString().slice(0, 10);
     }
 
-    function updateSplitPreview() {
-      const callout = $("splitPreview");
-      if (!callout) return;
-      if (!APP.ui.showAdvancedSettings) {
-        callout.className = "callout hidden";
-        callout.innerHTML = "";
-        return;
-      }
+	    function updateSplitPreview() {
+	      const callout = $("splitPreview");
+	      if (!callout) return;
+	      const allowWhenCollapsed = (effectiveSplitMode() === "time");
+	      if (!APP.ui.showAdvancedSettings && !allowWhenCollapsed) {
+	        callout.className = "callout hidden";
+	        callout.innerHTML = "";
+	        return;
+	      }
 
       const rows = APP.raw.rows || [];
       const targetCol = APP.raw.targetCol;
@@ -4029,17 +4053,305 @@
         : "";
 
       callout.className = `callout${warn ? " warn" : ""}`;
-      callout.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
-        <div>Train rows ≈ <span class="mono">${formatPreviewCount(trainCount)}</span> / Test rows ≈ <span class="mono">${formatPreviewCount(testCount)}</span></div>
-        <div class="muted2">Based on ${formatPreviewCount(previewRows)} sampled rows${maxRowsNote}${droppedTargets ? ` (${formatPreviewCount(droppedTargets)} dropped)` : ""}.</div>
-        ${detailHtml}
-        ${warnNote}`;
-    }
+	      callout.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
+	        <div>Train rows ≈ <span class="mono">${formatPreviewCount(trainCount)}</span> / Test rows ≈ <span class="mono">${formatPreviewCount(testCount)}</span></div>
+	        <div class="muted2">Based on ${formatPreviewCount(previewRows)} sampled rows${maxRowsNote}${droppedTargets ? ` (${formatPreviewCount(droppedTargets)} dropped)` : ""}.</div>
+	        ${detailHtml}
+	        ${warnNote}`;
+	    }
 
-    function renderTargetPreview() {
-      const field = $("targetPreviewField");
-      const canvas = $("targetPreviewChart");
-      const pill = $("targetPreviewPill");
+	    function buildTimeSplitTimestampSample({ maxPoints = 5000 } = {}) {
+	      const splitMode = effectiveSplitMode();
+	      if (splitMode !== "time") return { dateCol: null, timestamps: [] };
+	      const dateCol = $("splitDateCol")?.value || APP.setup.splitDateCol || null;
+	      if (!dateCol) return { dateCol: null, timestamps: [] };
+
+	      const rows = APP.raw.rows || [];
+	      if (!rows.length) return { dateCol, timestamps: [] };
+
+	      const seed = Math.floor(parseNum($("seed")?.value) || 42);
+	      const maxRowsSetting = Math.max(0, Math.floor(parseNum($("maxRows")?.value) || 0));
+	      const baseIdx = sampleRowIndices(rows.length, maxRowsSetting, seed, "time");
+	      const idx = (baseIdx.length > maxPoints)
+	        ? (() => {
+	          const out = [];
+	          const step = baseIdx.length / maxPoints;
+	          for (let i = 0; i < maxPoints; i++) out.push(baseIdx[Math.floor(i * step)]);
+	          return out;
+	        })()
+	        : baseIdx;
+
+	      const timestamps = [];
+	      for (const i of idx) {
+	        const d = parseDate(rows[i]?.[dateCol]);
+	        if (!d) continue;
+	        const t = d.getTime();
+	        if (Number.isFinite(t)) timestamps.push(t);
+	      }
+	      timestamps.sort((a, b) => a - b);
+	      return { dateCol, timestamps };
+	    }
+
+	    function lowerBound(arr, x) {
+	      let lo = 0;
+	      let hi = arr.length;
+	      while (lo < hi) {
+	        const mid = (lo + hi) >> 1;
+	        if (arr[mid] < x) lo = mid + 1;
+	        else hi = mid;
+	      }
+	      return lo;
+	    }
+
+	    function cutoffMsFromPercentile(timestamps, pct) {
+	      const n = timestamps.length;
+	      if (!n) return null;
+	      const p = Math.max(1, Math.min(99, Math.floor(Number(pct) || 0)));
+	      const idx = Math.max(0, Math.min(n - 1, Math.round((p / 100) * (n - 1))));
+	      return timestamps[idx];
+	    }
+
+	    function percentileFromCutoffMs(timestamps, cutoffMs) {
+	      const n = timestamps.length;
+	      if (!n || !Number.isFinite(cutoffMs)) return null;
+	      const idx = lowerBound(timestamps, cutoffMs);
+	      if (n <= 1) return 50;
+	      const p = Math.round(100 * (idx / (n - 1)));
+	      return Math.max(1, Math.min(99, p));
+	    }
+
+	    function parseCutoffDateToMs(cutoffStr) {
+	      const s = normStr(cutoffStr);
+	      if (!s) return null;
+	      const d = new Date(`${s}T00:00:00`);
+	      const t = d.getTime();
+	      return Number.isFinite(t) ? t : null;
+	    }
+
+	    function formatIsoDateFromMs(ms) {
+	      if (!Number.isFinite(ms)) return "";
+	      const d = new Date(ms);
+	      if (!Number.isFinite(d.getTime())) return "";
+	      const y = d.getFullYear();
+	      const m = String(d.getMonth() + 1).padStart(2, "0");
+	      const day = String(d.getDate()).padStart(2, "0");
+	      return `${y}-${m}-${day}`;
+	    }
+
+	    function timeCutoffCacheKey() {
+	      const splitMode = effectiveSplitMode();
+	      if (splitMode !== "time") return "";
+	      const dateCol = $("splitDateCol")?.value || APP.setup.splitDateCol || "";
+	      const rowsN = APP.raw.rows?.length || 0;
+	      const seed = Math.floor(parseNum($("seed")?.value) || 42);
+	      const maxRowsSetting = Math.max(0, Math.floor(parseNum($("maxRows")?.value) || 0));
+	      return `${APP.ui.parseSeq || 0}|${dateCol}|${rowsN}|${seed}|${maxRowsSetting}`;
+	    }
+
+	    function renderTimeCutoffPicker() {
+	      const wrap = $("timeCutoffPicker");
+	      const canvas = $("timeCutoffChart");
+	      const placeholder = $("timeCutoffPlaceholder");
+	      const slider = $("timeCutoffSlider");
+	      const hint = $("timeCutoffHint");
+	      if (!wrap || !canvas || !slider || !hint || !placeholder) return;
+
+	      const splitMode = effectiveSplitMode();
+	      const splitMethod = $("splitMethod")?.value || "cutoff";
+	      const show = (splitMode === "time" && splitMethod === "cutoff");
+	      wrap.classList.toggle("hidden", !show);
+	      if (!show) {
+	        placeholder.classList.add("hidden");
+	        hint.textContent = "—";
+	        slider.disabled = true;
+	        APP.ui.timeCutoffCache = null;
+	        if (APP.ui.timeCutoffRaf) cancelAnimationFrame(APP.ui.timeCutoffRaf);
+	        APP.ui.timeCutoffRaf = 0;
+	        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+	        return;
+	      }
+
+	      const key = timeCutoffCacheKey();
+	      let cache = APP.ui.timeCutoffCache;
+	      const cacheHit = Boolean(cache && cache.key === key);
+	      if (!cacheHit) {
+	        placeholder.classList.remove("hidden");
+	        const built = buildTimeSplitTimestampSample({ maxPoints: 7000 });
+	        placeholder.classList.add("hidden");
+
+	        const timestamps = built.timestamps || [];
+	        const dateCol = built.dateCol || null;
+
+	        if (!dateCol) {
+	          APP.ui.timeCutoffCache = null;
+	          hint.textContent = "Pick a time column to enable the cutoff picker.";
+	          slider.disabled = true;
+	          APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+	          return;
+	        }
+
+	        if (timestamps.length < 2) {
+	          APP.ui.timeCutoffCache = null;
+	          hint.textContent = `No parseable dates found in "${dateCol}". Try forcing a date type or pick a different column.`;
+	          slider.disabled = true;
+	          APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+	          return;
+	        }
+
+	        const nBins = Math.min(30, Math.max(10, Math.round(Math.sqrt(timestamps.length))));
+	        const min = timestamps[0];
+	        const max = timestamps[timestamps.length - 1];
+	        const span = Math.max(1, max - min);
+	        const binW = span / nBins;
+	        const counts = new Array(nBins).fill(0);
+	        const labels = new Array(nBins).fill("");
+	        for (let b = 0; b < nBins; b++) labels[b] = formatPreviewDate(min + (b * binW));
+
+	        for (const t of timestamps) {
+	          const b = Math.min(nBins - 1, Math.max(0, Math.floor((t - min) / binW)));
+	          counts[b]++;
+	        }
+
+	        cache = { key, dateCol, timestamps, nBins, min, binW, labels, counts };
+	        APP.ui.timeCutoffCache = cache;
+	        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+	      }
+
+	      slider.disabled = false;
+
+	      const { dateCol, timestamps, nBins, min, binW, labels, counts } = cache;
+	      const cutoffEl = $("cutoffDate");
+	      const currentCutoffStr = cutoffEl ? (cutoffEl.value || "") : (APP.setup.cutoffDate || "");
+	      const currentCutoffMs = parseCutoffDateToMs(currentCutoffStr);
+
+	      let sliderPct = (currentCutoffMs !== null)
+	        ? percentileFromCutoffMs(timestamps, currentCutoffMs)
+	        : null;
+
+	      if (sliderPct === null) {
+	        const testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac")?.value) || 0.1));
+	        sliderPct = Math.max(1, Math.min(99, Math.round(100 * (1 - testFrac))));
+	      }
+
+	      slider.value = String(sliderPct);
+	      const cutoffMs = cutoffMsFromPercentile(timestamps, sliderPct);
+	      const cutoffStr = formatIsoDateFromMs(cutoffMs);
+
+	      if (cutoffEl && !normStr(currentCutoffStr) && cutoffStr) {
+	        cutoffEl.value = cutoffStr;
+	        APP.setup.cutoffDate = cutoffStr;
+	      }
+
+	      const trainCount = lowerBound(timestamps, cutoffMs);
+	      const testCount = timestamps.length - trainCount;
+	      hint.textContent = `Cutoff: ${cutoffStr} · Train ≈ ${formatPreviewCount(trainCount)} / Test ≈ ${formatPreviewCount(testCount)} (date rows sampled=${formatPreviewCount(timestamps.length)})`;
+
+	      const colors = new Array(nBins).fill("");
+	      for (let b = 0; b < nBins; b++) {
+	        const mid = (min + (b * binW)) + (binW / 2);
+	        colors[b] = (mid < cutoffMs) ? "rgba(139,92,246,0.22)" : "rgba(139,92,246,0.08)";
+	      }
+
+	      const ctx = canvas.getContext("2d");
+	      if (!ctx) return;
+	      if (!APP.ui.charts.timeCutoff) {
+	        APP.ui.charts.timeCutoff = new Chart(ctx, {
+	          type: "bar",
+	          data: {
+	            labels,
+	            datasets: [{
+	              label: "Rows (sampled)",
+	              data: counts,
+	              backgroundColor: colors,
+	              borderColor: "rgba(139,92,246,0.35)",
+	              borderWidth: 1,
+	            }],
+	          },
+	          options: {
+	            responsive: true,
+	            maintainAspectRatio: false,
+	            plugins: {
+	              legend: { display: false },
+	              tooltip: {
+	                callbacks: {
+	                  title: (items) => items?.[0]?.label || "",
+	                },
+	              },
+	            },
+	            scales: {
+	              x: {
+	                ticks: { autoSkip: true, maxRotation: 0 },
+	                grid: { display: false },
+	              },
+	              y: {
+	                beginAtZero: true,
+	                ticks: { precision: 0 },
+	                grid: { color: "rgba(234,240,255,0.08)" },
+	              },
+	            },
+	          },
+	        });
+	      } else {
+	        APP.ui.charts.timeCutoff.data.labels = labels;
+	        APP.ui.charts.timeCutoff.data.datasets[0].data = counts;
+	        APP.ui.charts.timeCutoff.data.datasets[0].backgroundColor = colors;
+	        APP.ui.charts.timeCutoff.update("none");
+	      }
+	    }
+
+	    function updateTimeCutoffFromSlider() {
+	      const slider = $("timeCutoffSlider");
+	      const hint = $("timeCutoffHint");
+	      if (!slider || !hint) return;
+	      const splitMode = effectiveSplitMode();
+	      const splitMethod = $("splitMethod")?.value || "cutoff";
+	      if (!(splitMode === "time" && splitMethod === "cutoff")) return;
+
+	      const key = timeCutoffCacheKey();
+	      const cache = APP.ui.timeCutoffCache;
+	      if (!cache || cache.key !== key || !Array.isArray(cache.timestamps) || cache.timestamps.length < 2) {
+	        renderTimeCutoffPicker();
+	        return;
+	      }
+
+	      const pct = Math.max(1, Math.min(99, Math.floor(parseNum(slider.value) || 0)));
+	      const cutoffMs = cutoffMsFromPercentile(cache.timestamps, pct);
+	      const cutoffStr = formatIsoDateFromMs(cutoffMs);
+	      if (!cutoffStr) return;
+
+	      const cutoffEl = $("cutoffDate");
+	      if (cutoffEl) cutoffEl.value = cutoffStr;
+	      APP.setup.cutoffDate = cutoffStr;
+	      markSetupDirty();
+
+	      const trainCount = lowerBound(cache.timestamps, cutoffMs);
+	      const testCount = cache.timestamps.length - trainCount;
+	      hint.textContent = `Cutoff: ${cutoffStr} · Train ≈ ${formatPreviewCount(trainCount)} / Test ≈ ${formatPreviewCount(testCount)} (date rows sampled=${formatPreviewCount(cache.timestamps.length)})`;
+
+	      const nBins = cache.nBins;
+	      const colors = new Array(nBins).fill("");
+	      for (let b = 0; b < nBins; b++) {
+	        const mid = (cache.min + (b * cache.binW)) + (cache.binW / 2);
+	        colors[b] = (mid < cutoffMs) ? "rgba(139,92,246,0.22)" : "rgba(139,92,246,0.08)";
+	      }
+
+	      if (APP.ui.charts.timeCutoff) {
+	        APP.ui.charts.timeCutoff.data.datasets[0].backgroundColor = colors;
+	        APP.ui.charts.timeCutoff.update("none");
+	      }
+
+	      if (APP.ui.timeCutoffRaf) cancelAnimationFrame(APP.ui.timeCutoffRaf);
+	      APP.ui.timeCutoffRaf = requestAnimationFrame(() => {
+	        APP.ui.timeCutoffRaf = 0;
+	        updateSplitPreview();
+	        renderStateChips();
+	      });
+	    }
+
+	    function renderTargetPreview() {
+	      const field = $("targetPreviewField");
+	      const canvas = $("targetPreviewChart");
+	      const pill = $("targetPreviewPill");
       const placeholder = $("targetPreviewPlaceholder");
       const hintRow = $("targetPreviewHintRow");
       const hintText = $("targetPreviewHintText");
@@ -7091,16 +7403,19 @@ raise NotImplementedError(
 	      APP.ui.setupDirty = false;
 	      APP.ui.prevRunSummary = null;
 	      APP.ui.runHistory = [];
+	      APP.ui.timeCutoffCache = null;
+	      APP.ui.timeCutoffRaf = 0;
 	      APP.ui.pruneUndoExcluded = null;
 	      APP.ui.pruneUndoReason = "";
 	      APP.ui.pruneJustApplied = false;
 	      APP.ui.maxUnlockedStep = 0;
 
-      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
-      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
-      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
-      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
-      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+	      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+	      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+	      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+	      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+	      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+	      APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
 
       $("trainStatus").innerHTML = "";
 	      setTrainingUi(false);
@@ -7589,16 +7904,23 @@ raise NotImplementedError(
       renderStateChips();
     });
 
-    $("cutoffDate").addEventListener("change", () => {
-      markSetupDirty();
-      APP.setup.cutoffDate = $("cutoffDate").value || "";
-      syncSetupUI();
-      renderStateChips();
-    });
+	    $("cutoffDate").addEventListener("change", () => {
+	      markSetupDirty();
+	      APP.setup.cutoffDate = $("cutoffDate").value || "";
+	      syncSetupUI();
+	      renderStateChips();
+	    });
 
-    $("testFrac").addEventListener("change", () => {
-      markSetupDirty();
-      APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
+	    $("timeCutoffSlider")?.addEventListener("input", () => {
+	      updateTimeCutoffFromSlider();
+	    });
+	    $("timeCutoffSlider")?.addEventListener("change", () => {
+	      updateTimeCutoffFromSlider();
+	    });
+
+	    $("testFrac").addEventListener("change", () => {
+	      markSetupDirty();
+	      APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
       syncSetupUI();
       renderStateChips();
     });

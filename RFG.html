@@ -177,10 +177,13 @@
       font-size:12px;
       white-space:nowrap;
     }
+    .pill.tiny{
+      padding:4px 8px;
+      font-size:12px;
+    }
     .pill.good{border-color:rgba(50,213,131,0.35);background:rgba(50,213,131,0.08);color:rgba(50,213,131,0.95)}
     .pill.warn{border-color:rgba(253,176,34,0.35);background:rgba(253,176,34,0.08);color:rgba(253,176,34,0.95)}
     .pill.bad {border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
-
     .hr{height:1px;background:var(--border2);margin:12px 0}
 
     .drop{
@@ -536,7 +539,12 @@
           </div>
 
           <div class="hr"></div>
-          <div class="muted2">Preview (first 12 rows)</div>
+          <div class="field" style="margin-bottom:8px;">
+            <label for="targetSearch">Search target column</label>
+            <input id="targetSearch" type="text" placeholder="Search columns…" />
+            <div class="muted2">Type to filter the preview columns below.</div>
+          </div>
+          <div class="muted2" style="margin-top:10px;">Preview (first 12 rows)</div>
           <div class="scroll" style="margin-top:8px;max-height:320px;">
             <table id="previewTable"></table>
           </div>
@@ -711,16 +719,30 @@
                 </div>
               </div>
 
+              <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
+                <div class="field hidden" id="colFilterField" style="margin:0;min-width:240px;">
+                  <label for="colFilter">Search columns</label>
+                  <input id="colFilter" type="text" placeholder="Filter by column name" />
+                </div>
+              </div>
+
               <div class="scroll" style="max-height:420px;">
                 <table id="reviewColumnsTable">
                   <thead>
                     <tr>
                       <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="name">Column <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="name">
+                        Column <span class="sort-indicator"></span>
+                        <button class="btn ghost" id="toggleColFilterBtn" type="button" aria-label="Filter columns" style="padding:2px 8px;font-size:11px;margin-left:6px;">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" width="12" height="12" style="display:block" fill="currentColor">
+                            <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+                          </svg>
+                        </button>
+                      </th>
                       <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
                     </tr>
                   </thead>
@@ -1056,6 +1078,7 @@
       { key: "results", title: "Results" },
       { key: "export",  title: "Export" },
     ];
+    const AUTO_EXCLUDE_MISSING_PCT = 50;
 
     let APP = {
       step: 0,
@@ -1081,6 +1104,7 @@
         forceCont: "",
         excludeCols: "",
         excluded: new Set(),
+        autoExcludedReasons: {},
         forcedTypes: {
           date: new Set(),
           categorical: new Set(),
@@ -1148,6 +1172,7 @@
         parseSeq: 0,
         predPage: 0,
         predFilter: "",
+        previewFilter: "",
         colSort: { key: "name", dir: "asc" },
         maxUnlockedStep: 0,
         shiftAutoExpandedRunSeq: 0,
@@ -1634,11 +1659,37 @@
       };
     }
 
+    function setTargetFromPicker(col, { advanceStep = true } = {}) {
+      if (!col) return;
+      APP.raw.targetCol = col;
+      APP.setup.excluded.delete(col);
+      renderTargetSelect();
+      $("targetSelect").value = col;
+      $("targetSelect").dispatchEvent(new Event("change"));
+
+      if (advanceStep) {
+        $("uploadStatus").innerHTML =
+          `<span class="pill good">Target selected</span><span class="muted2">Proceed to configure split & training.</span>`;
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
+        gotoStep(1);
+      }
+    }
+
     // ----------------------------
     // Rendering: Upload preview
     // ----------------------------
     function renderPreviewTable(rows, columns) {
-      const cols = columns.slice(0, Math.min(columns.length, 12));
+      const filter = normStr(APP.ui.previewFilter).toLowerCase();
+      const cols = filter
+        ? columns.filter(c => c.toLowerCase().includes(filter))
+        : columns.slice();
+      if (!cols.length) {
+        $("previewTable").innerHTML =
+          `<tbody><tr><td class="muted2">No columns match the search.</td></tr></tbody>`;
+        return;
+      }
+
       const head = "<thead><tr>" + cols.map((c, i) => (
         `<th class="previewPick" data-preview-col="${escapeHtml(c)}" data-preview-idx="${i}">${escapeHtml(c)}</th>`
       )).join("") + "</tr></thead>";
@@ -1706,18 +1757,8 @@
         const idx = Number(cell.getAttribute("data-preview-idx"));
         if (!col) return;
         if (Number.isFinite(idx)) setSelected(idx);
-
-        APP.raw.targetCol = col;
-        APP.setup.excluded.delete(col);
-        renderTargetSelect();
-        $("targetSelect").value = col;
-        $("targetSelect").dispatchEvent(new Event("change"));
-
-        $("uploadStatus").innerHTML = `<span class="pill good">Target selected</span><span class="muted2">Proceed to configure split & training.</span>`;
+        setTargetFromPicker(col, { advanceStep: true });
         showToast(`Target set to ${col}`, "good");
-        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
-        renderStepper();
-        gotoStep(1);
     });
   }
 
@@ -1768,6 +1809,33 @@
       syncHiddenTypingLists();
     }
 
+    function applyDefaultColumnExclusions() {
+      const meta = APP.raw.colMeta || {};
+      const target = APP.raw.targetCol;
+      const reasons = {};
+
+      for (const col of APP.raw.columns) {
+        if (col === target) continue;
+        const m = meta[col];
+        if (!m) continue;
+        const colReasons = [];
+
+        if (m.flags?.idLike) colReasons.push("ID-like");
+        if ((m.missingFrac ?? 0) * 100 > AUTO_EXCLUDE_MISSING_PCT) {
+          colReasons.push(`>${AUTO_EXCLUDE_MISSING_PCT}% missing`);
+        }
+
+        if (colReasons.length) {
+          APP.setup.excluded.add(col);
+          reasons[col] = colReasons;
+        }
+      }
+
+      APP.setup.autoExcludedReasons = reasons;
+      if (target) APP.setup.excluded.delete(target);
+      syncHiddenTypingLists();
+    }
+
     function computeTypeCounts() {
       const meta = APP.raw.colMeta;
       const counts = { date: 0, categorical: 0, continuous: 0, excluded: 0 };
@@ -1785,6 +1853,7 @@
     function renderColumnTable() {
       const meta = APP.raw.colMeta;
       const target = APP.raw.targetCol;
+      const q = normStr($("colFilter")?.value).toLowerCase();
 
       const groups = [
         { key: "continuous", title: "Continuous" },
@@ -1826,6 +1895,7 @@
         const colsInGroup = APP.raw.columns.filter(col => {
           const m = meta[col];
           if (!m) return false;
+          if (q && !col.toLowerCase().includes(q)) return false;
 
           const groupKey = m.include ? m.inferredType : "excluded";
           if (groupKey !== g.key) return false;
@@ -1846,7 +1916,7 @@
           return (sa < sb ? -1 : 1) * dirMul;
         });
 
-        rows.push(`<tr class="groupRow"><td colspan="7">${escapeHtml(g.title)} <span class="muted2">(${colsInGroup.length})</span></td></tr>`);
+          rows.push(`<tr class="groupRow"><td colspan="7">${escapeHtml(g.title)} <span class="muted2">(${colsInGroup.length})</span></td></tr>`);
 
         for (const col of colsInGroup) {
           const m = meta[col];
@@ -1869,9 +1939,17 @@
           `;
 
           const flags = [];
-          if (m.flags?.idLike) flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          if (target && col === target) flags.push(`<span class="pill good">target</span>`);
+          const autoReasons = (!m.include && APP.setup.autoExcludedReasons?.[col]) || [];
+          const hasAutoIdLike = autoReasons.includes("ID-like");
+          if (m.flags?.idLike && !hasAutoIdLike) {
+            flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          }
           if (forced) flags.push(`<span class="pill" title="Manually overridden">Forced</span>`);
           if (locked) flags.push(`<span class="pill warn" title="${escapeHtml(lockedReason)}">Locked</span>`);
+          for (const reason of autoReasons) {
+            flags.push(`<span class="pill warn tiny" title="Excluded by default">${escapeHtml(reason)}</span>`);
+          }
           const flagsHtml = flags.length ? flags.join(" ") : `<span class="muted2">—</span>`;
 
           const examplesFull = (m.examples || [])
@@ -1885,12 +1963,11 @@
               <td>${includeBox}</td>
               <td class="mono">
                 <span class="pickTarget ${target && col === target ? "active" : ""}" data-picktarget="${escapeHtml(col)}">${escapeHtml(col)}</span>
-                ${target && col === target ? `<span class="pill good" style="margin-left:8px;">target</span>` : ""}
               </td>
               <td>${typeSelect}</td>
+              <td>${flagsHtml}</td>
               <td>${escapeHtml(missPct.toFixed(1) + "%")}</td>
               <td>${escapeHtml(String(m.uniqueSample))}</td>
-              <td>${flagsHtml}</td>
               <td title="${escapeHtml(examples)}">${escapeHtml(examples)}</td>
             </tr>
           `);
@@ -5307,6 +5384,7 @@ function invertTargetIfNeeded(yPred, artifact){
         forceCont: "",
         excludeCols: "",
         excluded: new Set(),
+        autoExcludedReasons: {},
         forcedTypes: {
           date: new Set(),
           categorical: new Set(),
@@ -5357,6 +5435,7 @@ function invertTargetIfNeeded(yPred, artifact){
       };
       APP.ui.predPage = 0;
       APP.ui.predFilter = "";
+      APP.ui.previewFilter = "";
       APP.ui.prevRunSummary = null;
       APP.ui.pruneUndoExcluded = null;
       APP.ui.pruneUndoReason = "";
@@ -5371,10 +5450,11 @@ function invertTargetIfNeeded(yPred, artifact){
       $("trainStatus").innerHTML = "";
 	      setTrainingUi(false);
 
-	      hide($("uploadSummary"));
-	      show($("dropZone"));
-	      $("uploadStatus").innerHTML = "";
-	      $("previewTable").innerHTML = "";
+      hide($("uploadSummary"));
+      show($("dropZone"));
+      $("uploadStatus").innerHTML = "";
+      $("previewTable").innerHTML = "";
+      if ($("targetSearch")) $("targetSearch").value = "";
       $("predTable").innerHTML = "";
       $("worstErrTable").innerHTML = "";
       $("highUncTable").innerHTML = "";
@@ -5419,6 +5499,8 @@ function invertTargetIfNeeded(yPred, artifact){
       if ($("maxFeatures")) delete $("maxFeatures").dataset.userSet;
       if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
       if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
+      if ($("colFilterField")) $("colFilterField").classList.add("hidden");
+      if ($("colFilter")) $("colFilter").value = "";
 
       if ($("advancedTargetDetails")) $("advancedTargetDetails").classList.add("hidden");
       if ($("multiClassSummaryCallout")) $("multiClassSummaryCallout").innerHTML = "";
@@ -5470,6 +5552,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.setup.maxRows = Math.max(0, prefs.maxRows);
       APP.setup.maxCard = prefs.maxCard;
       APP.setup.excluded = new Set();
+      APP.setup.autoExcludedReasons = {};
       APP.setup.forcedTypes = { date: new Set(), categorical: new Set(), continuous: new Set() };
       syncHiddenTypingLists();
 
@@ -5504,16 +5587,23 @@ function invertTargetIfNeeded(yPred, artifact){
       renderStepper();
 
       recomputeColumnMeta();
+      applyDefaultColumnExclusions();
+      recomputeColumnMeta();
 
       $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
       $("dsShapePill").textContent = `${rows.length} rows · ${cols.length} cols`;
 
+      APP.ui.previewFilter = "";
       renderPreviewTable(rows, cols);
       bindPreviewTargetPicker();
 
       hide($("dropZone"));
       show($("uploadSummary"));
-      $("uploadStatus").innerHTML = `<span class="pill">Pick a target</span><span class="muted2">Click a column header in the preview.</span>`;
+      $("uploadStatus").innerHTML =
+        `<span class="pill">Pick a target</span>` +
+        `<span class="muted2">Pick the column you want to predict (click a header or use search).</span>`;
+
+      $("targetSearch").value = "";
 
       $("continueToSetupBtn").disabled = false;
 
@@ -5731,6 +5821,11 @@ function invertTargetIfNeeded(yPred, artifact){
       syncButtons();
     });
 
+    $("targetSearch").addEventListener("input", () => {
+      APP.ui.previewFilter = $("targetSearch").value;
+      renderPreviewTable(APP.raw.rows, APP.raw.columns);
+    });
+
     $("taskMode").addEventListener("change", () => {
       APP.setup.taskMode = $("taskMode").value;
       syncSetupUI();
@@ -5847,6 +5942,17 @@ function invertTargetIfNeeded(yPred, artifact){
     markTrainSettingAsUserSet("minNumSamples");
     markTrainSettingAsUserSet("derivedTargetColName");
     markTrainSettingAsUserSet("derivedTargetExpr");
+
+    $("colFilter").addEventListener("input", () => {
+      renderColumnTable();
+    });
+    $("toggleColFilterBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const field = $("colFilterField");
+      if (!field) return;
+      field.classList.remove("hidden");
+      $("colFilter").focus();
+    });
 
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
     $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {

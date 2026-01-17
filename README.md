@@ -85,3 +85,6 @@ The “Download predictions CSV” button (and the export zip) includes your tes
 - Your CSV data stays in the browser tab; the page still executes CDN-hosted scripts unless you self-host.
 - Very large datasets may hit browser memory/CPU limits; reduce `maxRows` for faster iteration.
 - In classification, some test rows can be dropped if their label never appears in the training split (train-only label encoding).
+
+## License
+MIT — see `LICENSE`.

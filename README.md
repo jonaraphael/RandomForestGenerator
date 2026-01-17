@@ -3,15 +3,9 @@
 Single-page, in-browser Random Forest trainer for CSV datasets. Everything runs client-side: upload a CSV, pick a target, train, inspect results/diagnostics, then export a portable artifact.
 
 ## Quick Start
-- Open `RFG.html` in a modern browser.
-- If your browser blocks ES module imports when opening via `file://`, run a tiny local server:
-```sh
-python3 -m http.server  # or: python -m http.server
-```
-- Navigate to `http://localhost:8000/RFG.html`.
-- For a smoke test:
-  - Click “Use Titanic sample” (embedded in `RFG.html`), or
-  - Upload `titanic.csv` and set target to `Survived` (classification).
+- Open [`RFG.html`](https://jonaraphael.github.io/RandomForestGenerator/RFG.html) in a modern browser.
+- Click “Use Titanic sample”, or
+- Upload  your own CSV to generate an RF.
 
 ## Dependencies (CDN / esm.sh)
 This app loads the following in the browser at runtime:

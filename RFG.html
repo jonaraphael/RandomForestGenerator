@@ -507,6 +507,7 @@
   </div>
 
   <div class="wrap">
+    <div class="row" id="stateChips" style="margin:12px 0 16px;"></div>
     <div class="grid">
 
       <!-- STEP 1: UPLOAD -->
@@ -738,8 +739,6 @@
         <div class="muted" style="margin-bottom:10px;">
           Defaults are tuned for a solid baseline. Adjust if you want faster iteration or more thorough training.
         </div>
-
-        <div class="row" id="trainChips" style="margin-bottom:10px;"></div>
 
         <details id="advancedTrainDetails" style="margin-top:12px;" open>
           <summary>Settings</summary>
@@ -2021,6 +2020,7 @@
       const splitSel = $("splitStrategy");
       if (splitSel) {
         const cur = APP.setup.splitStrategy || splitSel.value || "random";
+        const userSet = splitSel.dataset.userSet === "true";
         const options = [`<option value="random">Random</option>`];
         if (decidedTask === "classification") {
           options.push(`<option value="stratified">Stratified (classification)</option>`);
@@ -2029,9 +2029,15 @@
           options.push(`<option value="time">Time-based</option>`);
         }
         splitSel.innerHTML = options.join("");
-        if (cur === "time" && hasDates) splitSel.value = "time";
-        else if (cur === "stratified" && decidedTask === "classification") splitSel.value = "stratified";
-        else splitSel.value = "random";
+        if (userSet && cur === "time" && hasDates) {
+          splitSel.value = "time";
+        } else if ((userSet && cur === "stratified") || (!userSet && decidedTask === "classification")) {
+          splitSel.value = (decidedTask === "classification") ? "stratified" : "random";
+        } else if (userSet && cur === "random") {
+          splitSel.value = "random";
+        } else {
+          splitSel.value = "random";
+        }
         splitSel.disabled = options.length <= 1;
       }
       APP.setup.splitStrategy = $("splitStrategy")?.value || "random";
@@ -2673,8 +2679,8 @@
       if (APP.raw.targetCol) $("targetSelect").value = APP.raw.targetCol;
     }
 
-    function renderTrainChips() {
-      const el = $("trainChips");
+    function renderStateChips() {
+      const el = $("stateChips");
       if (!el) return;
 
       const chips = [];
@@ -2691,16 +2697,6 @@
       if (APP.raw.targetCol) {
         const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
         add("Task", task);
-      }
-
-      const topNState = APP.setup.multiClass?.topN || null;
-      if (topNState?.enabled && !isDerivedTargetActive()) {
-        add("TopN", `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`);
-      }
-
-      const dt = APP.setup.multiClass?.derivedTarget || null;
-      if (dt?.enabled && dt.sourceCol && dt.derivedCol && APP.raw.targetCol === dt.derivedCol) {
-        add("Derived", `${dt.sourceCol} → ${dt.derivedCol}`);
       }
 
       const splitMode = effectiveSplitMode();
@@ -2722,6 +2718,16 @@
       add("Typing", `cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date}`);
       add("max_card", maxCard);
 
+      const topNState = APP.setup.multiClass?.topN || null;
+      if (topNState?.enabled && !isDerivedTargetActive()) {
+        add("TopN", `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`);
+      }
+
+      const dt = APP.setup.multiClass?.derivedTarget || null;
+      if (dt?.enabled && dt.sourceCol && dt.derivedCol && APP.raw.targetCol === dt.derivedCol) {
+        add("Derived", `${dt.sourceCol} → ${dt.derivedCol}`);
+      }
+
       const excludedCount = APP.setup.excluded?.size || 0;
       const forcedCount =
         (APP.setup.forcedTypes?.date?.size || 0) +
@@ -2730,7 +2736,7 @@
       if (excludedCount) add("Excluded", excludedCount);
       if (forcedCount) add("Forced", forcedCount);
 
-      el.innerHTML = chips.length ? chips.join(" ") : `<span class="muted2">Pick a target to preview training settings.</span>`;
+      el.innerHTML = chips.length ? chips.join(" ") : `<span class="muted2">Pick a target to preview settings.</span>`;
     }
 
     function refreshSplitDateCol() {
@@ -5262,10 +5268,10 @@ function invertTargetIfNeeded(yPred, artifact){
       $("continueToTrainBtn").disabled = !APP.raw.targetCol;
       setTrainingUi(APP.ui.training.isTraining);
       updateExportUI();
-      renderTrainChips();
+      renderStateChips();
     }
 
-	    function hardReset() {
+    function hardReset() {
       try { APP.ui.training.abortController?.abort(); } catch {}
       try { APP.ui.training.diagAbortController?.abort(); } catch {}
       APP.ui.training.abortController = null;
@@ -5394,6 +5400,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";
       $("splitStrategy").value = "stratified";
+      delete $("splitStrategy").dataset.userSet;
       $("predTopK").value = "30";
       $("predFilter").value = "";
       $("pageSize").value = "50";
@@ -5425,11 +5432,13 @@ function invertTargetIfNeeded(yPred, artifact){
         (taskModeRaw === "auto" || taskModeRaw === "regression" || taskModeRaw === "classification")
           ? taskModeRaw
           : "auto";
+      const splitStrategyUserSet = $("splitStrategy").dataset.userSet === "true";
       const prefs = {
         testFrac: parseNum($("testFrac").value) || 0.1,
         splitMethod: $("splitMethod").value || "cutoff",
         cutoffDate: $("cutoffDate").value || "",
         splitStrategy: $("splitStrategy").value || "stratified",
+        splitStrategyUserSet,
         taskMode,
         targetTransform: $("targetTransform").value,
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
@@ -5460,6 +5469,8 @@ function invertTargetIfNeeded(yPred, artifact){
       $("splitMethod").value = APP.setup.splitMethod;
       $("cutoffDate").value = APP.setup.cutoffDate;
       $("splitStrategy").value = APP.setup.splitStrategy;
+      if (prefs.splitStrategyUserSet) $("splitStrategy").dataset.userSet = "true";
+      else delete $("splitStrategy").dataset.userSet;
       $("taskMode").value = taskMode;
       $("targetTransform").value = prefs.targetTransform;
       $("maxRows").value = String(APP.setup.maxRows);
@@ -5715,7 +5726,7 @@ function invertTargetIfNeeded(yPred, artifact){
     $("taskMode").addEventListener("change", () => {
       APP.setup.taskMode = $("taskMode").value;
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
       applyAutoTrainDefaults();
     });
 
@@ -5731,39 +5742,40 @@ function invertTargetIfNeeded(yPred, artifact){
     });
 
     $("splitStrategy").addEventListener("change", () => {
+      $("splitStrategy").dataset.userSet = "true";
       APP.setup.splitStrategy = $("splitStrategy").value || "random";
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("splitDateCol").addEventListener("change", () => {
       APP.setup.splitDateCol = $("splitDateCol").value;
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("splitMethod").addEventListener("change", () => {
       APP.setup.splitMethod = $("splitMethod").value;
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("cutoffDate").addEventListener("change", () => {
       APP.setup.cutoffDate = $("cutoffDate").value || "";
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("testFrac").addEventListener("change", () => {
       APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
       syncSetupUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("topNEnable").addEventListener("change", () => {
       APP.setup.multiClass.topN.enabled = Boolean($("topNEnable").checked);
       syncAdvancedTargetUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("topNKeep").addEventListener("change", () => {
@@ -5771,7 +5783,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.setup.multiClass.topN.keep = v;
       $("topNKeep").value = String(v);
       syncAdvancedTargetUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     $("derivedTargetColName").addEventListener("input", () => {
@@ -5798,7 +5810,7 @@ function invertTargetIfNeeded(yPred, artifact){
     $("undoDerivedTargetBtn").addEventListener("click", () => {
       undoDerivedTarget();
       syncAdvancedTargetUI();
-      renderTrainChips();
+      renderStateChips();
     });
 
     let typingDebounce = null;

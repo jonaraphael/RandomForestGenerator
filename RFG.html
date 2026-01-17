@@ -1213,6 +1213,17 @@
     import { Matrix, MatrixColumnSelectionView, MatrixRowSelectionView } from "https://esm.sh/ml-matrix@^6.8.2?target=es2022";
     import { MersenneTwister19937, integer } from "https://esm.sh/random-js@^2.1.0?target=es2022";
 
+    /**
+     * File map (RFG.html)
+     * - State: APP + constants
+     * - DOM helpers + core utils
+     * - Inference/typing + preprocessing
+     * - Splits + split preview + time cutoff picker
+     * - Training + diagnostics + export
+     * - Results rendering + run history
+     * - App wiring + event binding + init
+     */
+
     // ----------------------------
     // State
     // ----------------------------
@@ -5746,12 +5757,30 @@
     function captureTypingSnapshotForHistory() {
       const list = (set) => Array.from(set || []).filter(Boolean).sort();
       const forced = APP.setup.forcedTypes || {};
+      const topN = APP.setup.multiClass?.topN || { enabled: false, keep: 5, rareLabel: "RARE" };
+      const dt = APP.setup.multiClass?.derivedTarget || { enabled: false, sourceCol: null, derivedCol: "", expr: "" };
       return {
         targetCol: APP.raw.targetCol || "",
         taskMode: APP.setup.taskMode || "regression",
         targetTransform: APP.setup.targetTransform || "none",
         maxRows: Math.floor(APP.setup.maxRows || 0),
         maxCard: Math.floor(APP.setup.maxCard || 0),
+        testFrac: parseNum($("testFrac")?.value) || APP.setup.testFrac || 0.1,
+        splitStrategy: $("splitStrategy")?.value ?? APP.setup.splitStrategy ?? "random",
+        splitDateCol: $("splitDateCol")?.value ?? APP.setup.splitDateCol ?? "",
+        splitMethod: $("splitMethod")?.value ?? APP.setup.splitMethod ?? "cutoff",
+        cutoffDate: $("cutoffDate")?.value ?? APP.setup.cutoffDate ?? "",
+        topN: {
+          enabled: Boolean(topN.enabled),
+          keep: Math.max(1, Math.floor(topN.keep || 5)),
+          rareLabel: String(topN.rareLabel || "RARE"),
+        },
+        derivedTarget: {
+          enabled: Boolean(dt.enabled),
+          sourceCol: dt.sourceCol || null,
+          derivedCol: String(dt.derivedCol || ""),
+          expr: String(dt.expr || ""),
+        },
         excluded: list(APP.setup.excluded).filter(c => c !== APP.raw.targetCol),
         forcedTypes: {
           date: list(forced.date),
@@ -6224,24 +6253,130 @@
       if (APP.ui.training.isTraining) { showToast("Stop training before restoring", "warn"); return; }
 
       const snap = entry.typingSnapshot || {};
+      const dtSnap = snap.derivedTarget || {};
+      const desiredSplitDateCol = normStr(snap.splitDateCol);
+
+      const maxRowsEl = $("maxRows");
+      const maxCardEl = $("maxCard");
+      if (maxRowsEl && snap.maxRows !== undefined) {
+        maxRowsEl.value = String(Math.max(0, Math.floor(Number(snap.maxRows) || 0)));
+        APP.setup.maxRows = Math.floor(parseNum(maxRowsEl.value) || 0);
+      }
+      if (maxCardEl && snap.maxCard !== undefined) {
+        maxCardEl.value = String(Math.max(1, Math.floor(Number(snap.maxCard) || 50)));
+        APP.setup.maxCard = Math.max(1, Math.floor(parseNum(maxCardEl.value) || 50));
+      }
+
+      if ($("taskMode") && snap.taskMode) {
+        $("taskMode").value = String(snap.taskMode);
+        APP.setup.taskMode = $("taskMode").value;
+      }
+      if ($("targetTransform") && snap.targetTransform) {
+        $("targetTransform").value = String(snap.targetTransform);
+        APP.setup.targetTransform = $("targetTransform").value;
+      }
+
+      if ($("testFrac") && snap.testFrac !== undefined) {
+        const tf = Math.min(0.5, Math.max(0.05, parseNum(String(snap.testFrac)) || 0.1));
+        $("testFrac").value = String(tf);
+        APP.setup.testFrac = tf;
+      }
+      if ($("splitMethod") && snap.splitMethod) {
+        $("splitMethod").value = String(snap.splitMethod);
+        APP.setup.splitMethod = $("splitMethod").value;
+      }
+      if ($("cutoffDate") && snap.cutoffDate !== undefined) {
+        $("cutoffDate").value = String(snap.cutoffDate || "");
+        APP.setup.cutoffDate = $("cutoffDate").value || "";
+      }
+      if ($("splitStrategy") && snap.splitStrategy) {
+        $("splitStrategy").dataset.userSet = "true";
+        $("splitStrategy").value = String(snap.splitStrategy);
+        APP.setup.splitStrategy = $("splitStrategy").value || "random";
+      }
+      if (desiredSplitDateCol) APP.setup.splitDateCol = desiredSplitDateCol;
+
+      const topN = snap.topN || {};
+      if (APP.setup.multiClass?.topN) {
+        APP.setup.multiClass.topN.enabled = Boolean(topN.enabled);
+        APP.setup.multiClass.topN.keep = Math.max(1, Math.floor(Number(topN.keep) || 5));
+        APP.setup.multiClass.topN.rareLabel = String(topN.rareLabel || "RARE");
+      }
+
+      const dt = APP.setup.multiClass?.derivedTarget || null;
+      const wantsDerived = Boolean(dtSnap.enabled && normStr(dtSnap.derivedCol) && normStr(dtSnap.expr));
+      if (dt) {
+        if (!wantsDerived && dt.enabled) {
+          undoDerivedTarget();
+        }
+        if (wantsDerived) {
+          dt.enabled = false;
+          dt.sourceCol = null;
+          dt.derivedCol = "";
+          dt.expr = "";
+          dt.lastError = "";
+          dt.lastStatus = "";
+
+          const sourceCol = normStr(dtSnap.sourceCol) || normStr(snap.targetCol);
+          if (sourceCol && APP.raw.columns.includes(sourceCol)) {
+            setTargetFromPicker(sourceCol, { advanceStep: false });
+          }
+          const nameEl = $("derivedTargetColName");
+          const exprEl = $("derivedTargetExpr");
+          if (nameEl) {
+            delete nameEl.dataset.userSet;
+            nameEl.value = String(dtSnap.derivedCol || "");
+          }
+          if (exprEl) {
+            delete exprEl.dataset.userSet;
+            exprEl.value = String(dtSnap.expr || "");
+          }
+          try {
+            applyDerivedTargetFromExpr();
+          } catch (e) {
+            dt.lastError = e?.message || String(e);
+          }
+        }
+      }
+
+      if (!wantsDerived) {
+        const tcol = normStr(snap.targetCol);
+        if (tcol && APP.raw.columns.includes(tcol)) {
+          setTargetFromPicker(tcol, { advanceStep: false });
+        }
+      }
+
       const cols = new Set(APP.raw.columns || []);
       const target = APP.raw.targetCol;
-
       const filterCols = (xs) => (xs || []).filter(c => cols.has(c) && c !== target);
+
       const excluded = filterCols(snap.excluded || entry.excludedCols || []);
       const forced = snap.forcedTypes || {};
-
       APP.setup.excluded = new Set(excluded);
       APP.setup.forcedTypes = {
         date: new Set(filterCols(forced.date)),
         categorical: new Set(filterCols(forced.categorical)),
         continuous: new Set(filterCols(forced.continuous)),
       };
+      if (target) APP.setup.excluded.delete(target);
+      if (APP.setup.multiClass?.derivedTarget?.enabled && APP.setup.multiClass.derivedTarget.sourceCol) {
+        APP.setup.excluded.add(APP.setup.multiClass.derivedTarget.sourceCol);
+        if (APP.setup.multiClass.derivedTarget.derivedCol) APP.setup.excluded.delete(APP.setup.multiClass.derivedTarget.derivedCol);
+      }
+
       syncHiddenTypingLists();
       recomputeColumnMeta();
       refreshSplitDateCol();
+      syncAdvancedTargetUI();
+
+      if ($("splitDateCol") && desiredSplitDateCol && Array.from($("splitDateCol").options).some(o => o.value === desiredSplitDateCol)) {
+        $("splitDateCol").value = desiredSplitDateCol;
+        APP.setup.splitDateCol = desiredSplitDateCol;
+      }
+
       syncSetupUI();
       renderColumnTable();
+      syncPreviewTargetHighlight();
 
       const t = snap.trainInputs || {};
       if ($("seed") && t.seed !== undefined) $("seed").value = String(t.seed);
@@ -7316,7 +7451,7 @@ raise NotImplementedError(
       renderStateChips();
     }
 
-      function hardReset() {
+    function hardReset() {
       try { APP.ui.training.abortController?.abort(); } catch {}
       try { APP.ui.training.diagAbortController?.abort(); } catch {}
       APP.ui.training.abortController = null;
@@ -7336,7 +7471,7 @@ raise NotImplementedError(
         cutoffDate: "",
         splitStrategy: "stratified",
         testFrac: 0.1,
-          taskMode: "regression",
+        taskMode: "regression",
         targetTransform: "none",
         maxRows: 1000,
         maxCard: 50,
@@ -7619,166 +7754,89 @@ raise NotImplementedError(
     }
 
     // ----------------------------
-    // Events
+    // Events (bound in init)
     // ----------------------------
-    $("resetAllBtn")?.addEventListener("click", hardReset);
+    function bindUploadEvents() {
+      $("resetAllBtn")?.addEventListener("click", hardReset);
 
-    $("browseBtn").addEventListener("click", () => $("fileInput").click());
-    $("fileInput").addEventListener("change", (e) => {
-      const f = e.target.files && e.target.files[0];
-      if (!f) return;
-      resetForNewFile();
-      handleFile(f);
-    });
+      $("browseBtn")?.addEventListener("click", () => $("fileInput").click());
+      $("fileInput")?.addEventListener("change", (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        resetForNewFile();
+        handleFile(f);
+      });
 
-    $("sampleBtn").addEventListener("click", () => {
-      resetForNewFile();
-      const text = $("embeddedTitanicCsv")?.textContent || "";
-      parseSampleCsvText(text.trim(), "titanic.csv");
-      showToast("Loaded sample: titanic.csv", "good");
-    });
+      $("sampleBtn")?.addEventListener("click", () => {
+        resetForNewFile();
+        const text = $("embeddedTitanicCsv")?.textContent || "";
+        parseSampleCsvText(text.trim(), "titanic.csv");
+        showToast("Loaded sample: titanic.csv", "good");
+      });
 
-    const dz = $("dropZone");
-    dz.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add("dragover"); });
-    dz.addEventListener("dragleave", (e) => { e.stopPropagation(); dz.classList.remove("dragover"); });
-    dz.addEventListener("drop", (e) => {
-      e.preventDefault(); e.stopPropagation(); dz.classList.remove("dragover");
-      const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      resetForNewFile();
-      handleFile(f);
-    });
+      const dz = $("dropZone");
+      if (dz) {
+        dz.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add("dragover"); });
+        dz.addEventListener("dragleave", (e) => { e.stopPropagation(); dz.classList.remove("dragover"); });
+        dz.addEventListener("drop", (e) => {
+          e.preventDefault(); e.stopPropagation(); dz.classList.remove("dragover");
+          const f = e.dataTransfer.files && e.dataTransfer.files[0];
+          resetForNewFile();
+          handleFile(f);
+        });
+      }
 
-    function isFileDragEvent(e) {
-      const dt = e.dataTransfer;
-      if (!dt) return false;
-      if (dt.files && dt.files.length) return true;
-      const types = dt.types ? Array.from(dt.types) : [];
-      return types.includes("Files");
+      function isFileDragEvent(e) {
+        const dt = e.dataTransfer;
+        if (!dt) return false;
+        if (dt.files && dt.files.length) return true;
+        const types = dt.types ? Array.from(dt.types) : [];
+        return types.includes("Files");
+      }
+
+      let globalDragDepth = 0;
+      function setGlobalDropOverlayVisible(visible) {
+        const el = $("globalDropOverlay");
+        if (!el) return;
+        if (visible) el.classList.remove("hidden");
+        else el.classList.add("hidden");
+      }
+
+      window.addEventListener("dragenter", (e) => {
+        if (!isFileDragEvent(e)) return;
+        globalDragDepth += 1;
+        setGlobalDropOverlayVisible(true);
+      }, true);
+
+      window.addEventListener("dragleave", (e) => {
+        if (!globalDragDepth) return;
+        globalDragDepth = Math.max(0, globalDragDepth - 1);
+        if (!globalDragDepth) setGlobalDropOverlayVisible(false);
+      }, true);
+
+      window.addEventListener("dragover", (e) => {
+        if (!isFileDragEvent(e)) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+        setGlobalDropOverlayVisible(true);
+      });
+
+      window.addEventListener("drop", (e) => {
+        if (!isFileDragEvent(e)) return;
+        e.preventDefault();
+        globalDragDepth = 0;
+        setGlobalDropOverlayVisible(false);
+        const f = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!f) return;
+        resetForNewFile();
+        handleFile(f);
+      });
+
+      window.addEventListener("dragend", () => {
+        globalDragDepth = 0;
+        setGlobalDropOverlayVisible(false);
+      });
     }
-
-    let globalDragDepth = 0;
-    function setGlobalDropOverlayVisible(visible) {
-      const el = $("globalDropOverlay");
-      if (!el) return;
-      if (visible) el.classList.remove("hidden");
-      else el.classList.add("hidden");
-    }
-
-    window.addEventListener("dragenter", (e) => {
-      if (!isFileDragEvent(e)) return;
-      globalDragDepth += 1;
-      setGlobalDropOverlayVisible(true);
-    }, true);
-
-    window.addEventListener("dragleave", (e) => {
-      if (!globalDragDepth) return;
-      globalDragDepth = Math.max(0, globalDragDepth - 1);
-      if (!globalDragDepth) setGlobalDropOverlayVisible(false);
-    }, true);
-
-    window.addEventListener("dragover", (e) => {
-      if (!isFileDragEvent(e)) return;
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
-      setGlobalDropOverlayVisible(true);
-    });
-
-    window.addEventListener("drop", (e) => {
-      if (!isFileDragEvent(e)) return;
-      e.preventDefault();
-      globalDragDepth = 0;
-      setGlobalDropOverlayVisible(false);
-      const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      if (!f) return;
-      resetForNewFile();
-      handleFile(f);
-    });
-
-    window.addEventListener("dragend", () => {
-      globalDragDepth = 0;
-      setGlobalDropOverlayVisible(false);
-    });
-
-    $("globalContinueBtn").addEventListener("click", () => {
-      const btn = $("globalContinueBtn");
-      if (!btn || btn.disabled) return;
-      if (APP.step === 0) {
-        renderTargetSelect();
-        refreshSplitDateCol();
-        syncSetupUI();
-        renderColumnTable();
-        gotoStep(1);
-        return;
-      }
-
-      if (APP.step === 1) {
-        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
-        renderStepper();
-        const shouldRetrain = Boolean(APP.ui.setupDirty && isModelReady());
-        if (!isModelReady() || shouldRetrain) {
-          APP.ui.training.completedUnits = 0;
-          APP.ui.training.totalUnits = 0;
-          APP.ui.training.stopRequested = false;
-          APP.ui.training.autoStartOnResults = true;
-          APP.ui.training.retrainOnResults = shouldRetrain;
-        } else {
-          APP.ui.training.autoStartOnResults = false;
-          APP.ui.training.retrainOnResults = false;
-        }
-        gotoStep(2);
-        return;
-      }
-
-      if (APP.step === 2) {
-        gotoStep(3);
-        return;
-      }
-
-      if (APP.step === 3) {
-        downloadArtifactZip();
-        return;
-      }
-    });
-
-    $("jumpToExportBtn")?.addEventListener("click", () => gotoStep(3));
-
-    $("globalBackBtn").addEventListener("click", () => {
-      const btn = $("globalBackBtn");
-      if (!btn || btn.disabled) return;
-      const prev = (APP.step || 0) - 1;
-      if (prev < 0) return;
-      gotoStep(prev);
-    });
-
-    $("globalStopBtn").addEventListener("click", () => {
-      const btn = $("globalStopBtn");
-      if (!btn || btn.disabled) return;
-      if (APP.ui.training.isTraining) {
-        requestStopTraining();
-        return;
-      }
-      if (APP.step !== 2) return;
-      if (!isModelReady()) return;
-      APP.ui.training.completedUnits = 0;
-      APP.ui.training.totalUnits = 0;
-      APP.ui.training.stopRequested = false;
-      renderResultsPlaceholders();
-      trainModel();
-    });
-
-    $("toggleAdvancedSettingsBtn")?.addEventListener("click", () => {
-      APP.ui.showAdvancedSettings = !APP.ui.showAdvancedSettings;
-      syncSetupUI();
-      syncButtons();
-    });
-
-    $("targetPreviewLog1pBtn")?.addEventListener("click", () => {
-      const sel = $("targetTransform");
-      if (!sel) return;
-      sel.value = "log1p";
-      sel.dispatchEvent(new Event("change"));
-      showToast("Applied log1p target transform", "good");
-    });
 
     function setResultsTab(name) {
       const tabs = {
@@ -7800,10 +7858,6 @@ raise NotImplementedError(
       });
     }
 
-    $("presetFastBtn")?.addEventListener("click", () => applyTrainingPreset("fast"));
-    $("presetBalancedBtn")?.addEventListener("click", () => applyTrainingPreset("balanced"));
-    $("presetThoroughBtn")?.addEventListener("click", () => applyTrainingPreset("thorough"));
-
     function setExportLang(lang) {
       APP.ui.exportLang = (lang === "py") ? "py" : "js";
       const jsBtn = $("exportLangJsBtn");
@@ -7819,92 +7873,177 @@ raise NotImplementedError(
       renderExportSampleCode();
     }
 
-    $("tabOverview")?.addEventListener("click", () => setResultsTab("overview"));
-    $("tabDiagnostics")?.addEventListener("click", () => setResultsTab("diagnostics"));
-    $("tabPredictions")?.addEventListener("click", () => setResultsTab("predictions"));
+    function bindNavigationEvents() {
+      $("globalContinueBtn")?.addEventListener("click", () => {
+        const btn = $("globalContinueBtn");
+        if (!btn || btn.disabled) return;
+        if (APP.step === 0) {
+          renderTargetSelect();
+          refreshSplitDateCol();
+          syncSetupUI();
+          renderColumnTable();
+          gotoStep(1);
+          return;
+        }
 
-    forceDetailsOpen("shiftDetails");
-    forceDetailsOpen("predFullDetails");
+        if (APP.step === 1) {
+          APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+          renderStepper();
+          const shouldRetrain = Boolean(APP.ui.setupDirty && isModelReady());
+          if (!isModelReady() || shouldRetrain) {
+            APP.ui.training.completedUnits = 0;
+            APP.ui.training.totalUnits = 0;
+            APP.ui.training.stopRequested = false;
+            APP.ui.training.autoStartOnResults = true;
+            APP.ui.training.retrainOnResults = shouldRetrain;
+          } else {
+            APP.ui.training.autoStartOnResults = false;
+            APP.ui.training.retrainOnResults = false;
+          }
+          gotoStep(2);
+          return;
+        }
 
-    $("exportLangJsBtn")?.addEventListener("click", () => setExportLang("js"));
-    $("exportLangPyBtn")?.addEventListener("click", () => setExportLang("py"));
+        if (APP.step === 2) {
+          gotoStep(3);
+          return;
+        }
 
-    $("targetSelect").addEventListener("change", () => {
-      markSetupDirty();
-      APP.raw.targetCol = $("targetSelect").value;
-      if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
-      recomputeColumnMeta();
-      if (APP.raw.targetCol) {
-        const mode = defaultTaskModeForTarget(APP.raw.rows, APP.raw.targetCol, APP.raw.colMeta);
-        APP.setup.taskMode = mode;
-        if ($("taskMode")) $("taskMode").value = mode;
-        updateStateChip("target", { value: APP.raw.targetCol, visible: true });
-        updateStateChip("task", { value: mode, visible: true });
-        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
-        renderStepper();
-      }
-      applyAutoTrainDefaults();
-      refreshSplitDateCol();
-      syncSetupUI();
-      renderColumnTable();
-      syncPreviewTargetHighlight();
-      syncButtons();
-    });
+        if (APP.step === 3) {
+          downloadArtifactZip();
+          return;
+        }
+      });
 
-    $("targetSearch").addEventListener("input", () => {
-      APP.ui.previewFilter = $("targetSearch").value;
-      renderPreviewTable(APP.raw.rows, APP.raw.columns);
-    });
+      $("jumpToExportBtn")?.addEventListener("click", () => gotoStep(3));
 
-    $("taskMode").addEventListener("change", () => {
-      markSetupDirty();
-      APP.setup.taskMode = $("taskMode").value;
-      syncSetupUI();
-      renderStateChips();
-      applyAutoTrainDefaults();
-      renderTargetPreview();
-    });
+      $("globalBackBtn")?.addEventListener("click", () => {
+        const btn = $("globalBackBtn");
+        if (!btn || btn.disabled) return;
+        const prev = (APP.step || 0) - 1;
+        if (prev < 0) return;
+        gotoStep(prev);
+      });
 
-    $("targetTransform").addEventListener("change", () => {
-      markSetupDirty();
-      APP.setup.targetTransform = $("targetTransform").value;
-      syncSetupUI();
-      renderTargetPreview();
-    });
+      $("globalStopBtn")?.addEventListener("click", () => {
+        const btn = $("globalStopBtn");
+        if (!btn || btn.disabled) return;
+        if (APP.ui.training.isTraining) {
+          requestStopTraining();
+          return;
+        }
+        if (APP.step !== 2) return;
+        if (!isModelReady()) return;
+        APP.ui.training.completedUnits = 0;
+        APP.ui.training.totalUnits = 0;
+        APP.ui.training.stopRequested = false;
+        renderResultsPlaceholders();
+        trainModel();
+      });
 
-    $("maxRows").addEventListener("change", () => {
-      APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0);
-      markSetupDirty();
-      clearTrainingPreset();
-      syncSetupUI();
-      applyAutoTrainDefaults();
-    });
-    $("maxRows").addEventListener("input", clearTrainingPreset);
-    $("maxRows").addEventListener("input", markSetupDirty);
+      $("toggleAdvancedSettingsBtn")?.addEventListener("click", () => {
+        APP.ui.showAdvancedSettings = !APP.ui.showAdvancedSettings;
+        syncSetupUI();
+        syncButtons();
+      });
 
-    $("splitStrategy").addEventListener("change", () => {
-      markSetupDirty();
-      $("splitStrategy").dataset.userSet = "true";
-      APP.setup.splitStrategy = $("splitStrategy").value || "random";
-      syncSetupUI();
-      renderStateChips();
-    });
+      $("targetPreviewLog1pBtn")?.addEventListener("click", () => {
+        const sel = $("targetTransform");
+        if (!sel) return;
+        sel.value = "log1p";
+        sel.dispatchEvent(new Event("change"));
+        showToast("Applied log1p target transform", "good");
+      });
 
-    $("splitDateCol").addEventListener("change", () => {
-      markSetupDirty();
-      APP.setup.splitDateCol = $("splitDateCol").value;
-      syncSetupUI();
-      renderStateChips();
-    });
+      $("presetFastBtn")?.addEventListener("click", () => applyTrainingPreset("fast"));
+      $("presetBalancedBtn")?.addEventListener("click", () => applyTrainingPreset("balanced"));
+      $("presetThoroughBtn")?.addEventListener("click", () => applyTrainingPreset("thorough"));
 
-    $("splitMethod").addEventListener("change", () => {
-      markSetupDirty();
-      APP.setup.splitMethod = $("splitMethod").value;
-      syncSetupUI();
-      renderStateChips();
-    });
+      $("tabOverview")?.addEventListener("click", () => setResultsTab("overview"));
+      $("tabDiagnostics")?.addEventListener("click", () => setResultsTab("diagnostics"));
+      $("tabPredictions")?.addEventListener("click", () => setResultsTab("predictions"));
 
-      $("cutoffDate").addEventListener("change", () => {
+      $("exportLangJsBtn")?.addEventListener("click", () => setExportLang("js"));
+      $("exportLangPyBtn")?.addEventListener("click", () => setExportLang("py"));
+    }
+
+    function bindSetupEvents() {
+      $("targetSelect")?.addEventListener("change", () => {
+        markSetupDirty();
+        APP.raw.targetCol = $("targetSelect").value;
+        if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
+        recomputeColumnMeta();
+        if (APP.raw.targetCol) {
+          const mode = defaultTaskModeForTarget(APP.raw.rows, APP.raw.targetCol, APP.raw.colMeta);
+          APP.setup.taskMode = mode;
+          if ($("taskMode")) $("taskMode").value = mode;
+          updateStateChip("target", { value: APP.raw.targetCol, visible: true });
+          updateStateChip("task", { value: mode, visible: true });
+          APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+          renderStepper();
+        }
+        applyAutoTrainDefaults();
+        refreshSplitDateCol();
+        syncSetupUI();
+        renderColumnTable();
+        syncPreviewTargetHighlight();
+        syncButtons();
+      });
+
+      $("targetSearch")?.addEventListener("input", () => {
+        APP.ui.previewFilter = $("targetSearch").value;
+        renderPreviewTable(APP.raw.rows, APP.raw.columns);
+      });
+
+      $("taskMode")?.addEventListener("change", () => {
+        markSetupDirty();
+        APP.setup.taskMode = $("taskMode").value;
+        syncSetupUI();
+        renderStateChips();
+        applyAutoTrainDefaults();
+        renderTargetPreview();
+      });
+
+      $("targetTransform")?.addEventListener("change", () => {
+        markSetupDirty();
+        APP.setup.targetTransform = $("targetTransform").value;
+        syncSetupUI();
+        renderTargetPreview();
+      });
+
+      $("maxRows")?.addEventListener("change", () => {
+        APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0);
+        markSetupDirty();
+        clearTrainingPreset();
+        syncSetupUI();
+        applyAutoTrainDefaults();
+      });
+      $("maxRows")?.addEventListener("input", clearTrainingPreset);
+      $("maxRows")?.addEventListener("input", markSetupDirty);
+
+      $("splitStrategy")?.addEventListener("change", () => {
+        markSetupDirty();
+        $("splitStrategy").dataset.userSet = "true";
+        APP.setup.splitStrategy = $("splitStrategy").value || "random";
+        syncSetupUI();
+        renderStateChips();
+      });
+
+      $("splitDateCol")?.addEventListener("change", () => {
+        markSetupDirty();
+        APP.setup.splitDateCol = $("splitDateCol").value;
+        syncSetupUI();
+        renderStateChips();
+      });
+
+      $("splitMethod")?.addEventListener("change", () => {
+        markSetupDirty();
+        APP.setup.splitMethod = $("splitMethod").value;
+        syncSetupUI();
+        renderStateChips();
+      });
+
+      $("cutoffDate")?.addEventListener("change", () => {
         markSetupDirty();
         APP.setup.cutoffDate = $("cutoffDate").value || "";
         syncSetupUI();
@@ -7918,134 +8057,128 @@ raise NotImplementedError(
         updateTimeCutoffFromSlider();
       });
 
-      $("testFrac").addEventListener("change", () => {
+      $("testFrac")?.addEventListener("change", () => {
         markSetupDirty();
         APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
-      syncSetupUI();
-      renderStateChips();
-    });
-
-    $("topNEnable").addEventListener("change", () => {
-      markSetupDirty();
-      APP.setup.multiClass.topN.enabled = Boolean($("topNEnable").checked);
-      syncAdvancedTargetUI();
-      renderStateChips();
-    });
-
-    $("topNKeep").addEventListener("change", () => {
-      markSetupDirty();
-      const v = Math.max(1, Math.floor(parseNum($("topNKeep").value) || 1));
-      APP.setup.multiClass.topN.keep = v;
-      $("topNKeep").value = String(v);
-      syncAdvancedTargetUI();
-      renderStateChips();
-    });
-
-    $("derivedTargetColName").addEventListener("input", () => {
-      $("derivedTargetColName").dataset.userSet = "1";
-      syncAdvancedTargetUI();
-    });
-
-    $("derivedTargetExpr").addEventListener("input", () => {
-      $("derivedTargetExpr").dataset.userSet = "1";
-      syncAdvancedTargetUI();
-    });
-
-    $("applyDerivedTargetBtn").addEventListener("click", () => {
-      markSetupDirty();
-      const dt = APP.setup.multiClass?.derivedTarget || null;
-      if (dt) { dt.lastError = ""; dt.lastStatus = ""; }
-      try {
-        applyDerivedTargetFromExpr();
-      } catch (e) {
-        if (dt) dt.lastError = e?.message || String(e);
-        syncAdvancedTargetUI();
-      }
-    });
-
-    $("undoDerivedTargetBtn").addEventListener("click", () => {
-      markSetupDirty();
-      undoDerivedTarget();
-      syncAdvancedTargetUI();
-      renderStateChips();
-    });
-
-    let typingDebounce = null;
-    const scheduleTypingRefresh = () => {
-      if (!APP.raw.columns.length) return;
-      if (typingDebounce) clearTimeout(typingDebounce);
-      typingDebounce = setTimeout(() => {
-        recomputeColumnMeta();
-        refreshSplitDateCol();
         syncSetupUI();
-        applyAutoTrainDefaults();
-        renderColumnTable();
-        syncButtons();
-      }, 80);
-    };
+        renderStateChips();
+      });
 
-    function markTrainSettingAsUserSet(id) {
-      const el = $(id);
-      if (!el) return;
-      const mark = () => { el.dataset.userSet = "1"; };
-      el.addEventListener("input", mark);
-      el.addEventListener("change", mark);
-    }
-    $("maxFeaturesMode").addEventListener("change", () => {
-      clearTrainingPreset();
-      markSetupDirty();
-      syncMaxFeaturesUi();
-    });
-    $("maxFeaturesValue").addEventListener("input", clearTrainingPreset);
-    $("nEstimators").addEventListener("input", clearTrainingPreset);
-    $("maxDepth").addEventListener("input", clearTrainingPreset);
-    $("minNumSamples").addEventListener("input", clearTrainingPreset);
-    $("maxFeaturesValue").addEventListener("input", markSetupDirty);
-    $("nEstimators").addEventListener("input", markSetupDirty);
-    $("maxDepth").addEventListener("input", markSetupDirty);
-    $("minNumSamples").addEventListener("input", markSetupDirty);
-    $("seed").addEventListener("input", markSetupDirty);
-    $("replacement").addEventListener("change", markSetupDirty);
-    markTrainSettingAsUserSet("maxFeaturesMode");
-    markTrainSettingAsUserSet("maxFeaturesValue");
-    markTrainSettingAsUserSet("maxDepth");
-    markTrainSettingAsUserSet("minNumSamples");
-    markTrainSettingAsUserSet("derivedTargetColName");
-    markTrainSettingAsUserSet("derivedTargetExpr");
+      $("topNEnable")?.addEventListener("change", () => {
+        markSetupDirty();
+        APP.setup.multiClass.topN.enabled = Boolean($("topNEnable").checked);
+        syncAdvancedTargetUI();
+        renderStateChips();
+      });
 
-    $("colFilter").addEventListener("input", () => {
-      renderColumnTable();
-    });
-    $("toggleColFilterBtn").addEventListener("click", (e) => {
-      e.stopPropagation();
-      const field = $("colFilterField");
-      if (!field) return;
-      field.classList.remove("hidden");
-      $("colFilter").focus();
-    });
+      $("topNKeep")?.addEventListener("change", () => {
+        markSetupDirty();
+        const v = Math.max(1, Math.floor(parseNum($("topNKeep").value) || 1));
+        APP.setup.multiClass.topN.keep = v;
+        $("topNKeep").value = String(v);
+        syncAdvancedTargetUI();
+        renderStateChips();
+      });
 
-    $("maxCard").addEventListener("input", scheduleTypingRefresh);
-    $("maxCard").addEventListener("input", markSetupDirty);
-    $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {
-      th.addEventListener("click", () => {
-        const key = th.getAttribute("data-sort");
-        if (!key) return;
-        if (APP.ui.colSort.key === key) APP.ui.colSort.dir = (APP.ui.colSort.dir === "asc") ? "desc" : "asc";
-        else { APP.ui.colSort.key = key; APP.ui.colSort.dir = "asc"; }
+      $("derivedTargetColName")?.addEventListener("input", () => {
+        $("derivedTargetColName").dataset.userSet = "1";
+        syncAdvancedTargetUI();
+      });
+
+      $("derivedTargetExpr")?.addEventListener("input", () => {
+        $("derivedTargetExpr").dataset.userSet = "1";
+        syncAdvancedTargetUI();
+      });
+
+      $("applyDerivedTargetBtn")?.addEventListener("click", () => {
+        markSetupDirty();
+        const dt = APP.setup.multiClass?.derivedTarget || null;
+        if (dt) { dt.lastError = ""; dt.lastStatus = ""; }
+        try {
+          applyDerivedTargetFromExpr();
+        } catch (e) {
+          if (dt) dt.lastError = e?.message || String(e);
+          syncAdvancedTargetUI();
+        }
+      });
+
+      $("undoDerivedTargetBtn")?.addEventListener("click", () => {
+        markSetupDirty();
+        undoDerivedTarget();
+        syncAdvancedTargetUI();
+        renderStateChips();
+      });
+
+      let typingDebounce = null;
+      const scheduleTypingRefresh = () => {
+        if (!APP.raw.columns.length) return;
+        if (typingDebounce) clearTimeout(typingDebounce);
+        typingDebounce = setTimeout(() => {
+          recomputeColumnMeta();
+          refreshSplitDateCol();
+          syncSetupUI();
+          applyAutoTrainDefaults();
+          renderColumnTable();
+          syncButtons();
+        }, 80);
+      };
+
+      function markTrainSettingAsUserSet(id) {
+        const el = $(id);
+        if (!el) return;
+        const mark = () => { el.dataset.userSet = "1"; };
+        el.addEventListener("input", mark);
+        el.addEventListener("change", mark);
+      }
+
+      $("maxFeaturesMode")?.addEventListener("change", () => {
+        clearTrainingPreset();
+        markSetupDirty();
+        syncMaxFeaturesUi();
+      });
+      $("maxFeaturesValue")?.addEventListener("input", clearTrainingPreset);
+      $("nEstimators")?.addEventListener("input", clearTrainingPreset);
+      $("maxDepth")?.addEventListener("input", clearTrainingPreset);
+      $("minNumSamples")?.addEventListener("input", clearTrainingPreset);
+      $("maxFeaturesValue")?.addEventListener("input", markSetupDirty);
+      $("nEstimators")?.addEventListener("input", markSetupDirty);
+      $("maxDepth")?.addEventListener("input", markSetupDirty);
+      $("minNumSamples")?.addEventListener("input", markSetupDirty);
+      $("seed")?.addEventListener("input", markSetupDirty);
+      $("replacement")?.addEventListener("change", markSetupDirty);
+      markTrainSettingAsUserSet("maxFeaturesMode");
+      markTrainSettingAsUserSet("maxFeaturesValue");
+      markTrainSettingAsUserSet("maxDepth");
+      markTrainSettingAsUserSet("minNumSamples");
+      markTrainSettingAsUserSet("derivedTargetColName");
+      markTrainSettingAsUserSet("derivedTargetExpr");
+
+      $("colFilter")?.addEventListener("input", () => {
         renderColumnTable();
       });
-    });
+      $("toggleColFilterBtn")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const field = $("colFilterField");
+        if (!field) return;
+        field.classList.remove("hidden");
+        $("colFilter").focus();
+      });
 
+      $("maxCard")?.addEventListener("input", scheduleTypingRefresh);
+      $("maxCard")?.addEventListener("input", markSetupDirty);
+      $("reviewColumnsTable")?.querySelectorAll("th.sortable[data-sort]").forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.getAttribute("data-sort");
+          if (!key) return;
+          if (APP.ui.colSort.key === key) APP.ui.colSort.dir = (APP.ui.colSort.dir === "asc") ? "desc" : "asc";
+          else { APP.ui.colSort.key = key; APP.ui.colSort.dir = "asc"; }
+          renderColumnTable();
+        });
+      });
+    }
 
-    window.addEventListener("pagehide", (e) => {
-      if (e.persisted) return;
-      releaseAllResources();
-    });
-    window.addEventListener("beforeunload", () => {
-      releaseAllResources();
-    });
-
-      $("importanceMode").addEventListener("change", () => {
+    function bindResultsEvents() {
+      $("importanceMode")?.addEventListener("change", () => {
         if (!APP.train.model) return;
         const mode = $("importanceMode").value;
         if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance", "derived");
@@ -8061,57 +8194,105 @@ raise NotImplementedError(
         else if (action === "compare") compareRunHistoryToCurrent(runId);
       });
 
-      $("predFilter").addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });
-      $("pageSize").addEventListener("change", () => { APP.ui.predPage = 0; renderPredTable(); });
-      $("predTopK").addEventListener("change", () => { renderPredInsights(); });
-    $("predInsightsDetails").addEventListener("toggle", () => {
-      if ($("predInsightsDetails").open) {
-        renderPredInsights();
-        if (APP.ui.charts.errUnc) APP.ui.charts.errUnc.resize();
-      }
-    });
+      $("predFilter")?.addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });
+      $("pageSize")?.addEventListener("change", () => { APP.ui.predPage = 0; renderPredTable(); });
+      $("predTopK")?.addEventListener("change", () => { renderPredInsights(); });
+      $("predInsightsDetails")?.addEventListener("toggle", () => {
+        if ($("predInsightsDetails").open) {
+          renderPredInsights();
+          if (APP.ui.charts.errUnc) APP.ui.charts.errUnc.resize();
+        }
+      });
 
-    $("pruneImpBtn").addEventListener("click", () => {
-      if (!APP.train.model || !APP.train.pipeline) return;
-      const included = currentIncludedFeatureCols();
-      const fiNorm = normalizeFi(APP.train.fiBase).filter(x => included.includes(x.name));
-      if (!fiNorm.length) return;
+      $("pruneImpBtn")?.addEventListener("click", () => {
+        if (!APP.train.model || !APP.train.pipeline) return;
+        const included = currentIncludedFeatureCols();
+        const fiNorm = normalizeFi(APP.train.fiBase).filter(x => included.includes(x.name));
+        if (!fiNorm.length) return;
 
-      const tau = Math.max(0, parseNum($("pruneMinImp").value) || 0);
-      const keep = fiNorm.filter(x => x.frac >= tau).map(x => x.name);
-      const minKeep = Math.min(included.length, 5);
-      if (keep.length < minKeep) {
-        keep.length = 0;
-        for (let i = 0; i < Math.min(minKeep, fiNorm.length); i++) keep.push(fiNorm[i].name);
-      }
-      const drop = included.filter(c => !keep.includes(c));
-      applyExclusionsAndRetrain({ dropCols: drop, reason: `Pruned low-importance (min imp=${formatNum(tau, 4)})` });
-    });
+        const tau = Math.max(0, parseNum($("pruneMinImp").value) || 0);
+        const keep = fiNorm.filter(x => x.frac >= tau).map(x => x.name);
+        const minKeep = Math.min(included.length, 5);
+        if (keep.length < minKeep) {
+          keep.length = 0;
+          for (let i = 0; i < Math.min(minKeep, fiNorm.length); i++) keep.push(fiNorm[i].name);
+        }
+        const drop = included.filter(c => !keep.includes(c));
+        applyExclusionsAndRetrain({ dropCols: drop, reason: `Pruned low-importance (min imp=${formatNum(tau, 4)})` });
+      });
 
-    $("pruneShiftTopBtn").addEventListener("click", () => {
-      if (!APP.train.model || !APP.train.pipeline) return;
-      const shiftFi = APP.train.shift?.fiBase || null;
-      const shiftScore = APP.train.shift?.oobBalAcc ?? APP.train.shift?.oobAcc ?? null;
-      if (!Array.isArray(shiftFi) || !shiftFi.length || shiftScore === null) return;
-      const included = currentIncludedFeatureCols();
-      const fiNorm = normalizeFi(shiftFi).filter(x => included.includes(x.name));
-      if (!fiNorm.length) return;
-      const top = fiNorm[0].name;
-      applyExclusionsAndRetrain({ dropCols: [top], reason: `Pruned top shift driver (${top})` });
-    });
+      $("pruneShiftTopBtn")?.addEventListener("click", () => {
+        if (!APP.train.model || !APP.train.pipeline) return;
+        const shiftFi = APP.train.shift?.fiBase || null;
+        const shiftScore = APP.train.shift?.oobBalAcc ?? APP.train.shift?.oobAcc ?? null;
+        if (!Array.isArray(shiftFi) || !shiftFi.length || shiftScore === null) return;
+        const included = currentIncludedFeatureCols();
+        const fiNorm = normalizeFi(shiftFi).filter(x => included.includes(x.name));
+        if (!fiNorm.length) return;
+        const top = fiNorm[0].name;
+        applyExclusionsAndRetrain({ dropCols: [top], reason: `Pruned top shift driver (${top})` });
+      });
 
-    $("pruneUndoBtn").addEventListener("click", () => {
-      undoLastPrune();
-    });
+      $("pruneUndoBtn")?.addEventListener("click", () => {
+        undoLastPrune();
+      });
 
-    $("prevPage").addEventListener("click", () => { APP.ui.predPage = Math.max(0, APP.ui.predPage - 1); renderPredTable(); });
-    $("nextPage").addEventListener("click", () => { APP.ui.predPage = APP.ui.predPage + 1; renderPredTable(); });
+      $("prevPage")?.addEventListener("click", () => { APP.ui.predPage = Math.max(0, APP.ui.predPage - 1); renderPredTable(); });
+      $("nextPage")?.addEventListener("click", () => { APP.ui.predPage = APP.ui.predPage + 1; renderPredTable(); });
 
-    $("downloadPredCsvBtn").addEventListener("click", () => {
-      if (!APP.train.model) return;
-      const csv = buildPredictionsCsv();
-      downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "test_predictions.csv");
-    });
+      $("downloadPredCsvBtn")?.addEventListener("click", () => {
+        if (!APP.train.model) return;
+        const csv = buildPredictionsCsv();
+        downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "test_predictions.csv");
+      });
+    }
+
+    function bindLifecycleEvents() {
+      window.addEventListener("pagehide", (e) => {
+        if (e.persisted) return;
+        releaseAllResources();
+      });
+      window.addEventListener("beforeunload", () => {
+        releaseAllResources();
+      });
+
+      // Keyboard: Return = "next step" (via training)
+      window.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+        if (APP.ui.training.isTraining) return;
+
+        if (APP.step === 0) {
+          if ($("globalContinueBtn")?.disabled) return;
+          e.preventDefault();
+          $("globalContinueBtn").click();
+          return;
+        }
+
+        if (APP.step === 1) {
+          if ($("globalContinueBtn")?.disabled) return;
+          e.preventDefault();
+          $("globalContinueBtn").click();
+          return;
+        }
+
+        if (APP.step === 2) {
+          if ($("globalContinueBtn")?.disabled) return;
+          e.preventDefault();
+          $("globalContinueBtn").click();
+          return;
+        }
+
+        if (APP.step === 3) {
+          if (!buildArtifact()) return;
+          e.preventDefault();
+          downloadArtifactZip();
+        }
+      });
+    }
 
     async function downloadArtifactZip() {
       const artifact = buildArtifact();
@@ -8152,53 +8333,28 @@ Compatibility
       showToast("Downloading rf_artifact.zip", "good");
     }
 
-    // Keyboard: Return = "next step" (via training)
-    window.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
-      if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
-
-      const ae = document.activeElement;
-      if (ae && (ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
-      if (APP.ui.training.isTraining) return;
-
-      if (APP.step === 0) {
-        if ($("globalContinueBtn")?.disabled) return;
-        e.preventDefault();
-        $("globalContinueBtn").click();
-        return;
-      }
-
-      if (APP.step === 1) {
-        if ($("globalContinueBtn")?.disabled) return;
-        e.preventDefault();
-        $("globalContinueBtn").click();
-        return;
-      }
-
-      if (APP.step === 2) {
-        if ($("globalContinueBtn")?.disabled) return;
-        e.preventDefault();
-        $("globalContinueBtn").click();
-        return;
-      }
-
-      if (APP.step === 3) {
-        if (!buildArtifact()) return;
-        e.preventDefault();
-        downloadArtifactZip();
-      }
-    });
-
     // ----------------------------
     // Init
     // ----------------------------
-    disableChartAnimations();
-    renderStepper();
+    function initApp() {
+      disableChartAnimations();
+      renderStepper();
 
-    hardReset();
+      bindUploadEvents();
+      bindNavigationEvents();
+      bindSetupEvents();
+      bindResultsEvents();
+      bindLifecycleEvents();
+      forceDetailsOpen("shiftDetails");
+      forceDetailsOpen("predFullDetails");
 
-    syncButtons();
-    setExportLang(APP.ui.exportLang);
+      hardReset();
+
+      syncButtons();
+      setExportLang(APP.ui.exportLang);
+    }
+
+    initApp();
   </script>
 
 

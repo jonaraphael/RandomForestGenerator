@@ -1332,6 +1332,7 @@
           diagAbortController: null,
           runSeq: 0,
           autoStartOnResults: false,
+          retrainOnResults: false,
         },
         resultsTab: "overview",
 	        exportLang: "js",
@@ -1339,6 +1340,7 @@
           trainingPreset: "",
           hasVisitedSetup: false,
           targetPreviewKey: "",
+          setupDirty: false,
 	        parseSeq: 0,
 	        predPage: 0,
 	        predFilter: "",
@@ -1660,6 +1662,10 @@
       }
     }
 
+    function markSetupDirty() {
+      APP.ui.setupDirty = true;
+    }
+
     function requestStopTraining() {
       if (!APP.ui.training.isTraining) return;
       if (APP.ui.training.stopRequested) return;
@@ -1809,8 +1815,10 @@
       }
 
       if (APP.step === 2 && APP.ui.training.autoStartOnResults && !APP.ui.training.isTraining) {
+        const retrain = Boolean(APP.ui.training.retrainOnResults);
         APP.ui.training.autoStartOnResults = false;
-        if (isModelReady()) {
+        APP.ui.training.retrainOnResults = false;
+        if (isModelReady() && !retrain) {
           renderResults();
           return;
         }
@@ -2248,6 +2256,7 @@
 
       $("colConfigBody").querySelectorAll("input[type=checkbox][data-include]").forEach(cb => {
         cb.addEventListener("change", () => {
+          markSetupDirty();
           const col = cb.getAttribute("data-include");
           const targetCol = APP.raw.targetCol;
           if (targetCol && col === targetCol) return;
@@ -2264,6 +2273,7 @@
 
       $("colConfigBody").querySelectorAll("select[data-coltype]").forEach(sel => {
         sel.addEventListener("change", () => {
+          markSetupDirty();
           const col = sel.getAttribute("data-coltype");
           const picked = sel.value;
           APP.setup.forcedTypes.date.delete(col);
@@ -3375,6 +3385,7 @@
 
         APP.ui.trainingPreset = key;
         renderTrainingPresetButtons();
+        markSetupDirty();
         syncSetupUI();
         renderStateChips();
       };
@@ -6067,6 +6078,7 @@
 
       $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
       showToast("Training complete", "good");
+      APP.ui.setupDirty = false;
       APP.ui.training.abortController = null;
       APP.ui.training.stopRequested = false;
       setTrainingUi(false);
@@ -6836,6 +6848,7 @@ raise NotImplementedError(
       APP.ui.previewFilter = "";
       APP.ui.showAdvancedSettings = false;
       APP.ui.resultsTab = "overview";
+      APP.ui.setupDirty = false;
       APP.ui.prevRunSummary = null;
       APP.ui.pruneUndoExcluded = null;
       APP.ui.pruneUndoReason = "";
@@ -7141,13 +7154,16 @@ raise NotImplementedError(
       if (APP.step === 1) {
         APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
         renderStepper();
-        if (!isModelReady()) {
+        const shouldRetrain = Boolean(APP.ui.setupDirty && isModelReady());
+        if (!isModelReady() || shouldRetrain) {
           APP.ui.training.completedUnits = 0;
           APP.ui.training.totalUnits = 0;
           APP.ui.training.stopRequested = false;
           APP.ui.training.autoStartOnResults = true;
+          APP.ui.training.retrainOnResults = shouldRetrain;
         } else {
           APP.ui.training.autoStartOnResults = false;
+          APP.ui.training.retrainOnResults = false;
         }
         gotoStep(2);
         return;
@@ -7254,6 +7270,7 @@ raise NotImplementedError(
     $("exportLangPyBtn")?.addEventListener("click", () => setExportLang("py"));
 
     $("targetSelect").addEventListener("change", () => {
+      markSetupDirty();
       APP.raw.targetCol = $("targetSelect").value;
       if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
       recomputeColumnMeta();
@@ -7280,6 +7297,7 @@ raise NotImplementedError(
     });
 
     $("taskMode").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.taskMode = $("taskMode").value;
       syncSetupUI();
       renderStateChips();
@@ -7288,6 +7306,7 @@ raise NotImplementedError(
     });
 
     $("targetTransform").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.targetTransform = $("targetTransform").value;
       syncSetupUI();
       renderTargetPreview();
@@ -7295,13 +7314,16 @@ raise NotImplementedError(
 
     $("maxRows").addEventListener("change", () => {
       APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0);
+      markSetupDirty();
       clearTrainingPreset();
       syncSetupUI();
       applyAutoTrainDefaults();
     });
     $("maxRows").addEventListener("input", clearTrainingPreset);
+    $("maxRows").addEventListener("input", markSetupDirty);
 
     $("splitStrategy").addEventListener("change", () => {
+      markSetupDirty();
       $("splitStrategy").dataset.userSet = "true";
       APP.setup.splitStrategy = $("splitStrategy").value || "random";
       syncSetupUI();
@@ -7309,36 +7331,42 @@ raise NotImplementedError(
     });
 
     $("splitDateCol").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.splitDateCol = $("splitDateCol").value;
       syncSetupUI();
       renderStateChips();
     });
 
     $("splitMethod").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.splitMethod = $("splitMethod").value;
       syncSetupUI();
       renderStateChips();
     });
 
     $("cutoffDate").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.cutoffDate = $("cutoffDate").value || "";
       syncSetupUI();
       renderStateChips();
     });
 
     $("testFrac").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
       syncSetupUI();
       renderStateChips();
     });
 
     $("topNEnable").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.multiClass.topN.enabled = Boolean($("topNEnable").checked);
       syncAdvancedTargetUI();
       renderStateChips();
     });
 
     $("topNKeep").addEventListener("change", () => {
+      markSetupDirty();
       const v = Math.max(1, Math.floor(parseNum($("topNKeep").value) || 1));
       APP.setup.multiClass.topN.keep = v;
       $("topNKeep").value = String(v);
@@ -7357,6 +7385,7 @@ raise NotImplementedError(
     });
 
     $("applyDerivedTargetBtn").addEventListener("click", () => {
+      markSetupDirty();
       const dt = APP.setup.multiClass?.derivedTarget || null;
       if (dt) { dt.lastError = ""; dt.lastStatus = ""; }
       try {
@@ -7368,6 +7397,7 @@ raise NotImplementedError(
     });
 
     $("undoDerivedTargetBtn").addEventListener("click", () => {
+      markSetupDirty();
       undoDerivedTarget();
       syncAdvancedTargetUI();
       renderStateChips();
@@ -7396,12 +7426,19 @@ raise NotImplementedError(
     }
     $("maxFeaturesMode").addEventListener("change", () => {
       clearTrainingPreset();
+      markSetupDirty();
       syncMaxFeaturesUi();
     });
     $("maxFeaturesValue").addEventListener("input", clearTrainingPreset);
     $("nEstimators").addEventListener("input", clearTrainingPreset);
     $("maxDepth").addEventListener("input", clearTrainingPreset);
     $("minNumSamples").addEventListener("input", clearTrainingPreset);
+    $("maxFeaturesValue").addEventListener("input", markSetupDirty);
+    $("nEstimators").addEventListener("input", markSetupDirty);
+    $("maxDepth").addEventListener("input", markSetupDirty);
+    $("minNumSamples").addEventListener("input", markSetupDirty);
+    $("seed").addEventListener("input", markSetupDirty);
+    $("replacement").addEventListener("change", markSetupDirty);
     markTrainSettingAsUserSet("maxFeaturesMode");
     markTrainSettingAsUserSet("maxFeaturesValue");
     markTrainSettingAsUserSet("maxDepth");
@@ -7421,6 +7458,7 @@ raise NotImplementedError(
     });
 
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
+    $("maxCard").addEventListener("input", markSetupDirty);
     $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {
       th.addEventListener("click", () => {
         const key = th.getAttribute("data-sort");

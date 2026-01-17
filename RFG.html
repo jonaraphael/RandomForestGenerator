@@ -728,7 +728,11 @@
                       <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="name">
                         Column <span class="sort-indicator"></span>
-                        <button class="btn ghost" id="toggleColFilterBtn" type="button" style="padding:2px 8px;font-size:11px;margin-left:6px;">⏷</button>
+                        <button class="btn ghost" id="toggleColFilterBtn" type="button" aria-label="Filter columns" style="padding:2px 8px;font-size:11px;margin-left:6px;">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" width="12" height="12" style="display:block" fill="currentColor">
+                            <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+                          </svg>
+                        </button>
                       </th>
                       <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>

@@ -1610,6 +1610,12 @@
         const task = APP.train.pipeline?.task || "";
         renderResultsSidePanel(task);
       }
+      if (!APP.ui.training.isTraining) {
+        if ((APP.ui.maxUnlockedStep || 0) < 3 && buildArtifact()) {
+          APP.ui.maxUnlockedStep = 3;
+          renderStepper();
+        }
+      }
     }
 
     function requestStopTraining() {
@@ -1707,6 +1713,10 @@
         el.addEventListener("click", () => {
           const i = Number(el.getAttribute("data-step"));
           if (!Number.isFinite(i)) return;
+          if (i === 3 && APP.ui.training.isTraining) {
+            showToast("Stop training before exporting.", "warn");
+            return;
+          }
           if (i > (APP.ui.maxUnlockedStep || 0)) {
             showToast("Complete the previous step first.", "warn");
             return;
@@ -5895,6 +5905,7 @@
       const model = APP.train.model;
       const pipeline = APP.train.pipeline;
       if (!model || !pipeline) return null;
+      if (!Number.isFinite(model.nEstimators) || model.nEstimators <= 0) return null;
 
       return {
         schemaVersion: pipeline.schemaVersion,

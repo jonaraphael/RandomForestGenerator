@@ -177,6 +177,10 @@
       font-size:12px;
       white-space:nowrap;
     }
+    .pill.tiny{
+      padding:4px 8px;
+      font-size:12px;
+    }
     .pill.good{border-color:rgba(50,213,131,0.35);background:rgba(50,213,131,0.08);color:rgba(50,213,131,0.95)}
     .pill.warn{border-color:rgba(253,176,34,0.35);background:rgba(253,176,34,0.08);color:rgba(253,176,34,0.95)}
     .pill.bad {border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
@@ -714,16 +718,30 @@
                 </div>
               </div>
 
+              <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
+                <div class="field hidden" id="colFilterField" style="margin:0;min-width:240px;">
+                  <label for="colFilter">Search columns</label>
+                  <input id="colFilter" type="text" placeholder="Filter by column name" />
+                </div>
+              </div>
+
               <div class="scroll" style="max-height:420px;">
                 <table id="reviewColumnsTable">
                   <thead>
                     <tr>
                       <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="name">Column <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="name">
+                        Column <span class="sort-indicator"></span>
+                        <button class="btn ghost" id="toggleColFilterBtn" type="button" aria-label="Filter columns" style="padding:2px 8px;font-size:11px;margin-left:6px;">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" width="12" height="12" style="display:block" fill="currentColor">
+                            <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+                          </svg>
+                        </button>
+                      </th>
                       <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
                     </tr>
                   </thead>
@@ -1061,6 +1079,7 @@
       { key: "results", title: "Results" },
       { key: "export",  title: "Export" },
     ];
+    const AUTO_EXCLUDE_MISSING_PCT = 50;
 
     let APP = {
       step: 0,
@@ -1086,6 +1105,7 @@
         forceCont: "",
         excludeCols: "",
         excluded: new Set(),
+        autoExcludedReasons: {},
         forcedTypes: {
           date: new Set(),
           categorical: new Set(),
@@ -1790,6 +1810,33 @@
       syncHiddenTypingLists();
     }
 
+    function applyDefaultColumnExclusions() {
+      const meta = APP.raw.colMeta || {};
+      const target = APP.raw.targetCol;
+      const reasons = {};
+
+      for (const col of APP.raw.columns) {
+        if (col === target) continue;
+        const m = meta[col];
+        if (!m) continue;
+        const colReasons = [];
+
+        if (m.flags?.idLike) colReasons.push("ID-like");
+        if ((m.missingFrac ?? 0) * 100 > AUTO_EXCLUDE_MISSING_PCT) {
+          colReasons.push(`>${AUTO_EXCLUDE_MISSING_PCT}% missing`);
+        }
+
+        if (colReasons.length) {
+          APP.setup.excluded.add(col);
+          reasons[col] = colReasons;
+        }
+      }
+
+      APP.setup.autoExcludedReasons = reasons;
+      if (target) APP.setup.excluded.delete(target);
+      syncHiddenTypingLists();
+    }
+
     function computeTypeCounts() {
       const meta = APP.raw.colMeta;
       const counts = { date: 0, categorical: 0, continuous: 0, excluded: 0 };
@@ -1807,6 +1854,7 @@
     function renderColumnTable() {
       const meta = APP.raw.colMeta;
       const target = APP.raw.targetCol;
+      const q = normStr($("colFilter")?.value).toLowerCase();
 
       const groups = [
         { key: "continuous", title: "Continuous" },
@@ -1848,6 +1896,7 @@
         const colsInGroup = APP.raw.columns.filter(col => {
           const m = meta[col];
           if (!m) return false;
+          if (q && !col.toLowerCase().includes(q)) return false;
 
           const groupKey = m.include ? m.inferredType : "excluded";
           if (groupKey !== g.key) return false;
@@ -1868,7 +1917,7 @@
           return (sa < sb ? -1 : 1) * dirMul;
         });
 
-        rows.push(`<tr class="groupRow"><td colspan="7">${escapeHtml(g.title)} <span class="muted2">(${colsInGroup.length})</span></td></tr>`);
+          rows.push(`<tr class="groupRow"><td colspan="7">${escapeHtml(g.title)} <span class="muted2">(${colsInGroup.length})</span></td></tr>`);
 
         for (const col of colsInGroup) {
           const m = meta[col];
@@ -1891,9 +1940,17 @@
           `;
 
           const flags = [];
-          if (m.flags?.idLike) flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          if (target && col === target) flags.push(`<span class="pill good">target</span>`);
+          const autoReasons = (!m.include && APP.setup.autoExcludedReasons?.[col]) || [];
+          const hasAutoIdLike = autoReasons.includes("ID-like");
+          if (m.flags?.idLike && !hasAutoIdLike) {
+            flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          }
           if (forced) flags.push(`<span class="pill" title="Manually overridden">Forced</span>`);
           if (locked) flags.push(`<span class="pill warn" title="${escapeHtml(lockedReason)}">Locked</span>`);
+          for (const reason of autoReasons) {
+            flags.push(`<span class="pill warn tiny" title="Excluded by default">${escapeHtml(reason)}</span>`);
+          }
           const flagsHtml = flags.length ? flags.join(" ") : `<span class="muted2">—</span>`;
 
           const examplesFull = (m.examples || [])
@@ -1907,12 +1964,11 @@
               <td>${includeBox}</td>
               <td class="mono">
                 <span class="pickTarget ${target && col === target ? "active" : ""}" data-picktarget="${escapeHtml(col)}">${escapeHtml(col)}</span>
-                ${target && col === target ? `<span class="pill good" style="margin-left:8px;">target</span>` : ""}
               </td>
               <td>${typeSelect}</td>
+              <td>${flagsHtml}</td>
               <td>${escapeHtml(missPct.toFixed(1) + "%")}</td>
               <td>${escapeHtml(String(m.uniqueSample))}</td>
-              <td>${flagsHtml}</td>
               <td title="${escapeHtml(examples)}">${escapeHtml(examples)}</td>
             </tr>
           `);
@@ -5273,6 +5329,7 @@ function invertTargetIfNeeded(yPred, artifact){
         forceCont: "",
         excludeCols: "",
         excluded: new Set(),
+        autoExcludedReasons: {},
         forcedTypes: {
           date: new Set(),
           categorical: new Set(),
@@ -5386,6 +5443,8 @@ function invertTargetIfNeeded(yPred, artifact){
       if ($("maxFeatures")) delete $("maxFeatures").dataset.userSet;
       if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
       if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
+      if ($("colFilterField")) $("colFilterField").classList.add("hidden");
+      if ($("colFilter")) $("colFilter").value = "";
 
       if ($("advancedTargetDetails")) $("advancedTargetDetails").classList.add("hidden");
       if ($("multiClassSummaryCallout")) $("multiClassSummaryCallout").innerHTML = "";
@@ -5435,6 +5494,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.setup.maxRows = Math.max(0, prefs.maxRows);
       APP.setup.maxCard = prefs.maxCard;
       APP.setup.excluded = new Set();
+      APP.setup.autoExcludedReasons = {};
       APP.setup.forcedTypes = { date: new Set(), categorical: new Set(), continuous: new Set() };
       syncHiddenTypingLists();
 
@@ -5466,6 +5526,8 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 1);
       renderStepper();
 
+      recomputeColumnMeta();
+      applyDefaultColumnExclusions();
       recomputeColumnMeta();
 
       $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
@@ -5819,6 +5881,17 @@ function invertTargetIfNeeded(yPred, artifact){
     markTrainSettingAsUserSet("minNumSamples");
     markTrainSettingAsUserSet("derivedTargetColName");
     markTrainSettingAsUserSet("derivedTargetExpr");
+
+    $("colFilter").addEventListener("input", () => {
+      renderColumnTable();
+    });
+    $("toggleColFilterBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const field = $("colFilterField");
+      if (!field) return;
+      field.classList.remove("hidden");
+      $("colFilter").focus();
+    });
 
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
     $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {

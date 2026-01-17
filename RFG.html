@@ -1203,6 +1203,8 @@
       { key: "export",  title: "Export" },
     ];
     const AUTO_EXCLUDE_MISSING_PCT = 50;
+    const AUTO_EXCLUDE_HIGH_CARD_MIN_UNIQUE = 50;
+    const AUTO_EXCLUDE_HIGH_CARD_UNIQUE_RATIO = 0.60;
 
     let APP = {
       step: 0,
@@ -1210,7 +1212,7 @@
         fileName: null,
         rows: [],
         columns: [],
-        colMeta: {}, // {col: {inferredType, missingFrac, uniqueSample, examples[], flags:{idLike,idByName}, include:true}}
+        colMeta: {}, // {col: {inferredType, missingFrac, uniqueSample, examples[], flags:{idLike,idByName,highCardinality}, include:true}}
         targetCol: null
       },
       setup: {
@@ -1829,11 +1831,13 @@
       let nonEmpty = 0, numeric = 0, integerish = 0, dateish = 0;
       const uniq = new Set();
       const examples = [];
+      let sampleLenSum = 0;
 
       for (let i = 0; i < maxN; i++) {
         const s = normStr(rows[i][col]);
         if (!s) continue;
         nonEmpty++;
+        sampleLenSum += s.length;
 
         if (examples.length < 4 && !examples.includes(s)) examples.push(s);
         uniq.add(s);
@@ -1870,6 +1874,12 @@
       const uniqueRatio = nonEmpty ? (uniqueSample / nonEmpty) : 0;
 
       const idLike = idByName || (inferred !== "date" && fracInt >= 0.95 && uniqueRatio >= 0.95 && uniqueSample >= 50);
+      const avgLen = nonEmpty ? (sampleLenSum / nonEmpty) : 0;
+      const highCardinality =
+        inferred === "categorical" &&
+        uniqueSample >= AUTO_EXCLUDE_HIGH_CARD_MIN_UNIQUE &&
+        uniqueRatio >= AUTO_EXCLUDE_HIGH_CARD_UNIQUE_RATIO &&
+        avgLen >= 4;
 
       const forced = forceType || null;
       if (forced === "date" || forced === "categorical" || forced === "continuous") inferred = forced;
@@ -1881,7 +1891,8 @@
         examples,
         flags: {
           idLike,
-          idByName
+          idByName,
+          highCardinality,
         },
         include: true
       };
@@ -2075,6 +2086,7 @@
         const colReasons = [];
 
         if (m.flags?.idLike) colReasons.push("ID-like");
+        if (m.flags?.highCardinality) colReasons.push("High-cardinality");
         if ((m.missingFrac ?? 0) * 100 > AUTO_EXCLUDE_MISSING_PCT) {
           colReasons.push(`>${AUTO_EXCLUDE_MISSING_PCT}% missing`);
         }
@@ -2130,7 +2142,7 @@
           case "type": return labelOfType(m.inferredType);
           case "missing": return m.missingFrac ?? 0;
           case "unique": return m.uniqueSample ?? 0;
-          case "flags": return (m.flags?.idLike ? 1 : 0);
+          case "flags": return (m.flags?.idLike ? 2 : 0) + (m.flags?.highCardinality ? 1 : 0);
           case "examples": return (m.examples?.[0] ?? "").toLowerCase();
           default: return col.toLowerCase();
         }
@@ -2196,8 +2208,12 @@
           if (target && col === target) flags.push(`<span class="pill good">target</span>`);
           const autoReasons = (!m.include && APP.setup.autoExcludedReasons?.[col]) || [];
           const hasAutoIdLike = autoReasons.includes("ID-like");
+          const hasAutoHighCard = autoReasons.includes("High-cardinality");
           if (m.flags?.idLike && !hasAutoIdLike) {
             flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          }
+          if (m.flags?.highCardinality && !hasAutoHighCard) {
+            flags.push(`<span class="pill warn" title="Many unique categories; raw label encoding is often brittle. Consider excluding or feature-engineering.">High-cardinality</span>`);
           }
           if (forced) flags.push(`<span class="pill" title="Manually overridden">Forced</span>`);
           if (locked) flags.push(`<span class="pill warn" title="${escapeHtml(lockedReason)}">Locked</span>`);

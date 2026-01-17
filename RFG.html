@@ -312,8 +312,10 @@
       outline:none;
     }
 
-    .kpiGrid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px}
+    .kpiGrid{display:grid;grid-template-columns:1fr;gap:12px}
     @media(max-width:980px){.kpiGrid{grid-template-columns:1fr}}
+    .resultsTopGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+    @media(max-width:980px){.resultsTopGrid{grid-template-columns:1fr}}
     .kpi{
       border:1px solid var(--border2);
       background:rgba(255,255,255,0.03);
@@ -403,6 +405,27 @@
       font-family:var(--mono);
       font-size:12px;
       color:rgba(234,240,255,0.86);
+    }
+
+    .segmented{
+      display:inline-flex;
+      border:1px solid var(--border2);
+      border-radius:999px;
+      overflow:hidden;
+      background:rgba(255,255,255,0.03);
+    }
+    .segmented button{
+      border:0;
+      background:transparent;
+      color:var(--muted2);
+      padding:6px 10px;
+      font-size:12px;
+      line-height:1;
+      cursor:pointer;
+    }
+    .segmented button.active{
+      background:rgba(139,92,246,0.18);
+      color:rgba(234,240,255,0.92);
     }
 
     .hidden{display:none!important}
@@ -600,7 +623,7 @@
             <div class="two">
               <div class="field">
                 <label for="maxRows">Max rows (0 = all)</label>
-                <input id="maxRows" type="number" min="0" step="1000" value="50000" />
+                <input id="maxRows" type="number" min="0" step="1000" value="1000" />
                 <div class="muted2">Useful for quick iteration on huge CSVs. For time splits, we take the last N rows (file order).</div>
               </div>
 
@@ -815,25 +838,15 @@
 
         <div id="trainStatus" class="hidden"></div>
 
-        <div class="kpiGrid">
+        <div class="resultsTopGrid">
           <div class="kpi">
             <div class="lbl" id="primaryMetricLabel">—</div>
             <div class="big mono" id="primaryMetricValue">—</div>
             <div class="small" id="primaryMetricSub">—</div>
           </div>
-
-          <div class="kpi">
-            <div class="lbl">Setup</div>
-            <div class="small mono" id="setupSummary">—</div>
-            <div class="small mono" id="featureSummary">—</div>
-          </div>
-
-          <div class="kpi">
-            <div class="lbl">Next</div>
-            <div class="small">Export a portable artifact (model + preprocessing + sample loader).</div>
-            <div class="row" style="margin-top:10px;">
-              <button class="btn primary" id="jumpToExportBtn">Export</button>
-            </div>
+          <div class="callout hidden" id="resultsSidePanel">
+            <div style="font-weight:650;margin-bottom:6px;" id="resultsSideTitle">—</div>
+            <div class="muted2" id="resultsSideBody">—</div>
           </div>
         </div>
 
@@ -1024,19 +1037,13 @@
       <section class="card hidden" id="panelExport">
         <h2>Export</h2>
 
-        <div class="row space">
-          <div class="row">
-            <span class="pill" id="artifactPill">Artifact: not ready</span>
-            <span class="pill" id="artifactDetailPill">—</span>
-          </div>
-          <div class="row">
-            <button class="btn primary" id="downloadZipBtn" disabled>Download rf_artifact.zip</button>
+        <div class="row space" style="margin-bottom:8px;">
+          <div class="muted2">Example loader code</div>
+          <div class="segmented" role="tablist" aria-label="Example code language">
+            <button id="exportLangJsBtn" type="button" role="tab" aria-selected="true">JS</button>
+            <button id="exportLangPyBtn" type="button" role="tab" aria-selected="false">Python</button>
           </div>
         </div>
-
-        <div class="hr"></div>
-
-        <div class="muted" style="margin-bottom:8px;">Sample loader</div>
         <pre class="code" id="sampleCode"></pre>
 
         <div class="hr"></div>
@@ -1088,7 +1095,7 @@
         testFrac: 0.1,
         taskMode: "auto",
         targetTransform: "none",
-        maxRows: 50000,
+        maxRows: 1000,
         maxCard: 50,
         forceDate: "",
         forceCat: "",
@@ -1193,6 +1200,7 @@
           runSeq: 0,
           autoStartOnResults: false,
         },
+        exportLang: "js",
         parseSeq: 0,
         predPage: 0,
         predFilter: "",
@@ -1213,6 +1221,15 @@
     const $ = (id) => document.getElementById(id);
     const show = (el) => el.classList.remove("hidden");
     const hide = (el) => el.classList.add("hidden");
+
+    function disableChartAnimations() {
+      if (!window.Chart) return;
+      try {
+        Chart.defaults.animation = false;
+        if (Chart.defaults.transitions?.active?.animation) Chart.defaults.transitions.active.animation.duration = 0;
+        if (Chart.defaults.transitions?.resize?.animation) Chart.defaults.transitions.resize.animation.duration = 0;
+      } catch {}
+    }
 
     function showToast(message, kind = "") {
       const host = $("toastHost");
@@ -1493,6 +1510,10 @@
       syncGlobalContinueBtn();
       syncGlobalBackBtn();
       syncGlobalStopBtn();
+      if (!APP.ui.training.isTraining && APP.step === 2) {
+        const task = APP.train.pipeline?.task || "";
+        renderResultsSidePanel(task);
+      }
     }
 
     function requestStopTraining() {
@@ -3529,6 +3550,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           indexAxis: "y",
           plugins: { legend: { display: false } },
           scales: {
@@ -3563,6 +3585,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           indexAxis: "y",
           plugins: { legend: { display: false } },
           scales: {
@@ -3743,6 +3766,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           plugins: { legend: { display: false } },
           scales: {
             x: { title: { display: true, text: "true" }, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
@@ -4490,6 +4514,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           plugins: { legend: { display: false } },
           scales: {
             x: { title: { display: true, text: "abs(error)" }, ticks: { color: "rgba(234,240,255,0.75)" }, grid: { color: "rgba(234,240,255,0.08)" } },
@@ -4565,6 +4590,110 @@
         `<span class="muted2">${prog} · Elapsed <span class="mono">${formatDuration(elapsedMs)}</span> · ETA <span class="mono">${etaText}</span></span>`;
     }
 
+    function trainingCalloutBodyHtml(task, completedUnits, totalUnits, startMs) {
+      const elapsedMs = performance.now() - startMs;
+      let etaText = "estimating…";
+      if (completedUnits > 0 && totalUnits > 0) {
+        const msPerUnit = elapsedMs / Math.max(1, completedUnits);
+        const remainingMs = msPerUnit * Math.max(0, totalUnits - completedUnits);
+        etaText = formatDuration(remainingMs);
+      }
+
+      const prog = (totalUnits > 0)
+        ? `Tree <span class="mono">${completedUnits}</span>/<span class="mono">${totalUnits}</span>`
+        : `Tree <span class="mono">${completedUnits}</span>`;
+
+      return `<span class="spinner"></span> ` +
+        `<span class="mono">${escapeHtml(task)}</span> · ` +
+        `<span class="muted2">${prog} · Elapsed <span class="mono">${formatDuration(elapsedMs)}</span> · ETA <span class="mono">${etaText}</span></span>`;
+    }
+
+    function setResultsSidePanel({ visible, title, bodyHtml, cls }) {
+      const panel = $("resultsSidePanel");
+      const titleEl = $("resultsSideTitle");
+      const bodyEl = $("resultsSideBody");
+      if (!panel || !titleEl || !bodyEl) return;
+      if (!visible) {
+        panel.className = "callout hidden";
+        titleEl.textContent = "—";
+        bodyEl.textContent = "—";
+        return;
+      }
+      panel.className = `callout ${cls || ""}`.trim();
+      titleEl.textContent = title || "";
+      bodyEl.innerHTML = bodyHtml || "";
+    }
+
+    function renderResultsSidePanel(task) {
+      const isTraining = Boolean(APP.ui.training.isTraining);
+      const trained = Math.max(0, Math.floor(APP.ui.training.completedUnits || 0));
+      const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
+
+      if (isTraining) {
+        setResultsSidePanel({
+          visible: true,
+          title: "Training",
+          bodyHtml: trainingCalloutBodyHtml(task, trained, total, APP.ui.training.startMs),
+          cls: "",
+        });
+        return;
+      }
+
+      const prev = APP.ui.prevRunSummary;
+      const cur = APP.train.runSummary;
+      if (prev && prev.runId && cur && cur.runId && prev.runId !== cur.runId && prev.task === cur.task) {
+        const betterIsLower = (cur.task === "regression");
+        const a = Number(prev.test?.primary);
+        const b = Number(cur.test?.primary);
+        const delta = (Number.isFinite(a) && Number.isFinite(b)) ? (b - a) : null;
+        const improved = (delta !== null)
+          ? (betterIsLower ? (delta < 0) : (delta > 0))
+          : null;
+
+        const cls = (improved === null) ? "" : (improved ? "good" : "warn");
+        const deltaTxt = (delta === null) ? "n/a" : `${delta >= 0 ? "+" : ""}${formatNum(delta, 6)}`;
+        const prevTxt = Number.isFinite(a) ? formatNum(a, 6) : "n/a";
+        const curTxt = Number.isFinite(b) ? formatNum(b, 6) : "n/a";
+
+        const oA = Number(prev.oob?.value);
+        const oB = Number(cur.oob?.value);
+        const oDelta = (Number.isFinite(oA) && Number.isFinite(oB)) ? (oB - oA) : null;
+        const oDeltaTxt = (oDelta === null) ? "n/a" : `${oDelta >= 0 ? "+" : ""}${formatNum(oDelta, 6)}`;
+
+        const body =
+          `${escapeHtml(cur.test?.primaryLabel || "Test metric")}: <span class="mono">${escapeHtml(curTxt)}</span> (prev <span class="mono">${escapeHtml(prevTxt)}</span>, Δ <span class="mono">${escapeHtml(deltaTxt)}</span>)` +
+          (prev.oob?.label && cur.oob?.label
+            ? `<div style="margin-top:6px;">${escapeHtml(cur.oob.label)}: <span class="mono">${escapeHtml(Number.isFinite(oB) ? formatNum(oB, 6) : "n/a")}</span> (prev <span class="mono">${escapeHtml(Number.isFinite(oA) ? formatNum(oA, 6) : "n/a")}</span>, Δ <span class="mono">${escapeHtml(oDeltaTxt)}</span>)</div>`
+            : "") +
+          `<div style="margin-top:6px;">Columns: included <span class="mono">${cur.includedCols}</span> (prev <span class="mono">${prev.includedCols}</span>) · excluded <span class="mono">${cur.excludedCols}</span> (prev <span class="mono">${prev.excludedCols}</span>)</div>`;
+
+        setResultsSidePanel({ visible: true, title: "Compare to previous run", bodyHtml: body, cls });
+        return;
+      }
+
+      if (isModelReady()) {
+        setResultsSidePanel({
+          visible: true,
+          title: "Done",
+          bodyHtml: `Model trained locally. <span class="muted2">Use <span class="mono">Retrain</span> to run again.</span>`,
+          cls: "good",
+        });
+        return;
+      }
+
+      setResultsSidePanel({
+        visible: true,
+        title: "Not trained",
+        bodyHtml: `Continue to <span class="mono">Results</span> from <span class="mono">Settings</span> to train a model.`,
+        cls: "",
+      });
+    }
+
+    function updateTrainingCallout(task, completedUnits, totalUnits) {
+      if (APP.step !== 2) return;
+      renderResultsSidePanel(task);
+    }
+
     function isFrac01(x) {
       return x > 0 && x <= 1;
     }
@@ -4582,8 +4711,28 @@
     function yieldToBrowserPaint() {
       return new Promise(resolve => {
         const raf = window.requestAnimationFrame || ((cb) => setTimeout(cb, 16));
-        setTimeout(() => raf(() => resolve()), 0);
+        setTimeout(() => raf(() => setTimeout(resolve, 0)), 0);
       });
+    }
+
+    function withTemporaryTrainedEstimators(model, trainedEstimators, fn) {
+      if (!model) return fn();
+      const k = Math.max(0, Math.floor(trainedEstimators || 0));
+      const hasEstimators = Array.isArray(model.estimators);
+      const hasIndexes = Array.isArray(model.indexes);
+      const prevNE = model.nEstimators;
+      const prevEstLen = hasEstimators ? model.estimators.length : null;
+      const prevIdxLen = hasIndexes ? model.indexes.length : null;
+      try {
+        if (hasEstimators) model.estimators.length = k;
+        if (hasIndexes) model.indexes.length = k;
+        model.nEstimators = k;
+        return fn();
+      } finally {
+        if (hasEstimators && prevEstLen !== null) model.estimators.length = prevEstLen;
+        if (hasIndexes && prevIdxLen !== null) model.indexes.length = prevIdxLen;
+        model.nEstimators = prevNE;
+      }
     }
 
     function sampleWithBagging(X, y, seed, includeOob) {
@@ -4879,6 +5028,7 @@
         let liveTimer = null;
         let liveRefreshing = false;
         let livePending = false;
+        let liveErrorCount = 0;
 
         const runSeqForLive = runSeq;
         const queueLiveUpdate = (force = false) => {
@@ -4890,11 +5040,13 @@
           liveTimer = setTimeout(async () => {
             liveTimer = null;
             if (runSeqForLive !== APP.ui.training.runSeq) return;
+            if (!APP.ui.training.isTraining) return;
             if (liveRefreshing) { livePending = true; return; }
             if (APP.ui.training.completedUnits <= 0) return;
             liveRefreshing = true;
             try {
-              const ypredNow = model.predict(Xtest);
+              const trainedNow = Math.max(1, Math.floor(APP.ui.training.completedUnits || 1));
+              const ypredNow = withTemporaryTrainedEstimators(model, trainedNow, () => model.predict(Xtest));
               const ypredRaw = (pipeline.task === "regression" && transform === "log1p")
                 ? ypredNow.map(v => Math.expm1(v))
                 : (pipeline.task === "regression")
@@ -4904,7 +5056,7 @@
               APP.train.yPred = ypredRaw;
 
               let fi = null;
-              try { fi = model.featureImportance(); } catch { fi = null; }
+              try { fi = withTemporaryTrainedEstimators(model, trainedNow, () => model.featureImportance()); } catch { fi = null; }
               APP.train.fiDerived = (fi && fi.length === featureNames.length)
                 ? featureNames.map((name, i) => ({ name, imp: Number.isFinite(fi[i]) ? fi[i] : 0 }))
                     .sort((a,b)=>b.imp-a.imp)
@@ -4913,9 +5065,15 @@
                 ? aggregateFI(fi, featureNames, baseForDerived)
                 : [];
 
-              if (APP.step === 2) renderResultsLivePartial();
+              if (APP.step === 2) {
+                renderResultsLivePartial();
+                await yieldToBrowserPaint();
+              }
               liveLastMs = performance.now();
-            } catch {}
+            } catch (e) {
+              liveErrorCount++;
+              if (liveErrorCount <= 3) console.warn("Live results update failed", e);
+            }
             liveRefreshing = false;
             if (livePending) { livePending = false; queueLiveUpdate(true); }
           }, dueIn);
@@ -4926,6 +5084,7 @@
             APP.ui.training.completedUnits = completedUnits;
             APP.ui.training.totalUnits = totalUnits;
             $("trainStatus").innerHTML = trainingStatusHtml(task, completedUnits, totalUnits, APP.ui.training.startMs);
+            updateTrainingCallout(task, completedUnits, totalUnits);
             queueLiveUpdate(false);
           },
           signal: abortController.signal,
@@ -5225,8 +5384,8 @@
       const maxRowsTxt = String(APP.setup.maxRows || 0) === "0" ? "all" : String(APP.setup.maxRows || "—");
       const estFeatures = estimateDerivedFeatureCount();
 
-      $("setupSummary").textContent = `Target=${targetCol} · Split=${splitText} · Test=${testText}`;
-      $("featureSummary").textContent = `Max rows=${maxRowsTxt} · Est. features≈${estFeatures || "—"}`;
+      if ($("setupSummary")) $("setupSummary").textContent = `Target=${targetCol} · Split=${splitText} · Test=${testText}`;
+      if ($("featureSummary")) $("featureSummary").textContent = `Max rows=${maxRowsTxt} · Est. features≈${estFeatures || "—"}`;
 
       $("primaryMetricLabel").textContent = "Test metric";
       $("primaryMetricValue").textContent = "—";
@@ -5234,11 +5393,13 @@
 
       const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
       const totalTxt = total ? `/${total}` : "";
-      $("resultsCallouts").innerHTML =
-        `<div class="callout">` +
-        `<div style="font-weight:650;margin-bottom:6px;">Training</div>` +
-        `<div class="muted2"><span class="spinner"></span> Starting… Trees <span class="mono">0${escapeHtml(totalTxt)}</span></div>` +
-        `</div>`;
+      $("resultsCallouts").innerHTML = "";
+      setResultsSidePanel({
+        visible: true,
+        title: "Training",
+        bodyHtml: `<span class="spinner"></span> Starting… Trees <span class="mono">0${escapeHtml(totalTxt)}</span>`,
+        cls: "",
+      });
 
       $("secondaryChartTitle").textContent = "Test chart";
       $("secondaryChartPill").textContent = "—";
@@ -5260,14 +5421,20 @@
         ? `time-based (${APP.setup.splitDateCol})`
         : "random";
 
-      $("setupSummary").textContent =
-        `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+      if ($("setupSummary")) {
+        $("setupSummary").textContent =
+          `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+      }
 
-      $("featureSummary").textContent =
-        `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+      if ($("featureSummary")) {
+        $("featureSummary").textContent =
+          `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+      }
 
       const trained = Math.max(0, Math.floor(APP.ui.training.completedUnits || 0));
       const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
+
+      renderResultsSidePanel(task);
 
       $("resultsCallouts").innerHTML = "";
       const addCallout = (cls, title, body) => {
@@ -5277,10 +5444,6 @@
                         <div class="muted2">${body}</div>`;
         $("resultsCallouts").appendChild(el);
       };
-
-      if (APP.ui.training.isTraining) {
-        addCallout("", "Training", trainingStatusHtml(task, trained, total, APP.ui.training.startMs));
-      }
 
       if (APP.train.dropped?.unusableTargetRows) {
         addCallout("warn", "Some rows were dropped (target not usable)",
@@ -5297,6 +5460,23 @@
       const hasFi = (Array.isArray(APP.train.fiBase) && APP.train.fiBase.length) || (Array.isArray(APP.train.fiDerived) && APP.train.fiDerived.length);
       $("secondaryPlaceholder").classList.toggle("hidden", Boolean(hasPred));
       $("fiChartPlaceholder").classList.toggle("hidden", Boolean(hasFi));
+
+      const hasFullPred = Boolean(
+        Array.isArray(APP.train.yTest) &&
+        Array.isArray(APP.train.yPred) &&
+        APP.train.yTest.length > 0 &&
+        APP.train.yPred.length === APP.train.yTest.length
+      );
+      if (!hasFullPred) {
+        $("primaryMetricLabel").textContent = (task === "regression") ? "Test RMSE" : "Test Accuracy";
+        $("primaryMetricValue").textContent = "—";
+        $("primaryMetricSub").textContent = "Waiting for first live prediction…";
+        $("secondaryChartTitle").textContent = (task === "regression") ? "Predicted vs true (scatter)" : "Confusion matrix (top classes)";
+        $("secondaryChartPill").textContent = `trees=${trained}${total ? `/${total}` : ""}`;
+        $("secondaryChartHint").textContent = "Updates periodically during training.";
+        clearSecondaryViz();
+        return;
+      }
 
       if (task === "regression") {
         const yTrue = APP.train.yTest;
@@ -5321,7 +5501,7 @@
         const yPred = APP.train.yPred.map(v => Number(v));
 
         const acc = accuracy(yTrue, yPred);
-        const f1 = f1Macro(yTrue, yPred);
+        const f1 = f1Macro(yTrue, yPred, pl.target.numClasses || 2);
 
         $("primaryMetricLabel").textContent = "Test Accuracy";
         $("primaryMetricValue").textContent = formatNum(acc, 6);
@@ -5352,11 +5532,17 @@
         ? `time-based (${APP.setup.splitDateCol})`
         : "random";
 
-      $("setupSummary").textContent =
-        `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+      if ($("setupSummary")) {
+        $("setupSummary").textContent =
+          `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+      }
 
-      $("featureSummary").textContent =
-        `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+      if ($("featureSummary")) {
+        $("featureSummary").textContent =
+          `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+      }
+
+      renderResultsSidePanel(task);
 
       $("resultsCallouts").innerHTML = "";
 
@@ -5382,35 +5568,6 @@
       const cur = APP.train.runSummary;
       if (cur?.pruneReason) {
         addCallout("", "Prune applied", escapeHtml(cur.pruneReason));
-      }
-
-      const prev = APP.ui.prevRunSummary;
-      if (prev && prev.runId && cur && cur.runId && prev.runId !== cur.runId && prev.task === cur.task) {
-        const betterIsLower = (cur.task === "regression");
-        const a = Number(prev.test?.primary);
-        const b = Number(cur.test?.primary);
-        const delta = (Number.isFinite(a) && Number.isFinite(b)) ? (b - a) : null;
-        const improved = (delta !== null)
-          ? (betterIsLower ? (delta < 0) : (delta > 0))
-          : null;
-
-        const cls = (improved === null) ? "" : (improved ? "good" : "warn");
-        const deltaTxt = (delta === null) ? "n/a" : `${delta >= 0 ? "+" : ""}${formatNum(delta, 6)}`;
-        const prevTxt = Number.isFinite(a) ? formatNum(a, 6) : "n/a";
-        const curTxt = Number.isFinite(b) ? formatNum(b, 6) : "n/a";
-
-        const oA = Number(prev.oob?.value);
-        const oB = Number(cur.oob?.value);
-        const oDelta = (Number.isFinite(oA) && Number.isFinite(oB)) ? (oB - oA) : null;
-        const oDeltaTxt = (oDelta === null) ? "n/a" : `${oDelta >= 0 ? "+" : ""}${formatNum(oDelta, 6)}`;
-
-        addCallout(cls, "Compare to previous run",
-          `${escapeHtml(cur.test?.primaryLabel || "Test metric")}: <span class="mono">${escapeHtml(curTxt)}</span> (prev <span class="mono">${escapeHtml(prevTxt)}</span>, Δ <span class="mono">${escapeHtml(deltaTxt)}</span>)` +
-          (prev.oob?.label && cur.oob?.label
-            ? `<div style="margin-top:6px;">${escapeHtml(cur.oob.label)}: <span class="mono">${escapeHtml(Number.isFinite(oB) ? formatNum(oB, 6) : "n/a")}</span> (prev <span class="mono">${escapeHtml(Number.isFinite(oA) ? formatNum(oA, 6) : "n/a")}</span>, Δ <span class="mono">${escapeHtml(oDeltaTxt)}</span>)</div>`
-            : "") +
-          `<div style="margin-top:6px;">Columns: included <span class="mono">${cur.includedCols}</span> (prev <span class="mono">${prev.includedCols}</span>) · excluded <span class="mono">${cur.excludedCols}</span> (prev <span class="mono">${prev.excludedCols}</span>)</div>`
-        );
       }
 
       if (task === "regression") {
@@ -5628,22 +5785,66 @@ function invertTargetIfNeeded(yPred, artifact){
 `;
     }
 
-    async function updateExportUI() {
+    function buildSampleCodePy(artifact) {
+      const task = String(artifact.task || "unknown");
+      const targetCol = String(artifact.targetCol || artifact.target?.col || "unknown");
+      const transform = String(artifact.targetTransform || "none");
+      const nFeatures = Array.isArray(artifact.derivedFeatureNames) ? artifact.derivedFeatureNames.length : 0;
+      return `"""
+RFG export: rf_artifact.json
+
+This artifact contains:
+- preprocessing metadata (label encoders, medians, date expansion)
+- a random forest model serialized for the JavaScript library:
+    ml-random-forest (trees from ml-cart)
+
+Python note:
+There is no built-in Python loader for this JS model JSON. Use the JS example for
+inference, or retrain an equivalent model in Python (e.g. scikit-learn).
+"""
+
+import json
+from pathlib import Path
+
+# Generated metadata:
+# task=${task}
+# targetCol=${targetCol}
+# targetTransform=${transform}
+# n_features=${nFeatures}
+
+artifact = json.loads(Path("rf_artifact.json").read_text(encoding="utf-8"))
+
+print("task:", artifact.get("task"))
+print("targetCol:", artifact.get("targetCol"))
+print("targetTransform:", artifact.get("targetTransform"))
+print("n_features:", len(artifact.get("derivedFeatureNames", [])))
+
+if artifact.get("task") == "classification":
+  mapping = (artifact.get("target", {}) or {}).get("mapping", {}) or {}
+  print("numClasses:", (artifact.get("target", {}) or {}).get("numClasses"))
+  print("example label mapping:", list(mapping.items())[:5])
+
+raise NotImplementedError(
+  "Model is serialized for ml-random-forest (JavaScript). "
+  "Use the JS example for predictions, or retrain in Python."
+)
+`;
+    }
+
+    function renderExportSampleCode() {
       const artifact = buildArtifact();
       if (!artifact) {
-        $("artifactPill").className = "pill";
-        $("artifactPill").textContent = "Artifact: not ready";
-        $("artifactDetailPill").textContent = "Train a model first";
-        $("downloadZipBtn").disabled = true;
         $("sampleCode").textContent = "";
         return;
       }
+      const lang = (APP.ui.exportLang === "py") ? "py" : "js";
+      $("sampleCode").textContent = (lang === "py") ? buildSampleCodePy(artifact) : buildSampleCode(artifact);
+    }
 
-      $("artifactPill").className = "pill good";
-      $("artifactPill").textContent = "Artifact: ready";
-      $("artifactDetailPill").textContent = `task=${artifact.task} · features=${artifact.derivedFeatureNames.length}`;
-      $("downloadZipBtn").disabled = false;
-      $("sampleCode").textContent = buildSampleCode(artifact);
+    async function updateExportUI() {
+      const artifact = buildArtifact();
+      if (!artifact) { renderExportSampleCode(); return; }
+      renderExportSampleCode();
       APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 3);
       renderStepper();
     }
@@ -5656,6 +5857,15 @@ function invertTargetIfNeeded(yPred, artifact){
       if (!btn) return;
 
       const step = APP.step || 0;
+      if (step === 3) {
+        btn.classList.remove("hidden");
+        btn.textContent = "Download";
+        btn.title = "Download rf_artifact.zip";
+        btn.setAttribute("aria-label", "Download rf_artifact.zip");
+        btn.disabled = !Boolean(buildArtifact());
+        return;
+      }
+
       const next = step + 1;
       if (next >= STEPS.length) {
         btn.classList.add("hidden");
@@ -5666,6 +5876,7 @@ function invertTargetIfNeeded(yPred, artifact){
       }
 
       btn.classList.remove("hidden");
+      btn.textContent = "Continue";
       btn.title = `Continue to ${STEPS[next].title}`;
       btn.setAttribute("aria-label", `Continue to ${STEPS[next].title}`);
 
@@ -5710,6 +5921,13 @@ function invertTargetIfNeeded(yPred, artifact){
         btn.title = "Stop training";
         btn.setAttribute("aria-label", "Stop training");
       } else {
+        if (APP.step !== 2) {
+          btn.classList.add("hidden");
+          btn.disabled = true;
+          btn.title = "";
+          btn.setAttribute("aria-label", "Retrain model");
+          return;
+        }
         btn.className = "btn";
         btn.textContent = "Retrain";
         btn.disabled = false;
@@ -5750,7 +5968,7 @@ function invertTargetIfNeeded(yPred, artifact){
         testFrac: 0.1,
         taskMode: "auto",
         targetTransform: "none",
-        maxRows: 50000,
+        maxRows: 1000,
         maxCard: 50,
         forceDate: "",
         forceCat: "",
@@ -5850,7 +6068,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("testFrac").value = "0.1";
       $("cutoffDate").value = "";
       $("seed").value = "42";
-      $("maxRows").value = "50000";
+      $("maxRows").value = "1000";
       $("maxCard").value = "50";
       $("nEstimators").value = "100";
       $("maxFeatures").value = "1.0";
@@ -6177,9 +6395,14 @@ function invertTargetIfNeeded(yPred, artifact){
         gotoStep(3);
         return;
       }
+
+      if (APP.step === 3) {
+        downloadArtifactZip();
+        return;
+      }
     });
 
-    $("jumpToExportBtn").addEventListener("click", () => gotoStep(3));
+    $("jumpToExportBtn")?.addEventListener("click", () => gotoStep(3));
 
     $("globalBackBtn").addEventListener("click", () => {
       const btn = $("globalBackBtn");
@@ -6204,6 +6427,24 @@ function invertTargetIfNeeded(yPred, artifact){
       renderResultsPlaceholders();
       trainModel();
     });
+
+    function setExportLang(lang) {
+      APP.ui.exportLang = (lang === "py") ? "py" : "js";
+      const jsBtn = $("exportLangJsBtn");
+      const pyBtn = $("exportLangPyBtn");
+      if (jsBtn) {
+        jsBtn.classList.toggle("active", APP.ui.exportLang === "js");
+        jsBtn.setAttribute("aria-selected", APP.ui.exportLang === "js" ? "true" : "false");
+      }
+      if (pyBtn) {
+        pyBtn.classList.toggle("active", APP.ui.exportLang === "py");
+        pyBtn.setAttribute("aria-selected", APP.ui.exportLang === "py" ? "true" : "false");
+      }
+      renderExportSampleCode();
+    }
+
+    $("exportLangJsBtn")?.addEventListener("click", () => setExportLang("js"));
+    $("exportLangPyBtn")?.addEventListener("click", () => setExportLang("py"));
 
     $("targetSelect").addEventListener("change", () => {
       APP.raw.targetCol = $("targetSelect").value;
@@ -6446,11 +6687,13 @@ function invertTargetIfNeeded(yPred, artifact){
       downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "test_predictions.csv");
     });
 
-    $("downloadZipBtn").addEventListener("click", async () => {
+    async function downloadArtifactZip() {
       const artifact = buildArtifact();
       if (!artifact) return;
 
-      const sample = $("sampleCode").textContent || "";
+      const sampleJs = buildSampleCode(artifact);
+      const samplePy = buildSampleCodePy(artifact);
+      if ($("sampleCode") && !$("sampleCode").textContent) renderExportSampleCode();
       const predCsv = APP.train.model ? buildPredictionsCsv() : "";
 
       const readme = `# Random Forest Artifact
@@ -6473,14 +6716,15 @@ Compatibility
 
       const zip = new JSZip();
       zip.file("rf_artifact.json", JSON.stringify(artifact, null, 2));
-      zip.file("use_model.js", sample);
+      zip.file("use_model.js", sampleJs);
+      zip.file("use_model.py", samplePy);
       zip.file("test_predictions.csv", predCsv);
       zip.file("README.md", readme);
 
       const blob = await zip.generateAsync({ type: "blob" });
       downloadBlob(blob, "rf_artifact.zip");
       showToast("Downloading rf_artifact.zip", "good");
-    });
+    }
 
     // Keyboard: Return = "next step" (via training)
     window.addEventListener("keydown", (e) => {
@@ -6513,20 +6757,22 @@ Compatibility
       }
 
       if (APP.step === 3) {
-        if ($("downloadZipBtn")?.disabled) return;
+        if (!buildArtifact()) return;
         e.preventDefault();
-        $("downloadZipBtn").click();
+        downloadArtifactZip();
       }
     });
 
     // ----------------------------
     // Init
     // ----------------------------
+    disableChartAnimations();
     renderStepper();
 
     hardReset();
 
     syncButtons();
+    setExportLang(APP.ui.exportLang);
   </script>
 </body>
 </html>

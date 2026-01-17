@@ -481,6 +481,38 @@
       margin:12px 0 14px;
     }
 
+    .presetRow{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .presetBtn{
+      flex:1;
+      min-width:160px;
+      padding:12px 14px;
+      border-radius:14px;
+      font-weight:700;
+      letter-spacing:0.15px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+    }
+    .presetBtn.active{
+      border-color:rgba(139,92,246,0.65);
+      background:rgba(139,92,246,0.18);
+    }
+    .presetTag{
+      font-weight:650;
+      font-size:11px;
+      padding:3px 8px;
+      border-radius:999px;
+      border:1px solid rgba(234,240,255,0.16);
+      color:rgba(234,240,255,0.82);
+      background:rgba(255,255,255,0.03);
+      white-space:nowrap;
+    }
+
     .hidden{display:none!important}
 
     /* Chart sizing: prevent runaway growth */
@@ -962,7 +994,7 @@
 
           <div class="hr"></div>
 
-          <details id="shiftDetails">
+          <details id="shiftDetails" open>
             <summary>
               <div class="row space">
                 <div class="muted">Shift detector (is_valid model)</div>
@@ -1061,7 +1093,7 @@
 
           <div class="hr"></div>
 
-          <details id="predFullDetails">
+          <details id="predFullDetails" open>
             <summary>
               <div class="row space">
                 <div class="muted2">Full predictions table (paged)</div>
@@ -1885,7 +1917,18 @@
         setTargetFromPicker(col, { advanceStep: true });
         showToast(`Target set to ${col}`, "good");
     });
-  }
+    }
+
+    function forceDetailsOpen(id) {
+      const el = $(id);
+      if (!el) return;
+      el.open = true;
+      if (el.dataset.forceOpen === "1") return;
+      el.dataset.forceOpen = "1";
+      el.addEventListener("toggle", () => {
+        if (!el.open) el.open = true;
+      });
+    }
 
     // ----------------------------
     // Setup rendering
@@ -5690,13 +5733,15 @@
 
       APP.ui.predPage = 0;
       $("predFilter").value = "";
-      if ($("predFullDetails")) $("predFullDetails").open = false;
+      if ($("predFullDetails")) $("predFullDetails").open = true;
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
       updateUncertaintyPills();
       renderPredInsights();
       renderPredTable();
       updatePruneMiniUi();
 
+      forceDetailsOpen("shiftDetails");
+      forceDetailsOpen("predFullDetails");
       updateExportUI();
     }
 
@@ -6143,7 +6188,7 @@ raise NotImplementedError(
       $("shiftPill").textContent = "—";
       $("shiftPill").className = "pill";
       $("shiftSummary").textContent = "—";
-      if ($("shiftDetails")) $("shiftDetails").open = false;
+      if ($("shiftDetails")) $("shiftDetails").open = true;
 
       $("testFrac").value = "0.1";
       $("cutoffDate").value = "";
@@ -6164,7 +6209,7 @@ raise NotImplementedError(
       $("predFilter").value = "";
       $("pageSize").value = "50";
       $("importanceMode").value = "base";
-      if ($("predFullDetails")) $("predFullDetails").open = false;
+      if ($("predFullDetails")) $("predFullDetails").open = true;
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
       $("pruneMinImp").value = "0.002";
       if ($("maxFeatures")) delete $("maxFeatures").dataset.userSet;
@@ -6533,6 +6578,10 @@ raise NotImplementedError(
       });
     }
 
+    $("presetFastBtn")?.addEventListener("click", () => applyTrainingPreset("fast"));
+    $("presetBalancedBtn")?.addEventListener("click", () => applyTrainingPreset("balanced"));
+    $("presetThoroughBtn")?.addEventListener("click", () => applyTrainingPreset("thorough"));
+
     function setExportLang(lang) {
       APP.ui.exportLang = (lang === "py") ? "py" : "js";
       const jsBtn = $("exportLangJsBtn");
@@ -6551,6 +6600,9 @@ raise NotImplementedError(
     $("tabOverview")?.addEventListener("click", () => setResultsTab("overview"));
     $("tabDiagnostics")?.addEventListener("click", () => setResultsTab("diagnostics"));
     $("tabPredictions")?.addEventListener("click", () => setResultsTab("predictions"));
+
+    forceDetailsOpen("shiftDetails");
+    forceDetailsOpen("predFullDetails");
 
     $("exportLangJsBtn")?.addEventListener("click", () => setExportLang("js"));
     $("exportLangPyBtn")?.addEventListener("click", () => setExportLang("py"));

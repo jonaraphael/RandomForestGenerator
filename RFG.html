@@ -477,6 +477,38 @@
       color:rgba(234,240,255,0.92);
     }
 
+    .presetRow{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .presetBtn{
+      flex:1;
+      min-width:160px;
+      padding:12px 14px;
+      border-radius:14px;
+      font-weight:700;
+      letter-spacing:0.15px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+    }
+    .presetBtn.active{
+      border-color:rgba(139,92,246,0.65);
+      background:rgba(139,92,246,0.18);
+    }
+    .presetTag{
+      font-weight:650;
+      font-size:11px;
+      padding:3px 8px;
+      border-radius:999px;
+      border:1px solid rgba(234,240,255,0.16);
+      color:rgba(234,240,255,0.82);
+      background:rgba(255,255,255,0.03);
+      white-space:nowrap;
+    }
+
     .hidden{display:none!important}
 
     /* Chart sizing: prevent runaway growth */
@@ -655,11 +687,11 @@
 	              <div class="groupTitle">Target</div>
 	              <div class="two">
 	                <div class="field span2" id="targetSelectField">
-	                  <label for="targetSelect">What do you want to predict?</label>
+	                  <label for="targetSelect" title="Choose the column you want the model to predict (the output/label).">What do you want to predict?</label>
 	                  <select id="targetSelect"></select>
 	                </div>
 	                <div class="field hidden" id="taskModeField">
-	                  <label for="taskMode">Predict mode</label>
+	                  <label for="taskMode" title="Regression predicts a number (e.g., price). Classification predicts a category (e.g., yes/no). The app usually chooses this automatically.">Task type</label>
 	                  <select id="taskMode">
 	                    <option value="regression" selected>Regression</option>
 	                    <option value="classification">Classification</option>
@@ -668,7 +700,7 @@
 	              </div>
 
 	              <div class="field hidden" id="targetTransformField" style="margin-top:10px;">
-	                <label for="targetTransform">Target transform</label>
+	                <label for="targetTransform" title="Optional: transform the target before training. Useful when the target is skewed (e.g., incomes). Predictions are converted back to the original scale.">Target transformation</label>
 	                <select id="targetTransform">
 	                  <option value="none" selected>None</option>
 	                  <option value="log1p">log1p (for non-negative targets)</option>
@@ -687,12 +719,12 @@
 	                <div class="callout">
 	                  <div style="font-weight:650;margin-bottom:6px;">Keep top N classes (map the rest → <span class="mono">RARE</span>)</div>
 	                  <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">
-	                    <label class="row" style="gap:8px;align-items:center;margin:0;">
+	                    <label class="row" style="gap:8px;align-items:center;margin:0;" title="For classification with many labels: keep only the most common classes and group the rest as RARE. This can make training and charts easier to interpret.">
 	                      <input type="checkbox" id="topNEnable" />
 	                      <span>Enable</span>
 	                    </label>
 	                    <div class="row" style="gap:8px;align-items:center;">
-	                      <span class="muted2">Keep</span>
+	                      <label class="muted2" for="topNKeep" title="How many of the most frequent classes to keep. All other classes are mapped to RARE.">Keep</label>
 	                      <input id="topNKeep" type="number" min="1" step="1" value="5" style="width:110px;" />
 	                      <span class="muted2">most frequent classes</span>
 	                    </div>
@@ -715,11 +747,11 @@
 
 	                  <div class="two" style="margin-top:10px;">
 	                    <div class="field" style="margin:0;">
-	                      <label for="derivedTargetColName">New column name</label>
+	                      <label for="derivedTargetColName" title="Name for the new true/false column that will be created from your expression and used as the target.">New column name</label>
 	                      <input id="derivedTargetColName" type="text" placeholder="e.g. is_positive" />
 	                    </div>
 	                    <div class="field" style="margin:0;">
-	                      <label for="derivedTargetExpr">Expression</label>
+	                      <label for="derivedTargetExpr" title="A simple rule that returns true/false for each row, using the target value as 'target'. Example: target in ('A','B')">Expression</label>
 	                      <input id="derivedTargetExpr" type="text" placeholder='e.g. target in (6,7,8) or len(target) > 5' />
 	                    </div>
 	                  </div>
@@ -738,19 +770,19 @@
 	              <div class="groupTitle">Data split</div>
 	              <div class="two">
 	                <div class="field">
-	                  <label for="maxRows">Max rows (0 = all)</label>
+	                  <label for="maxRows" title="Limit how many rows to use from the CSV for faster experiments. Use 0 to use every row.">Max rows (0 = all)</label>
 	                  <input id="maxRows" type="number" min="0" step="1000" value="1000" />
 	                </div>
 
 	                <div class="field hidden" id="testFracField">
-	                  <label for="testFrac">Test fraction</label>
+	                  <label for="testFrac" title="Fraction of rows held out for testing (not used for training). Typical values: 0.1–0.3.">Test fraction</label>
 	                  <input id="testFrac" type="number" value="0.1" />
 	                  <div class="muted2">What fraction [0-1] of the data to use for testing.</div>
 	                </div>
 	              </div>
 
 	              <div class="field hidden" id="splitStrategyField" style="margin-top:10px;">
-	                <label>Split strategy</label>
+	                <label for="splitStrategy" title="How to choose the test split. Random is the default. Stratified keeps class proportions similar. Time split tests on later dates to simulate 'future' data.">Split strategy</label>
 	                <select id="splitStrategy">
 	                  <option value="random" selected>Random</option>
 	                </select>
@@ -758,12 +790,12 @@
 
 	              <div id="timeSplitSettings" class="two hidden" style="margin-top:10px;">
 	                <div class="field">
-	                  <label for="splitDateCol">Time column</label>
+	                  <label for="splitDateCol" title="When using a time-based split, pick the column that represents time (date/time). The test set will be later than the training set.">Time column</label>
 	                  <select id="splitDateCol"></select>
 	                </div>
 
 	                <div class="field">
-	                  <label for="splitMethod">Validation rule</label>
+	                  <label for="splitMethod" title="How to create the time-based test set: either everything after a cutoff date, or a fraction of the latest rows.">Validation rule</label>
 	                  <select id="splitMethod">
 	                    <option value="cutoff" selected>Cutoff date (recommended)</option>
 	                    <option value="fraction">Test fraction</option>
@@ -772,56 +804,75 @@
 	              </div>
 
 	              <div class="field hidden" id="cutoffField" style="margin-top:10px;">
-	                <label for="cutoffDate">Cutoff date (train &lt; cutoff, valid ≥ cutoff)</label>
+	                <label for="cutoffDate" title="For time split with cutoff: rows before this date train the model; rows on/after this date are used for testing.">Cutoff date</label>
 	                <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
 	              </div>
 
 	              <div id="splitPreview" class="callout hidden" style="margin-top:10px;"></div>
 	            </div>
 
-	            <div class="groupBox hidden" id="modelGroupBox" style="margin-top:12px;">
-	              <div class="groupTitle">Model (random forest)</div>
-	              <div class="two">
-	                <div class="field">
-	                  <label for="nEstimators">Trees</label>
-	                  <input id="nEstimators" type="number" min="10" step="10" value="100" />
-	                </div>
-	                <div class="field">
-	                  <label for="maxFeatures">maxFeatures</label>
-	                  <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. sqrt, log2, 0.33, or 12" />
-	                </div>
-	              </div>
+	            <div class="groupBox" id="hyperparametersGroupBox" style="margin-top:12px;">
+	              <div class="groupTitle">Hyperparameters</div>
+                <div class="field" style="margin-bottom:10px;">
+                  <div class="presetRow">
+                    <button class="btn presetBtn" id="presetFastBtn" type="button" title="Fast training for quick iteration.">Fast</button>
+                    <button class="btn presetBtn" id="presetBalancedBtn" type="button" title="A good default balance of speed and accuracy.">Balanced<br>(Recommended)</button>
+                    <button class="btn presetBtn" id="presetThoroughBtn" type="button" title="Slowest, most thorough training for best quality.">Thorough</button>
+                  </div>
+                </div>
 
-	              <div class="two" style="margin-top:10px;">
-	                <div class="field">
-	                  <label for="maxDepth">maxDepth</label>
-	                  <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
-	                </div>
-	                <div class="field">
-	                  <label for="minNumSamples">minNumSamples</label>
-	                  <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
-	                </div>
-	              </div>
+                <div id="hyperparametersAdvancedFields" class="hidden">
+  	              <div class="two">
+  	                <div class="field">
+  	                  <label for="nEstimators" title="Number of trees in the forest. More trees usually improve stability/accuracy but take longer to train.">Trees</label>
+  	                  <input id="nEstimators" type="number" min="10" step="10" value="100" />
+  	                </div>
+  	                <div class="field">
+  	                  <label for="maxFeaturesMode" title="How many features (columns) each split is allowed to consider. Using fewer features can speed up training.">Features per split</label>
+  	                  <select id="maxFeaturesMode">
+  	                    <option value="all" selected>All features (1.0)</option>
+  	                    <option value="sqrt">Square root (sqrt)</option>
+  	                    <option value="log2">Log base 2 (log2)</option>
+  	                    <option value="fraction">Fraction of features</option>
+  	                    <option value="count">Fixed number of features</option>
+  	                  </select>
+  	                  <input id="maxFeaturesValue" class="hidden" type="number" placeholder="e.g. 0.33" />
+  	                </div>
+  	              </div>
 
-	              <div class="two" style="margin-top:10px;">
-	                <div class="field">
-	                  <label for="seed">Random seed</label>
-	                  <input id="seed" type="number" value="42" />
-	                </div>
-	                <div class="field">
-	                  <label for="replacement">Feature sampling replacement</label>
-	                  <select id="replacement">
-	                    <option value="false" selected>false</option>
-	                    <option value="true">true</option>
-	                  </select>
-	                </div>
-	              </div>
+  	              <div class="two" style="margin-top:10px;">
+  	                <div class="field">
+  	                  <label for="maxDepth" title="Maximum depth of each tree. Smaller depths make simpler, faster trees; deeper trees can overfit. Leave blank for no limit.">Maximum tree depth</label>
+  	                  <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
+  	                </div>
+  	                <div class="field">
+  	                  <label for="minNumSamples" title="Minimum number of training rows required to split a node. Higher values make trees simpler and can reduce overfitting. Leave blank to use the library default.">Minimum samples to split</label>
+  	                  <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
+  	                </div>
+  	              </div>
 
-	              <div class="muted2" style="margin-top:10px;">
-	                Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
-	              </div>
+  	              <div class="two" style="margin-top:10px;">
+  	                <div class="field">
+  	                  <label for="seed" title="Controls randomness (splits, sampling). Using the same seed makes results repeatable.">Random seed</label>
+  	                  <input id="seed" type="number" value="42" />
+  	                </div>
+  	                <div class="field">
+  	                  <label for="replacement" title="Whether feature sampling is done with replacement (the same feature can be selected more than once). Usually leave this off.">Feature sampling with replacement</label>
+  	                  <select id="replacement">
+  	                    <option value="false" selected>false</option>
+  	                    <option value="true">true</option>
+  	                  </select>
+  	                </div>
+  	              </div>
+
+                  <div class="muted2" style="margin-top:10px;">
+                    Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
+                  </div>
+                </div>
 	            </div>
-
+              <div class="muted2" style="margin-top:10px;">
+                Hover over a setting name to see what it does.
+              </div>
 	            <div id="setupCallout" class="callout hidden" style="margin-top:12px;"></div>
 
 	          </div>
@@ -831,15 +882,15 @@
 	              <div class="groupTitle">Review columns</div>
 	              <div style="margin-bottom:10px;" class="hidden" id="maxCardFieldWrap">
 	                <div class="field">
-	                  <label for="maxCard">max_card (cat vs cont threshold)</label>
+	                  <label for="maxCard" title="If an integer column has at most this many unique values, treat it as categorical (one-hot/label encoding) instead of continuous.">Categorical threshold (max unique values)</label>
 	                  <input id="maxCard" type="number" min="1" step="1" value="50" />
-	                  <div class="muted2">If an integer column has ≤ max_card unique values, treat it as categorical.</div>
+	                  <div class="muted2">If an integer column has ≤ this many unique values, treat it as categorical.</div>
 	                </div>
 	              </div>
 
 	              <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
 	                <div class="field hidden" id="colFilterField" style="margin:0;min-width:240px;">
-	                  <label for="colFilter">Search columns</label>
+	                  <label for="colFilter" title="Filter the column list below by name to quickly find a feature.">Search columns</label>
 	                  <input id="colFilter" type="text" placeholder="Filter by column name" />
 	                </div>
 	              </div>
@@ -1226,8 +1277,8 @@
 	            test: { label: "Test", value: "", visible: false, kind: "", title: "", setByStep: null },
 	            maxRows: { label: "Max rows", value: "", visible: false, kind: "", title: "", setByStep: null },
 	            typing: { label: "Typing", value: "", visible: false, kind: "", title: "", setByStep: null },
-            maxCard: { label: "max_card", value: "", visible: false, kind: "", title: "", setByStep: null },
-            topN: { label: "TopN", value: "", visible: false, kind: "", title: "", setByStep: null },
+            maxCard: { label: "Categorical threshold", value: "", visible: false, kind: "", title: "", setByStep: null },
+            topN: { label: "Top N", value: "", visible: false, kind: "", title: "", setByStep: null },
             derived: { label: "Derived", value: "", visible: false, kind: "", title: "", setByStep: null },
             excluded: { label: "Excluded", value: "", visible: false, kind: "", title: "", setByStep: null },
             forced: { label: "Forced", value: "", visible: false, kind: "", title: "", setByStep: null },
@@ -1246,6 +1297,8 @@
         },
 	        exportLang: "js",
 	        showAdvancedSettings: false,
+          trainingPreset: "",
+          hasVisitedSetup: false,
 	        parseSeq: 0,
 	        predPage: 0,
 	        predFilter: "",
@@ -1559,6 +1612,12 @@
         const task = APP.train.pipeline?.task || "";
         renderResultsSidePanel(task);
       }
+      if (!APP.ui.training.isTraining) {
+        if ((APP.ui.maxUnlockedStep || 0) < 3 && buildArtifact()) {
+          APP.ui.maxUnlockedStep = 3;
+          renderStepper();
+        }
+      }
     }
 
     function requestStopTraining() {
@@ -1656,6 +1715,10 @@
         el.addEventListener("click", () => {
           const i = Number(el.getAttribute("data-step"));
           if (!Number.isFinite(i)) return;
+          if (i === 3 && APP.ui.training.isTraining) {
+            showToast("Stop training before exporting.", "warn");
+            return;
+          }
           if (i > (APP.ui.maxUnlockedStep || 0)) {
             showToast("Complete the previous step first.", "warn");
             return;
@@ -1684,6 +1747,15 @@
       });
 
       syncButtons();
+
+      if (APP.step === 1) {
+        if (!APP.ui.hasVisitedSetup) {
+          APP.ui.hasVisitedSetup = true;
+          applyTrainingPreset("balanced", { silent: true });
+        } else {
+          renderTrainingPresetButtons();
+        }
+      }
 
       if (APP.step === 2 && isModelReady() && !APP.ui.training.isTraining && !APP.ui.training.autoStartOnResults) {
         renderResults();
@@ -2229,7 +2301,7 @@
 	      if ($("maxCardFieldWrap")) $("maxCardFieldWrap").classList.toggle("hidden", !showAdv);
 	      if ($("testFracField")) $("testFracField").classList.toggle("hidden", !showAdv);
 	      if ($("splitStrategyField")) $("splitStrategyField").classList.toggle("hidden", !showAdv);
-	      if ($("modelGroupBox")) $("modelGroupBox").classList.toggle("hidden", !showAdv);
+	      if ($("hyperparametersAdvancedFields")) $("hyperparametersAdvancedFields").classList.toggle("hidden", !showAdv);
 	      const advBtn = $("toggleAdvancedSettingsBtn");
 	      if (advBtn) {
 	        advBtn.textContent = showAdv ? "[Hide Advanced]" : "[Show Advanced]";
@@ -2247,6 +2319,7 @@
 	        hide(c);
 	      }
 
+        renderTrainingPresetButtons();
 	      syncAdvancedTargetUI();
 	      updateSplitPreview();
 	    }
@@ -3038,17 +3111,51 @@
       return idx.slice(0, maxRows);
     }
 
-    function parseMaxFeatures(v, nFeatures) {
-      const s = normStr(v);
-      if (!s) return 1.0;
-      const kw = s.toLowerCase();
-      if (kw === "sqrt") return Math.max(1, Math.floor(Math.sqrt(nFeatures)));
-      if (kw === "log2") return Math.max(1, Math.floor(Math.log2(nFeatures)));
-      const x = Number(s);
-      if (!Number.isFinite(x)) return 1.0;
-      if (x > 0 && x < 1) return x;
-      const k = Math.floor(x);
-      if (k >= 1) return Math.min(k, nFeatures);
+    function syncMaxFeaturesUi() {
+      const modeEl = $("maxFeaturesMode");
+      const valueEl = $("maxFeaturesValue");
+      if (!modeEl || !valueEl) return;
+      const mode = modeEl.value || "all";
+      const showValue = (mode === "fraction" || mode === "count");
+      valueEl.classList.toggle("hidden", !showValue);
+      valueEl.disabled = !showValue;
+      if (mode === "fraction") {
+        valueEl.placeholder = "e.g. 0.33";
+        valueEl.min = "0";
+        valueEl.max = "1";
+        valueEl.step = "0.01";
+        valueEl.inputMode = "decimal";
+      } else if (mode === "count") {
+        valueEl.placeholder = "e.g. 12";
+        valueEl.min = "1";
+        valueEl.removeAttribute("max");
+        valueEl.step = "1";
+        valueEl.inputMode = "numeric";
+      } else {
+        valueEl.placeholder = "";
+        valueEl.removeAttribute("min");
+        valueEl.removeAttribute("max");
+        valueEl.removeAttribute("step");
+        valueEl.removeAttribute("inputmode");
+      }
+    }
+
+    function parseMaxFeatures(modeRaw, valueRaw, nFeatures) {
+      const mode = normStr(modeRaw) || "all";
+      if (mode === "all") return 1.0;
+      if (mode === "sqrt") return Math.max(1, Math.floor(Math.sqrt(nFeatures)));
+      if (mode === "log2") return Math.max(1, Math.floor(Math.log2(nFeatures)));
+      const value = normStr(valueRaw);
+      if (mode === "fraction") {
+        const x = Number(value);
+        if (Number.isFinite(x) && x > 0 && x < 1) return x;
+        return 1.0;
+      }
+      if (mode === "count") {
+        const k = Math.floor(Number(value));
+        if (Number.isFinite(k) && k >= 1) return Math.min(k, nFeatures);
+        return 1.0;
+      }
       return 1.0;
     }
 
@@ -3074,8 +3181,8 @@
       return (cont * 2) + (cat * 1) + (date * DATE_FEATURES_PER_COL);
     }
 
-    function suggestMaxFeaturesValue(task) {
-      return "1.0";
+    function suggestMaxFeaturesSetting(task) {
+      return { mode: "all", value: "" };
     }
 
     function suggestTreeOptions({ nRows, nFeatures }) {
@@ -3098,17 +3205,126 @@
 
       const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
 
-      const mfEl = $("maxFeatures");
+      const mfModeEl = $("maxFeaturesMode");
+      const mfValueEl = $("maxFeaturesValue");
       const mdEl = $("maxDepth");
       const msEl = $("minNumSamples");
-      if (!mfEl || !mdEl || !msEl) return;
+      if (!mfModeEl || !mfValueEl || !mdEl || !msEl) return;
 
-      const suggestedMf = suggestMaxFeaturesValue(task);
+      const suggestedMf = suggestMaxFeaturesSetting(task);
       const suggestedTree = suggestTreeOptions({ nRows, nFeatures });
 
-      if (!mfEl.dataset.userSet) mfEl.value = suggestedMf;
+      if (!mfModeEl.dataset.userSet) mfModeEl.value = suggestedMf.mode;
+      if (!mfValueEl.dataset.userSet) mfValueEl.value = suggestedMf.value;
+      syncMaxFeaturesUi();
       if (!mdEl.dataset.userSet) mdEl.value = String(suggestedTree.maxDepth);
       if (!msEl.dataset.userSet) msEl.value = String(suggestedTree.minNumSamples);
+    }
+
+    function renderTrainingPresetButtons() {
+      const preset = APP.ui.trainingPreset || "";
+      $("presetFastBtn")?.classList.toggle("active", preset === "fast");
+      $("presetBalancedBtn")?.classList.toggle("active", preset === "balanced");
+      $("presetThoroughBtn")?.classList.toggle("active", preset === "thorough");
+    }
+
+    function clearTrainingPreset() {
+      if (!APP.ui.trainingPreset) return;
+      APP.ui.trainingPreset = "";
+      renderTrainingPresetButtons();
+    }
+
+    function countIncludedFeatureTypes() {
+      const meta = APP.raw.colMeta || {};
+      const target = APP.raw.targetCol;
+      const out = { categorical: 0, continuous: 0, date: 0 };
+      for (const c of APP.raw.columns || []) {
+        if (c === target) continue;
+        const m = meta[c];
+        if (!m?.include) continue;
+        if (m.inferredType === "continuous") out.continuous++;
+        else if (m.inferredType === "date") out.date++;
+        else out.categorical++;
+      }
+      return out;
+    }
+
+    function chooseFastMaxFeaturesSetting() {
+      const { categorical, continuous } = countIncludedFeatureTypes();
+      if (!categorical && !continuous) return { mode: "sqrt", value: "" };
+      if (categorical >= continuous) return { mode: "sqrt", value: "" };
+      return { mode: "fraction", value: "0.333" };
+    }
+
+    function applyTrainingPreset(presetKey, { silent = false } = {}) {
+      const key = String(presetKey || "").toLowerCase();
+      const maxRowsEl = $("maxRows");
+      const nEstimatorsEl = $("nEstimators");
+      const maxFeaturesModeEl = $("maxFeaturesMode");
+      const maxFeaturesValueEl = $("maxFeaturesValue");
+      const maxDepthEl = $("maxDepth");
+      const minNumSamplesEl = $("minNumSamples");
+      if (!maxRowsEl || !nEstimatorsEl || !maxFeaturesModeEl || !maxFeaturesValueEl || !maxDepthEl || !minNumSamplesEl) return;
+
+      const setTrainInputs = ({ maxRows, nEstimators, maxDepth, minNumSamples, maxFeaturesMode, maxFeaturesValue }) => {
+        maxRowsEl.value = String(maxRows);
+        APP.setup.maxRows = Math.floor(parseNum(maxRowsEl.value) || 0);
+
+        nEstimatorsEl.value = String(nEstimators);
+        maxDepthEl.value = String(maxDepth);
+        minNumSamplesEl.value = String(minNumSamples);
+
+        maxFeaturesModeEl.value = String(maxFeaturesMode);
+        maxFeaturesValueEl.value = (maxFeaturesValue === null || maxFeaturesValue === undefined) ? "" : String(maxFeaturesValue);
+        maxFeaturesModeEl.dataset.userSet = "1";
+        maxFeaturesValueEl.dataset.userSet = "1";
+        maxDepthEl.dataset.userSet = "1";
+        minNumSamplesEl.dataset.userSet = "1";
+        syncMaxFeaturesUi();
+
+        APP.ui.trainingPreset = key;
+        renderTrainingPresetButtons();
+        syncSetupUI();
+        renderStateChips();
+      };
+
+      if (key === "fast") {
+        const mf = chooseFastMaxFeaturesSetting();
+        setTrainInputs({
+          maxRows: 100,
+          nEstimators: 50,
+          maxDepth: 14,
+          minNumSamples: 20,
+          maxFeaturesMode: mf.mode,
+          maxFeaturesValue: mf.value,
+        });
+        if (!silent) showToast("Preset applied: Fast", "good");
+        return;
+      }
+      if (key === "balanced") {
+        setTrainInputs({
+          maxRows: 1000,
+          nEstimators: 100,
+          maxDepth: 20,
+          minNumSamples: 10,
+          maxFeaturesMode: "all",
+          maxFeaturesValue: "",
+        });
+        if (!silent) showToast("Preset applied: Balanced", "good");
+        return;
+      }
+      if (key === "thorough") {
+        setTrainInputs({
+          maxRows: 0,
+          nEstimators: 400,
+          maxDepth: 24,
+          minNumSamples: 5,
+          maxFeaturesMode: "all",
+          maxFeaturesValue: "",
+        });
+        if (!silent) showToast("Preset applied: Thorough", "good");
+        return;
+      }
     }
 
     function buildInverseMapping(mappingObj) {
@@ -5193,7 +5409,7 @@
         return;
       }
 
-      const maxFeaturesParsed = parseMaxFeatures($("maxFeatures").value, featureNames.length);
+      const maxFeaturesParsed = parseMaxFeatures($("maxFeaturesMode").value, $("maxFeaturesValue").value, featureNames.length);
       const maxDepth = parseOptionalPositiveInt($("maxDepth")?.value);
       const minNumSamples = parseOptionalPositiveInt($("minNumSamples")?.value);
       const treeOptions = {};
@@ -5854,6 +6070,7 @@
       const model = APP.train.model;
       const pipeline = APP.train.pipeline;
       if (!model || !pipeline) return null;
+      if (!Number.isFinite(model.nEstimators) || model.nEstimators <= 0) return null;
 
       return {
         schemaVersion: pipeline.schemaVersion,
@@ -6295,7 +6512,9 @@ raise NotImplementedError(
       $("maxRows").value = "1000";
       $("maxCard").value = "50";
       $("nEstimators").value = "100";
-      $("maxFeatures").value = "1.0";
+      $("maxFeaturesMode").value = "all";
+      $("maxFeaturesValue").value = "";
+      syncMaxFeaturesUi();
       $("maxDepth").value = "20";
       $("minNumSamples").value = "10";
       $("replacement").value = "false";
@@ -6311,7 +6530,8 @@ raise NotImplementedError(
       if ($("predFullDetails")) $("predFullDetails").open = false;
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
       $("pruneMinImp").value = "0.002";
-      if ($("maxFeatures")) delete $("maxFeatures").dataset.userSet;
+      if ($("maxFeaturesMode")) delete $("maxFeaturesMode").dataset.userSet;
+      if ($("maxFeaturesValue")) delete $("maxFeaturesValue").dataset.userSet;
       if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
       if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
       if ($("colFilterField")) $("colFilterField").classList.add("hidden");
@@ -6349,7 +6569,8 @@ raise NotImplementedError(
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
         maxCard: Math.max(1, Math.floor(parseNum($("maxCard").value) || 50)),
         nEstimators: Math.max(10, Math.floor(parseNum($("nEstimators").value) || 100)),
-        maxFeatures: $("maxFeatures").value || "1.0",
+        maxFeaturesMode: $("maxFeaturesMode").value || "all",
+        maxFeaturesValue: $("maxFeaturesValue").value || "",
         maxDepth: $("maxDepth")?.value || "",
         minNumSamples: $("minNumSamples")?.value || "",
         replacement: $("replacement").value || "false",
@@ -6382,7 +6603,9 @@ raise NotImplementedError(
       $("maxRows").value = String(APP.setup.maxRows);
       $("maxCard").value = String(APP.setup.maxCard);
       $("nEstimators").value = String(prefs.nEstimators);
-      $("maxFeatures").value = String(prefs.maxFeatures);
+      $("maxFeaturesMode").value = String(prefs.maxFeaturesMode);
+      $("maxFeaturesValue").value = String(prefs.maxFeaturesValue);
+      syncMaxFeaturesUi();
       if ($("maxDepth")) $("maxDepth").value = String(prefs.maxDepth);
       if ($("minNumSamples")) $("minNumSamples").value = String(prefs.minNumSamples);
       $("replacement").value = String(prefs.replacement);
@@ -6657,6 +6880,10 @@ raise NotImplementedError(
       syncButtons();
     });
 
+    $("presetFastBtn")?.addEventListener("click", () => applyTrainingPreset("fast"));
+    $("presetBalancedBtn")?.addEventListener("click", () => applyTrainingPreset("balanced"));
+    $("presetThoroughBtn")?.addEventListener("click", () => applyTrainingPreset("thorough"));
+
     function setExportLang(lang) {
       APP.ui.exportLang = (lang === "py") ? "py" : "js";
       const jsBtn = $("exportLangJsBtn");
@@ -6714,9 +6941,11 @@ raise NotImplementedError(
 
     $("maxRows").addEventListener("change", () => {
       APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0);
+      clearTrainingPreset();
       syncSetupUI();
       applyAutoTrainDefaults();
     });
+    $("maxRows").addEventListener("input", clearTrainingPreset);
 
     $("splitStrategy").addEventListener("change", () => {
       $("splitStrategy").dataset.userSet = "true";
@@ -6811,7 +7040,16 @@ raise NotImplementedError(
       el.addEventListener("input", mark);
       el.addEventListener("change", mark);
     }
-    markTrainSettingAsUserSet("maxFeatures");
+    $("maxFeaturesMode").addEventListener("change", () => {
+      clearTrainingPreset();
+      syncMaxFeaturesUi();
+    });
+    $("maxFeaturesValue").addEventListener("input", clearTrainingPreset);
+    $("nEstimators").addEventListener("input", clearTrainingPreset);
+    $("maxDepth").addEventListener("input", clearTrainingPreset);
+    $("minNumSamples").addEventListener("input", clearTrainingPreset);
+    markTrainSettingAsUserSet("maxFeaturesMode");
+    markTrainSettingAsUserSet("maxFeaturesValue");
     markTrainSettingAsUserSet("maxDepth");
     markTrainSettingAsUserSet("minNumSamples");
     markTrainSettingAsUserSet("derivedTargetColName");

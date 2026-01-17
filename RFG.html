@@ -37,10 +37,13 @@
       margin:0;
       font-family:var(--sans);
       color:var(--text);
-      background:
+      background-image:
         radial-gradient(1000px 550px at 20% 0%, rgba(109,40,217,0.22), transparent 60%),
         radial-gradient(900px 520px at 95% 10%, rgba(139,92,246,0.16), transparent 62%),
-        linear-gradient(180deg, var(--bg0), var(--bg1));
+        linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 50%, var(--bg0) 100%);
+      background-repeat: no-repeat, no-repeat, repeat-y;
+      background-size: 100% 100%, 100% 100%, 100% 200vh;
+      background-attachment: fixed, fixed, scroll;
     }
 
     .wrap{max-width:1200px;margin:0 auto;padding:18px 16px 60px}
@@ -1758,6 +1761,12 @@
           if (i > (APP.ui.maxUnlockedStep || 0)) {
             showToast("Complete the previous step first.", "warn");
             return;
+          }
+          if (i === 2 && !APP.ui.training.isTraining && !isModelReady()) {
+            APP.ui.training.completedUnits = 0;
+            APP.ui.training.totalUnits = 0;
+            APP.ui.training.stopRequested = false;
+            APP.ui.training.autoStartOnResults = true;
           }
           gotoStep(i);
         });

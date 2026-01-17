@@ -10,7 +10,7 @@ python3 -m http.server  # or: python -m http.server
 ```
 - Navigate to `http://localhost:8000/RFG.html`.
 - For a smoke test:
-  - Click “Use a sample CSV” (built-in synthetic dataset with a date column; good for regression/time-split demos), or
+  - Click “Use Titanic sample” (embedded in `RFG.html`), or
   - Upload `titanic.csv` and set target to `Survived` (classification).
 
 ## Dependencies (CDN / esm.sh)

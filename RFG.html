@@ -582,21 +582,6 @@
               </div>
 
               <div class="field">
-                <label for="testFrac">Test fraction</label>
-                <input id="testFrac" type="number" value="0.1" />
-                <div class="muted2">What fraction [0-1] of the data to use for testing.</div>
-              </div>
-            </div>
-
-            <div class="two" style="margin-top:10px;">
-              <div class="field">
-                <label>Split strategy</label>
-                <select id="splitStrategy">
-                  <option value="random" selected>Random</option>
-                </select>
-              </div>
-
-              <div class="field">
                 <label for="targetTransform">Target transform</label>
                 <select id="targetTransform">
                   <option value="none" selected>None</option>
@@ -606,30 +591,51 @@
               </div>
             </div>
 
-            <div id="timeSplitSettings" class="two hidden" style="margin-top:10px;">
-              <div class="field">
-                <label for="splitDateCol">Time column</label>
-                <select id="splitDateCol"></select>
+            <details id="splitDetails" style="margin-top:10px;">
+              <summary>Split Details</summary>
+              <div class="hr"></div>
+
+              <div class="two">
+                <div class="field">
+                  <label for="testFrac">Test fraction</label>
+                  <input id="testFrac" type="number" value="0.1" />
+                  <div class="muted2">What fraction [0-1] of the data to use for testing.</div>
+                </div>
+
+                <div class="field">
+                  <label>Split strategy</label>
+                  <select id="splitStrategy">
+                    <option value="random" selected>Random</option>
+                  </select>
+                </div>
               </div>
 
-              <div class="field">
-                <label for="splitMethod">Validation rule</label>
-                <select id="splitMethod">
-                  <option value="cutoff" selected>Cutoff date (recommended)</option>
-                  <option value="fraction">Test fraction</option>
-                </select>
-              </div>
-            </div>
+              <div id="timeSplitSettings" class="two hidden" style="margin-top:10px;">
+                <div class="field">
+                  <label for="splitDateCol">Time column</label>
+                  <select id="splitDateCol"></select>
+                </div>
 
-            <div class="field hidden" id="cutoffField" style="margin-top:10px;">
-              <label for="cutoffDate">Cutoff date (train &lt; cutoff, valid ≥ cutoff)</label>
-              <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
-            </div>
+                <div class="field">
+                  <label for="splitMethod">Validation rule</label>
+                  <select id="splitMethod">
+                    <option value="cutoff" selected>Cutoff date (recommended)</option>
+                    <option value="fraction">Test fraction</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field hidden" id="cutoffField" style="margin-top:10px;">
+                <label for="cutoffDate">Cutoff date (train &lt; cutoff, valid ≥ cutoff)</label>
+                <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
+              </div>
+
+              <div id="splitPreview" class="callout" style="margin-top:10px;"></div>
+            </details>
 
             <div class="hr"></div>
 
             <div id="setupCallout" class="callout hidden"></div>
-            <div id="splitPreview" class="callout" style="margin-top:10px;"></div>
 
             <details id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
               <summary>Advanced (multi-class target)</summary>
@@ -1157,6 +1163,7 @@
         pruneUndoExcluded: null,
         pruneUndoReason: "",
         pruneJustApplied: false,
+        splitDetailsUserOpen: false,
       }
     };
 
@@ -3249,6 +3256,8 @@
     function updateSplitPreview() {
       const el = $("splitPreview");
       if (!el) return;
+      const details = $("splitDetails");
+      let shouldWarn = false;
 
       const rows = APP.raw.rows;
       const targetCol = APP.raw.targetCol;
@@ -3256,12 +3265,14 @@
         el.className = "callout";
         el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
                         <div class="muted2">Upload a dataset to preview the train/test split.</div>`;
+        if (details && !APP.ui.splitDetailsUserOpen) details.open = false;
         return;
       }
       if (!targetCol) {
         el.className = "callout";
         el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
                         <div class="muted2">Pick a target column to preview the split.</div>`;
+        if (details && !APP.ui.splitDetailsUserOpen) details.open = false;
         return;
       }
 
@@ -3287,6 +3298,8 @@
         el.className = "callout warn";
         el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
                         <div class="muted2">No usable target rows in the preview sample. Check target parsing or filters.</div>`;
+        shouldWarn = true;
+        if (details) details.open = true;
         return;
       }
 
@@ -3398,11 +3411,16 @@
       if (hasMissingLabels) {
         lines.push(`<div class="muted2" style="margin-top:6px;">Some labels may be absent from train/test. Consider stratified split or adjust cutoff.</div>`);
         el.className = "callout warn";
+        shouldWarn = true;
       } else {
         el.className = "callout";
       }
 
       el.innerHTML = lines.join("");
+      if (details) {
+        if (shouldWarn) details.open = true;
+        else details.open = Boolean(APP.ui.splitDetailsUserOpen);
+      }
     }
 
     // ----------------------------
@@ -5831,6 +5849,9 @@ function invertTargetIfNeeded(yPred, artifact){
     $("backToTrainBtn").addEventListener("click", () => gotoStep(2));
     $("jumpToExportBtn").addEventListener("click", () => gotoStep(4));
     $("backToResultsBtn").addEventListener("click", () => gotoStep(3));
+    $("splitDetails").addEventListener("toggle", () => {
+      APP.ui.splitDetailsUserOpen = $("splitDetails").open;
+    });
 
     $("targetSelect").addEventListener("change", () => {
       APP.raw.targetCol = $("targetSelect").value;

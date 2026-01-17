@@ -785,8 +785,15 @@
 	                  <input id="nEstimators" type="number" min="10" step="10" value="100" />
 	                </div>
 	                <div class="field">
-	                  <label for="maxFeatures">maxFeatures</label>
-	                  <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. sqrt, log2, 0.33, or 12" />
+	                  <label for="maxFeaturesMode">maxFeatures</label>
+	                  <select id="maxFeaturesMode">
+	                    <option value="all" selected>All (1.0)</option>
+	                    <option value="sqrt">sqrt</option>
+	                    <option value="log2">log2</option>
+	                    <option value="fraction">Fraction</option>
+	                    <option value="count">Count</option>
+	                  </select>
+	                  <input id="maxFeaturesValue" class="hidden" type="number" placeholder="e.g. 0.33" />
 	                </div>
 	              </div>
 
@@ -3035,17 +3042,51 @@
       return idx.slice(0, maxRows);
     }
 
-    function parseMaxFeatures(v, nFeatures) {
-      const s = normStr(v);
-      if (!s) return 1.0;
-      const kw = s.toLowerCase();
-      if (kw === "sqrt") return Math.max(1, Math.floor(Math.sqrt(nFeatures)));
-      if (kw === "log2") return Math.max(1, Math.floor(Math.log2(nFeatures)));
-      const x = Number(s);
-      if (!Number.isFinite(x)) return 1.0;
-      if (x > 0 && x < 1) return x;
-      const k = Math.floor(x);
-      if (k >= 1) return Math.min(k, nFeatures);
+    function syncMaxFeaturesUi() {
+      const modeEl = $("maxFeaturesMode");
+      const valueEl = $("maxFeaturesValue");
+      if (!modeEl || !valueEl) return;
+      const mode = modeEl.value || "all";
+      const showValue = (mode === "fraction" || mode === "count");
+      valueEl.classList.toggle("hidden", !showValue);
+      valueEl.disabled = !showValue;
+      if (mode === "fraction") {
+        valueEl.placeholder = "e.g. 0.33";
+        valueEl.min = "0";
+        valueEl.max = "1";
+        valueEl.step = "0.01";
+        valueEl.inputMode = "decimal";
+      } else if (mode === "count") {
+        valueEl.placeholder = "e.g. 12";
+        valueEl.min = "1";
+        valueEl.removeAttribute("max");
+        valueEl.step = "1";
+        valueEl.inputMode = "numeric";
+      } else {
+        valueEl.placeholder = "";
+        valueEl.removeAttribute("min");
+        valueEl.removeAttribute("max");
+        valueEl.removeAttribute("step");
+        valueEl.removeAttribute("inputmode");
+      }
+    }
+
+    function parseMaxFeatures(modeRaw, valueRaw, nFeatures) {
+      const mode = normStr(modeRaw) || "all";
+      if (mode === "all") return 1.0;
+      if (mode === "sqrt") return Math.max(1, Math.floor(Math.sqrt(nFeatures)));
+      if (mode === "log2") return Math.max(1, Math.floor(Math.log2(nFeatures)));
+      const value = normStr(valueRaw);
+      if (mode === "fraction") {
+        const x = Number(value);
+        if (Number.isFinite(x) && x > 0 && x < 1) return x;
+        return 1.0;
+      }
+      if (mode === "count") {
+        const k = Math.floor(Number(value));
+        if (Number.isFinite(k) && k >= 1) return Math.min(k, nFeatures);
+        return 1.0;
+      }
       return 1.0;
     }
 
@@ -3071,8 +3112,8 @@
       return (cont * 2) + (cat * 1) + (date * DATE_FEATURES_PER_COL);
     }
 
-    function suggestMaxFeaturesValue(task) {
-      return "1.0";
+    function suggestMaxFeaturesSetting(task) {
+      return { mode: "all", value: "" };
     }
 
     function suggestTreeOptions({ nRows, nFeatures }) {
@@ -3095,15 +3136,18 @@
 
       const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
 
-      const mfEl = $("maxFeatures");
+      const mfModeEl = $("maxFeaturesMode");
+      const mfValueEl = $("maxFeaturesValue");
       const mdEl = $("maxDepth");
       const msEl = $("minNumSamples");
-      if (!mfEl || !mdEl || !msEl) return;
+      if (!mfModeEl || !mfValueEl || !mdEl || !msEl) return;
 
-      const suggestedMf = suggestMaxFeaturesValue(task);
+      const suggestedMf = suggestMaxFeaturesSetting(task);
       const suggestedTree = suggestTreeOptions({ nRows, nFeatures });
 
-      if (!mfEl.dataset.userSet) mfEl.value = suggestedMf;
+      if (!mfModeEl.dataset.userSet) mfModeEl.value = suggestedMf.mode;
+      if (!mfValueEl.dataset.userSet) mfValueEl.value = suggestedMf.value;
+      syncMaxFeaturesUi();
       if (!mdEl.dataset.userSet) mdEl.value = String(suggestedTree.maxDepth);
       if (!msEl.dataset.userSet) msEl.value = String(suggestedTree.minNumSamples);
     }
@@ -5028,7 +5072,7 @@
         return;
       }
 
-      const maxFeaturesParsed = parseMaxFeatures($("maxFeatures").value, featureNames.length);
+      const maxFeaturesParsed = parseMaxFeatures($("maxFeaturesMode").value, $("maxFeaturesValue").value, featureNames.length);
       const maxDepth = parseOptionalPositiveInt($("maxDepth")?.value);
       const minNumSamples = parseOptionalPositiveInt($("minNumSamples")?.value);
       const treeOptions = {};
@@ -6130,7 +6174,9 @@ raise NotImplementedError(
       $("maxRows").value = "1000";
       $("maxCard").value = "50";
       $("nEstimators").value = "100";
-      $("maxFeatures").value = "1.0";
+      $("maxFeaturesMode").value = "all";
+      $("maxFeaturesValue").value = "";
+      syncMaxFeaturesUi();
       $("maxDepth").value = "20";
       $("minNumSamples").value = "10";
       $("replacement").value = "false";
@@ -6146,7 +6192,8 @@ raise NotImplementedError(
       if ($("predFullDetails")) $("predFullDetails").open = false;
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
       $("pruneMinImp").value = "0.002";
-      if ($("maxFeatures")) delete $("maxFeatures").dataset.userSet;
+      if ($("maxFeaturesMode")) delete $("maxFeaturesMode").dataset.userSet;
+      if ($("maxFeaturesValue")) delete $("maxFeaturesValue").dataset.userSet;
       if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
       if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
       if ($("colFilterField")) $("colFilterField").classList.add("hidden");
@@ -6184,7 +6231,8 @@ raise NotImplementedError(
         maxRows: Math.floor(parseNum($("maxRows").value) || 0),
         maxCard: Math.max(1, Math.floor(parseNum($("maxCard").value) || 50)),
         nEstimators: Math.max(10, Math.floor(parseNum($("nEstimators").value) || 100)),
-        maxFeatures: $("maxFeatures").value || "1.0",
+        maxFeaturesMode: $("maxFeaturesMode").value || "all",
+        maxFeaturesValue: $("maxFeaturesValue").value || "",
         maxDepth: $("maxDepth")?.value || "",
         minNumSamples: $("minNumSamples")?.value || "",
         replacement: $("replacement").value || "false",
@@ -6217,7 +6265,9 @@ raise NotImplementedError(
       $("maxRows").value = String(APP.setup.maxRows);
       $("maxCard").value = String(APP.setup.maxCard);
       $("nEstimators").value = String(prefs.nEstimators);
-      $("maxFeatures").value = String(prefs.maxFeatures);
+      $("maxFeaturesMode").value = String(prefs.maxFeaturesMode);
+      $("maxFeaturesValue").value = String(prefs.maxFeaturesValue);
+      syncMaxFeaturesUi();
       if ($("maxDepth")) $("maxDepth").value = String(prefs.maxDepth);
       if ($("minNumSamples")) $("minNumSamples").value = String(prefs.minNumSamples);
       $("replacement").value = String(prefs.replacement);
@@ -6646,7 +6696,11 @@ raise NotImplementedError(
       el.addEventListener("input", mark);
       el.addEventListener("change", mark);
     }
-    markTrainSettingAsUserSet("maxFeatures");
+    $("maxFeaturesMode").addEventListener("change", () => {
+      syncMaxFeaturesUi();
+    });
+    markTrainSettingAsUserSet("maxFeaturesMode");
+    markTrainSettingAsUserSet("maxFeaturesValue");
     markTrainSettingAsUserSet("maxDepth");
     markTrainSettingAsUserSet("minNumSamples");
     markTrainSettingAsUserSet("derivedTargetColName");

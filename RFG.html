@@ -477,6 +477,10 @@
       color:rgba(234,240,255,0.92);
     }
 
+    .resultsTabs{
+      margin:12px 0 14px;
+    }
+
     .hidden{display:none!important}
 
     /* Chart sizing: prevent runaway growth */
@@ -876,198 +880,211 @@
 
         <div id="trainStatus" class="hidden"></div>
 
-        <div class="resultsTopGrid">
-          <div class="kpi">
-            <div class="lbl" id="primaryMetricLabel">—</div>
-            <div class="big mono" id="primaryMetricValue">—</div>
-            <div class="small" id="primaryMetricSub">—</div>
-          </div>
-          <div class="callout hidden" id="resultsSidePanel">
-            <div style="font-weight:650;margin-bottom:6px;" id="resultsSideTitle">—</div>
-            <div class="muted2" id="resultsSideBody">—</div>
-          </div>
+        <div class="segmented resultsTabs" role="tablist" aria-label="Results tabs">
+          <button id="tabOverview" type="button" role="tab" aria-selected="true">Overview</button>
+          <button id="tabDiagnostics" type="button" role="tab" aria-selected="false">Diagnostics</button>
+          <button id="tabPredictions" type="button" role="tab" aria-selected="false">Predictions</button>
         </div>
 
-        <div class="hr"></div>
-
-        <div id="resultsCallouts" class="grid" style="gap:10px;"></div>
-
-        <div class="hr"></div>
-
-        <div class="two">
-          <div>
-            <div class="row space" style="margin-bottom:8px;">
-              <div class="muted">What matters (feature importance)</div>
-              <div class="row">
-                <select id="importanceMode" style="width:220px;">
-                  <option value="base" selected>Aggregate by column</option>
-                  <option value="derived">Show derived features</option>
-                </select>
-              </div>
+        <div id="resultsOverview" class="resultsTabPanel">
+          <div class="resultsTopGrid">
+            <div class="kpi">
+              <div class="lbl" id="primaryMetricLabel">—</div>
+              <div class="big mono" id="primaryMetricValue">—</div>
+              <div class="small" id="primaryMetricSub">—</div>
             </div>
-            <div class="chartBox">
-              <canvas id="fiChart"></canvas>
-              <div id="fiChartPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
-            </div>
-            <div class="muted2" style="margin-top:8px;">
-              Aggregation groups derived features (e.g. date parts + missing indicators) back to their original column.
-            </div>
-            <div class="row hidden" id="pruneImpRow" style="margin-top:10px;">
-              <button class="btn" id="pruneImpBtn">Prune low-importance → retrain</button>
-              <div class="field" style="margin:0;min-width:160px;">
-                <label for="pruneMinImp" style="margin-bottom:4px;">Min importance</label>
-                <input id="pruneMinImp" type="number" min="0" step="0.001" value="0.002" style="width:160px;" />
-                <div class="muted2" style="margin-top:4px;">Drops columns below this fraction</div>
-              </div>
-              <button class="btn ghost" id="pruneUndoBtn" disabled>Undo prune</button>
-              <span class="muted2" id="pruneMiniHint">—</span>
-            </div>
-          </div>
-
-          <div>
-            <div class="row space" style="margin-bottom:8px;">
-              <div class="muted" id="secondaryChartTitle">—</div>
-              <div class="row">
-                <span class="pill" id="secondaryChartPill">—</span>
-              </div>
-            </div>
-            <div class="row hidden" id="classFocusRow" style="margin-bottom:8px;">
-              <select id="classFocus" style="width:260px;"></select>
-              <div class="muted2" id="classMetrics">—</div>
-            </div>
-            <div class="chartBox">
-              <canvas id="secondaryChart"></canvas>
-              <div id="secondaryMatrix" class="hidden"></div>
-              <div id="secondaryPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
-            </div>
-            <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
-          </div>
-        </div>
-
-        <div class="hr"></div>
-
-        <details id="shiftDetails">
-          <summary>
-            <div class="row space">
-              <div class="muted">Shift detector (is_valid model)</div>
-              <span class="pill" id="shiftPill">—</span>
-            </div>
-          </summary>
-          <div class="two" style="margin-top:10px;">
-            <div class="callout">
-              <div style="font-weight:650;margin-bottom:6px;">How to read this</div>
-              <div class="muted2" id="shiftSummary">—</div>
-            </div>
-            <div>
-              <div class="row space" style="margin-bottom:8px;margin-top:0;">
-                <div class="muted">Top shift drivers (feature importance)</div>
-                <button class="btn" id="pruneShiftTopBtn" disabled>Prune top shift driver → retrain</button>
-              </div>
-              <div class="chartBox">
-                <canvas id="shiftFiChart"></canvas>
-              </div>
-            </div>
-          </div>
-        </details>
-
-        <div class="hr"></div>
-
-        <div class="row space" style="margin-bottom:8px;">
-          <div class="muted">Predictions explorer</div>
-          <div class="row">
-            <span class="pill" id="uncertaintyPill">Uncertainty: —</span>
-            <input id="predTopK" type="number" min="10" step="10" value="30" style="width:90px;" />
-            <button class="btn" id="downloadPredCsvBtn">Download predictions CSV</button>
-          </div>
-        </div>
-
-        <details id="predInsightsDetails">
-          <summary>
-            <div class="row space">
-              <div class="muted2">Prediction diagnostics (errors + uncertainty)</div>
-              <span class="pill">What am I looking at?</span>
-            </div>
-          </summary>
-
-          <div class="callout" style="margin-top:10px;">
-            <div style="font-weight:650;margin-bottom:6px;">What this section is</div>
-            <div class="muted2">
-              These views help you understand <span class="mono">which rows</span> the model struggles with, and <span class="mono">whether it knew it was struggling</span>.
-              Everything here is computed on the <span class="mono">test split</span> only (rows the model did not train on).
-            </div>
-          </div>
-
-          <div class="two" style="margin-top:10px;">
-            <div>
-              <div class="muted2" style="margin-bottom:6px;">Worst errors (top-k)</div>
-              <div class="muted2" style="margin:0 0 8px;">
-                Rows where the prediction was most wrong. Use this to spot data quality issues (missing values, strange units, parsing mistakes),
-                or segments the model can’t learn from the available features.
-              </div>
-              <div class="scroll">
-                <table id="worstErrTable"></table>
-              </div>
-              <div class="muted2" style="margin-top:8px;">
-                Tip: open “Full predictions table” below to see more raw columns for any suspicious row.
-              </div>
-            </div>
-            <div>
-              <div class="muted2" style="margin-bottom:6px;">Highest uncertainty (top-k)</div>
-              <div class="muted2" style="margin:0 0 8px;">
-                “Uncertainty” here means <span class="mono">tree disagreement</span> (fastai-style).
-                A Random Forest is many trees voting; if they don’t agree, the model is less confident for that row.
-              </div>
-              <div class="scroll">
-                <table id="highUncTable"></table>
-              </div>
-              <div class="muted2" style="margin-top:8px;">
-                Not all uncertainty is bad: a row can be uncertain but still correct. The scatter below helps separate “uncertain” from “wrong”.
-              </div>
+            <div class="callout hidden" id="resultsSidePanel">
+              <div style="font-weight:650;margin-bottom:6px;" id="resultsSideTitle">—</div>
+              <div class="muted2" id="resultsSideBody">—</div>
             </div>
           </div>
 
           <div class="hr"></div>
 
+          <div class="two">
+            <div>
+              <div class="row space" style="margin-bottom:8px;">
+                <div class="muted">What matters (feature importance)</div>
+                <div class="row">
+                  <select id="importanceMode" style="width:220px;">
+                    <option value="base" selected>Aggregate by column</option>
+                    <option value="derived">Show derived features</option>
+                  </select>
+                </div>
+              </div>
+              <div class="chartBox">
+                <canvas id="fiChart"></canvas>
+                <div id="fiChartPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
+              </div>
+              <div class="muted2" style="margin-top:8px;">
+                Aggregation groups derived features (e.g. date parts + missing indicators) back to their original column.
+              </div>
+            </div>
+
+            <div>
+              <div class="row space" style="margin-bottom:8px;">
+                <div class="muted" id="secondaryChartTitle">—</div>
+                <div class="row">
+                  <span class="pill" id="secondaryChartPill">—</span>
+                </div>
+              </div>
+              <div class="row hidden" id="classFocusRow" style="margin-bottom:8px;">
+                <select id="classFocus" style="width:260px;"></select>
+                <div class="muted2" id="classMetrics">—</div>
+              </div>
+              <div class="chartBox">
+                <canvas id="secondaryChart"></canvas>
+                <div id="secondaryMatrix" class="hidden"></div>
+                <div id="secondaryPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
+              </div>
+              <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="resultsDiagnostics" class="resultsTabPanel hidden">
+          <div id="resultsCallouts" class="grid" style="gap:10px;"></div>
+
+          <div class="hr"></div>
+
+          <div class="muted" style="margin-bottom:8px;">Pruning tools</div>
+          <div class="muted2" style="margin-bottom:10px;">Use importance or shift diagnostics to drop columns and retrain quickly.</div>
+          <div class="row hidden" id="pruneImpRow" style="margin-top:10px;">
+            <button class="btn" id="pruneImpBtn">Prune low-importance → retrain</button>
+            <div class="field" style="margin:0;min-width:160px;">
+              <label for="pruneMinImp" style="margin-bottom:4px;">Min importance</label>
+              <input id="pruneMinImp" type="number" min="0" step="0.001" value="0.002" style="width:160px;" />
+              <div class="muted2" style="margin-top:4px;">Drops columns below this fraction</div>
+            </div>
+            <button class="btn ghost" id="pruneUndoBtn" disabled>Undo prune</button>
+            <span class="muted2" id="pruneMiniHint">—</span>
+          </div>
+
+          <div class="hr"></div>
+
+          <details id="shiftDetails">
+            <summary>
+              <div class="row space">
+                <div class="muted">Shift detector (is_valid model)</div>
+                <span class="pill" id="shiftPill">—</span>
+              </div>
+            </summary>
+            <div class="two" style="margin-top:10px;">
+              <div class="callout">
+                <div style="font-weight:650;margin-bottom:6px;">How to read this</div>
+                <div class="muted2" id="shiftSummary">—</div>
+              </div>
+              <div>
+                <div class="row space" style="margin-bottom:8px;margin-top:0;">
+                  <div class="muted">Top shift drivers (feature importance)</div>
+                  <button class="btn" id="pruneShiftTopBtn" disabled>Prune top shift driver → retrain</button>
+                </div>
+                <div class="chartBox">
+                  <canvas id="shiftFiChart"></canvas>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div id="resultsPredictions" class="resultsTabPanel hidden">
           <div class="row space" style="margin-bottom:8px;">
-            <div class="muted2">Abs(error) vs uncertainty</div>
+            <div class="muted">Predictions explorer</div>
             <div class="row">
-              <span class="pill" id="errUncPill">—</span>
+              <span class="pill" id="uncertaintyPill">Uncertainty: —</span>
+              <input id="predTopK" type="number" min="10" step="10" value="30" style="width:90px;" />
+              <button class="btn" id="downloadPredCsvBtn">Download predictions CSV</button>
             </div>
           </div>
-          <div class="chartBox">
-            <canvas id="errUncChart"></canvas>
-          </div>
-          <div class="muted2" style="margin-top:8px;">
-            How to read this: <span class="mono">right</span> = more wrong, <span class="mono">up</span> = less consensus across trees.
-            Upper-right often indicates shift or rare edge-cases. Bottom-right can mean “confidently wrong” (often leakage, label noise, or a missing important feature).
-          </div>
-        </details>
 
-        <div class="hr"></div>
+          <details id="predInsightsDetails">
+            <summary>
+              <div class="row space">
+                <div class="muted2">Prediction diagnostics (errors + uncertainty)</div>
+                <span class="pill">What am I looking at?</span>
+              </div>
+            </summary>
 
-        <details id="predFullDetails">
-          <summary>
-            <div class="row space">
-              <div class="muted2">Full predictions table (paged)</div>
-              <span class="pill">Filter + paging</span>
+            <div class="callout" style="margin-top:10px;">
+              <div style="font-weight:650;margin-bottom:6px;">What this section is</div>
+              <div class="muted2">
+                These views help you understand <span class="mono">which rows</span> the model struggles with, and <span class="mono">whether it knew it was struggling</span>.
+                Everything here is computed on the <span class="mono">test split</span> only (rows the model did not train on).
+              </div>
             </div>
-          </summary>
-          <div class="row" style="margin-top:10px;">
-            <input id="predFilter" type="text" placeholder="Filter (true/pred contains…)" style="width:260px;" />
-            <input id="pageSize" type="number" min="10" step="10" value="50" style="width:90px;" />
-            <button class="btn" id="prevPage">Prev</button>
-            <button class="btn" id="nextPage">Next</button>
-          </div>
-          <div class="scroll" style="margin-top:10px;">
-            <table id="predTable"></table>
-          </div>
+
+            <div class="two" style="margin-top:10px;">
+              <div>
+                <div class="muted2" style="margin-bottom:6px;">Worst errors (top-k)</div>
+                <div class="muted2" style="margin:0 0 8px;">
+                  Rows where the prediction was most wrong. Use this to spot data quality issues (missing values, strange units, parsing mistakes),
+                  or segments the model can’t learn from the available features.
+                </div>
+                <div class="scroll">
+                  <table id="worstErrTable"></table>
+                </div>
+                <div class="muted2" style="margin-top:8px;">
+                  Tip: open “Full predictions table” below to see more raw columns for any suspicious row.
+                </div>
+              </div>
+              <div>
+                <div class="muted2" style="margin-bottom:6px;">Highest uncertainty (top-k)</div>
+                <div class="muted2" style="margin:0 0 8px;">
+                  “Uncertainty” here means <span class="mono">tree disagreement</span> (fastai-style).
+                  A Random Forest is many trees voting; if they don’t agree, the model is less confident for that row.
+                </div>
+                <div class="scroll">
+                  <table id="highUncTable"></table>
+                </div>
+                <div class="muted2" style="margin-top:8px;">
+                  Not all uncertainty is bad: a row can be uncertain but still correct. The scatter below helps separate “uncertain” from “wrong”.
+                </div>
+              </div>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="row space" style="margin-bottom:8px;">
+              <div class="muted2">Abs(error) vs uncertainty</div>
+              <div class="row">
+                <span class="pill" id="errUncPill">—</span>
+              </div>
+            </div>
+            <div class="chartBox">
+              <canvas id="errUncChart"></canvas>
+            </div>
+            <div class="muted2" style="margin-top:8px;">
+              How to read this: <span class="mono">right</span> = more wrong, <span class="mono">up</span> = less consensus across trees.
+              Upper-right often indicates shift or rare edge-cases. Bottom-right can mean “confidently wrong” (often leakage, label noise, or a missing important feature).
+            </div>
+          </details>
+
+          <div class="hr"></div>
+
+          <details id="predFullDetails">
+            <summary>
+              <div class="row space">
+                <div class="muted2">Full predictions table (paged)</div>
+                <span class="pill">Filter + paging</span>
+              </div>
+            </summary>
+            <div class="row" style="margin-top:10px;">
+              <input id="predFilter" type="text" placeholder="Filter (true/pred contains…)" style="width:260px;" />
+              <input id="pageSize" type="number" min="10" step="10" value="50" style="width:90px;" />
+              <button class="btn" id="prevPage">Prev</button>
+              <button class="btn" id="nextPage">Next</button>
+            </div>
+            <div class="scroll" style="margin-top:10px;">
+              <table id="predTable"></table>
+            </div>
+            <div class="muted2" style="margin-top:10px;">
+              This table shows raw input rows from your CSV (test split) alongside predictions, errors, and uncertainty (tree disagreement).
+            </div>
+          </details>
+
           <div class="muted2" style="margin-top:10px;">
-            This table shows raw input rows from your CSV (test split) alongside predictions, errors, and uncertainty (tree disagreement).
+            Tree-disagreement uncertainty is a fastai-style confidence signal: higher values mean the trees disagree more.
           </div>
-        </details>
-
-        <div class="muted2" style="margin-top:10px;">
-          Tree-disagreement uncertainty is a fastai-style confidence signal: higher values mean the trees disagree more.
         </div>
       </section>
 
@@ -1242,6 +1259,7 @@
           runSeq: 0,
           autoStartOnResults: false,
         },
+        resultsTab: "overview",
 	        exportLang: "js",
 	        showAdvancedSettings: false,
 	        parseSeq: 0,
@@ -5317,6 +5335,7 @@
       APP.ui.pruneJustApplied = false;
 
       // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
+      setResultsTab("overview");
       renderResults();
       gotoStep(2);
 
@@ -6083,12 +6102,13 @@ raise NotImplementedError(
         shift: null,
         dropped: { unusableTargetRows: 0, unseenTestLabels: 0, sampledRows: 0, usableRows: 0 }
       };
-	      APP.ui.predPage = 0;
-	      APP.ui.predFilter = "";
-	      APP.ui.previewFilter = "";
-	      APP.ui.showAdvancedSettings = false;
-	      APP.ui.prevRunSummary = null;
-	      APP.ui.pruneUndoExcluded = null;
+      APP.ui.predPage = 0;
+      APP.ui.predFilter = "";
+      APP.ui.previewFilter = "";
+      APP.ui.showAdvancedSettings = false;
+      APP.ui.resultsTab = "overview";
+      APP.ui.prevRunSummary = null;
+      APP.ui.pruneUndoExcluded = null;
       APP.ui.pruneUndoReason = "";
       APP.ui.pruneJustApplied = false;
       APP.ui.maxUnlockedStep = 0;
@@ -6100,6 +6120,7 @@ raise NotImplementedError(
 
       $("trainStatus").innerHTML = "";
 	      setTrainingUi(false);
+      setResultsTab(APP.ui.resultsTab);
 
       hide($("uploadSummary"));
       show($("dropZone"));
@@ -6492,6 +6513,26 @@ raise NotImplementedError(
       syncButtons();
     });
 
+    function setResultsTab(name) {
+      const tabs = {
+        overview: { button: "tabOverview", panel: "resultsOverview" },
+        diagnostics: { button: "tabDiagnostics", panel: "resultsDiagnostics" },
+        predictions: { button: "tabPredictions", panel: "resultsPredictions" },
+      };
+      const next = tabs[name] ? name : "overview";
+      APP.ui.resultsTab = next;
+      Object.entries(tabs).forEach(([key, config]) => {
+        const btn = $(config.button);
+        const panel = $(config.panel);
+        const isActive = key === next;
+        if (btn) {
+          btn.classList.toggle("active", isActive);
+          btn.setAttribute("aria-selected", isActive ? "true" : "false");
+        }
+        if (panel) panel.classList.toggle("hidden", !isActive);
+      });
+    }
+
     function setExportLang(lang) {
       APP.ui.exportLang = (lang === "py") ? "py" : "js";
       const jsBtn = $("exportLangJsBtn");
@@ -6506,6 +6547,10 @@ raise NotImplementedError(
       }
       renderExportSampleCode();
     }
+
+    $("tabOverview")?.addEventListener("click", () => setResultsTab("overview"));
+    $("tabDiagnostics")?.addEventListener("click", () => setResultsTab("diagnostics"));
+    $("tabPredictions")?.addEventListener("click", () => setResultsTab("predictions"));
 
     $("exportLangJsBtn")?.addEventListener("click", () => setExportLang("js"));
     $("exportLangPyBtn")?.addEventListener("click", () => setExportLang("py"));

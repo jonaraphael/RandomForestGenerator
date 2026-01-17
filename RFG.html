@@ -231,6 +231,36 @@
     .pill.bad {border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
     .hr{height:1px;background:var(--border2);margin:12px 0}
 
+    .runHistoryList{
+      display:grid;
+      gap:10px;
+    }
+    .runHistoryRow{
+      border:1px solid var(--border2);
+      border-radius:12px;
+      padding:10px;
+      background:rgba(0,0,0,0.12);
+      display:grid;
+      gap:8px;
+    }
+    .runHistoryMeta{
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      gap:8px 12px;
+      justify-content:space-between;
+    }
+    .runHistoryMetrics{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px 12px;
+    }
+    .runHistoryActions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
     .drop{
       border:1px dashed rgba(234,240,255,0.22);
       background:rgba(255,255,255,0.03);
@@ -993,6 +1023,17 @@
               <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
             </div>
           </div>
+
+          <div class="hr"></div>
+
+          <div>
+            <div class="row space" style="margin-bottom:8px;">
+              <div class="muted">Run history</div>
+              <div class="muted2">Last ~5 runs</div>
+            </div>
+            <div id="runHistoryEmpty" class="muted2">No runs yet. Train a model to start tracking history.</div>
+            <div id="runHistoryList" class="runHistoryList hidden"></div>
+          </div>
         </div>
 
         <div id="resultsDiagnostics" class="resultsTabPanel hidden">
@@ -1185,6 +1226,7 @@
       { key: "export",  title: "Export" },
     ];
     const AUTO_EXCLUDE_MISSING_PCT = 50;
+    const RUN_HISTORY_LIMIT = 5;
 
     let APP = {
       step: 0,
@@ -1325,6 +1367,7 @@
         maxUnlockedStep: 0,
         shiftAutoExpandedRunSeq: 0,
         prevRunSummary: null,
+        runHistory: [],
         pruneUndoExcluded: null,
         pruneUndoReason: "",
         pruneJustApplied: false,
@@ -5193,6 +5236,216 @@
       });
     }
 
+    function captureTypingSnapshot() {
+      return {
+        excludedCols: Array.from(APP.setup.excluded || []),
+        forcedTypes: {
+          date: Array.from(APP.setup.forcedTypes?.date || []),
+          categorical: Array.from(APP.setup.forcedTypes?.categorical || []),
+          continuous: Array.from(APP.setup.forcedTypes?.continuous || []),
+        },
+      };
+    }
+
+    function captureTrainSettingsSnapshot() {
+      return {
+        nEstimators: normStr($("nEstimators")?.value),
+        maxFeaturesMode: normStr($("maxFeaturesMode")?.value) || "all",
+        maxFeaturesValue: normStr($("maxFeaturesValue")?.value),
+        maxDepth: normStr($("maxDepth")?.value),
+        minNumSamples: normStr($("minNumSamples")?.value),
+        seed: normStr($("seed")?.value),
+        replacement: normStr($("replacement")?.value) || "false",
+      };
+    }
+
+    function buildRunHistoryEntry() {
+      const summary = APP.train.runSummary;
+      if (!summary) return null;
+      const primaryMetric = summary.test
+        ? { label: summary.test.primaryLabel || "Test metric", value: summary.test.primary }
+        : null;
+      const oobMetric = summary.oob
+        ? { label: summary.oob.label || "OOB", value: summary.oob.value, coverage: summary.oob.coverage }
+        : null;
+      const rfOptions = APP.train.rfOptions
+        ? JSON.parse(JSON.stringify(APP.train.rfOptions))
+        : null;
+      return {
+        runId: summary.runId,
+        timestamp: Date.now(),
+        task: summary.task,
+        primaryMetric,
+        oobMetric,
+        includedCols: summary.includedCols,
+        excludedCols: summary.excludedCols,
+        rfOptions,
+        typingSnapshot: captureTypingSnapshot(),
+        trainSettings: captureTrainSettingsSnapshot(),
+      };
+    }
+
+    function pushRunHistoryEntry(entry) {
+      if (!entry) return;
+      const existing = Array.isArray(APP.ui.runHistory) ? APP.ui.runHistory : [];
+      APP.ui.runHistory = [entry, ...existing.filter(item => item?.runId !== entry.runId)].slice(0, RUN_HISTORY_LIMIT);
+      renderRunHistory();
+    }
+
+    function formatRunTimestamp(ts) {
+      if (!ts) return "—";
+      try {
+        return new Date(ts).toLocaleString();
+      } catch {
+        return "—";
+      }
+    }
+
+    function formatHistoryMetric(metric) {
+      if (!metric || metric.value === null || metric.value === undefined || !Number.isFinite(Number(metric.value))) {
+        return "n/a";
+      }
+      return formatNum(Number(metric.value), 6);
+    }
+
+    function restoreTypingSnapshot(entry) {
+      if (!entry?.typingSnapshot) return;
+      const cols = new Set(APP.raw.columns || []);
+      const snap = entry.typingSnapshot;
+      const excluded = (snap.excludedCols || []).filter(c => cols.has(c));
+      const forcedDate = (snap.forcedTypes?.date || []).filter(c => cols.has(c));
+      const forcedCat = (snap.forcedTypes?.categorical || []).filter(c => cols.has(c));
+      const forcedCont = (snap.forcedTypes?.continuous || []).filter(c => cols.has(c));
+      APP.setup.excluded = new Set(excluded);
+      if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
+      APP.setup.forcedTypes = {
+        date: new Set(forcedDate),
+        categorical: new Set(forcedCat),
+        continuous: new Set(forcedCont),
+      };
+      recomputeColumnMeta();
+      refreshSplitDateCol();
+      renderTargetSelect();
+      renderColumnTable();
+      syncSetupUI();
+    }
+
+    function restoreTrainSettings(entry) {
+      const settings = entry?.trainSettings || {};
+      const rfOptions = entry?.rfOptions || {};
+      if ($("nEstimators")) $("nEstimators").value = settings.nEstimators || String(rfOptions.nEstimators || 100);
+      if ($("maxFeaturesMode")) $("maxFeaturesMode").value = settings.maxFeaturesMode || "all";
+      if ($("maxFeaturesValue")) $("maxFeaturesValue").value = settings.maxFeaturesValue || "";
+      if ($("maxDepth")) $("maxDepth").value = settings.maxDepth || "";
+      if ($("minNumSamples")) $("minNumSamples").value = settings.minNumSamples || "";
+      if ($("seed")) $("seed").value = settings.seed || String(rfOptions.seed || 42);
+      if ($("replacement")) $("replacement").value = settings.replacement || (rfOptions.replacement ? "true" : "false");
+      clearTrainingPreset();
+      syncMaxFeaturesUi();
+      if ($("maxFeaturesMode")) $("maxFeaturesMode").dataset.userSet = "1";
+      if ($("maxFeaturesValue")) $("maxFeaturesValue").dataset.userSet = "1";
+      if ($("maxDepth")) $("maxDepth").dataset.userSet = "1";
+      if ($("minNumSamples")) $("minNumSamples").dataset.userSet = "1";
+    }
+
+    function restoreRunHistoryEntry(entry) {
+      if (!APP.raw.columns.length) {
+        showToast("Load data before restoring settings.", "warn");
+        return;
+      }
+      restoreTypingSnapshot(entry);
+      restoreTrainSettings(entry);
+      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+      renderStepper();
+      APP.ui.training.autoStartOnResults = true;
+      gotoStep(2);
+      showToast("Restored settings from run history.", "good");
+    }
+
+    function compareRunHistoryEntry(entry) {
+      const cur = APP.train.runSummary;
+      if (!cur) {
+        showToast("Train a model to compare against.", "warn");
+        return;
+      }
+      if (entry?.runId === cur.runId) {
+        showToast("Already viewing the current run.", "warn");
+        return;
+      }
+      if (entry?.task && cur.task && entry.task !== cur.task) {
+        showToast("Cannot compare runs with different tasks.", "warn");
+        return;
+      }
+      APP.ui.prevRunSummary = {
+        runId: entry.runId,
+        task: entry.task,
+        test: entry.primaryMetric
+          ? { primaryLabel: entry.primaryMetric.label, primary: entry.primaryMetric.value }
+          : null,
+        oob: entry.oobMetric
+          ? { label: entry.oobMetric.label, value: entry.oobMetric.value }
+          : null,
+        includedCols: entry.includedCols,
+        excludedCols: entry.excludedCols,
+      };
+      renderResultsSidePanel(cur.task);
+      showToast("Comparing to selected run.", "good");
+    }
+
+    function renderRunHistory() {
+      const list = $("runHistoryList");
+      const empty = $("runHistoryEmpty");
+      if (!list || !empty) return;
+      const items = Array.isArray(APP.ui.runHistory) ? APP.ui.runHistory : [];
+      if (!items.length) {
+        empty.classList.remove("hidden");
+        list.classList.add("hidden");
+        list.innerHTML = "";
+        return;
+      }
+      empty.classList.add("hidden");
+      list.classList.remove("hidden");
+      list.innerHTML = items.map((entry, idx) => {
+        const primaryLabel = entry.primaryMetric?.label || "Test metric";
+        const primaryValue = formatHistoryMetric(entry.primaryMetric);
+        const oobLabel = entry.oobMetric?.label || "OOB";
+        const oobValue = formatHistoryMetric(entry.oobMetric);
+        const hasOob = Boolean(entry.oobMetric);
+        const timestamp = formatRunTimestamp(entry.timestamp);
+        const included = Number.isFinite(Number(entry.includedCols)) ? Number(entry.includedCols) : "—";
+        const excluded = Number.isFinite(Number(entry.excludedCols)) ? Number(entry.excludedCols) : "—";
+        return `
+          <div class="runHistoryRow" data-run-index="${idx}">
+            <div class="runHistoryMeta">
+              <div class="mono">${escapeHtml(timestamp)}</div>
+              <div class="muted2">Included ${included} · Excluded ${excluded}</div>
+            </div>
+            <div class="runHistoryMetrics">
+              <div class="muted2">${escapeHtml(primaryLabel)}: <span class="mono">${escapeHtml(primaryValue)}</span></div>
+              ${hasOob ? `<div class="muted2">${escapeHtml(oobLabel)}: <span class="mono">${escapeHtml(oobValue)}</span></div>` : ""}
+            </div>
+            <div class="runHistoryActions">
+              <button class="btn" type="button" data-action="restore">Restore settings</button>
+              <button class="btn ghost" type="button" data-action="compare">Compare to current</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      list.querySelectorAll("[data-action]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          const action = e.currentTarget.getAttribute("data-action");
+          const row = e.currentTarget.closest("[data-run-index]");
+          if (!row) return;
+          const idx = Number(row.getAttribute("data-run-index"));
+          if (!Number.isFinite(idx)) return;
+          const entry = items[idx];
+          if (action === "restore") restoreRunHistoryEntry(entry);
+          if (action === "compare") compareRunHistoryEntry(entry);
+        });
+      });
+    }
+
     function updateTrainingCallout(task, completedUnits, totalUnits) {
       if (APP.step !== 2) return;
       renderResultsSidePanel(task);
@@ -5761,6 +6014,7 @@
         pruneReason: APP.ui.pruneJustApplied ? (APP.ui.pruneUndoReason || "") : "",
       };
       APP.ui.pruneJustApplied = false;
+      pushRunHistoryEntry(buildRunHistoryEntry());
 
       // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
       setResultsTab("overview");
@@ -5914,6 +6168,7 @@
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       $("secondaryPlaceholder").classList.remove("hidden");
       $("fiChartPlaceholder").classList.remove("hidden");
+      renderRunHistory();
     }
 
     function renderResultsLivePartial() {
@@ -6128,6 +6383,7 @@
       forceDetailsOpen("shiftDetails");
       forceDetailsOpen("predFullDetails");
       updateExportUI();
+      renderRunHistory();
     }
 
     // ----------------------------
@@ -6539,6 +6795,7 @@ raise NotImplementedError(
       APP.ui.showAdvancedSettings = false;
       APP.ui.resultsTab = "overview";
       APP.ui.prevRunSummary = null;
+      APP.ui.runHistory = [];
       APP.ui.pruneUndoExcluded = null;
       APP.ui.pruneUndoReason = "";
       APP.ui.pruneJustApplied = false;
@@ -6550,8 +6807,9 @@ raise NotImplementedError(
       APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
 
       $("trainStatus").innerHTML = "";
-	      setTrainingUi(false);
+      setTrainingUi(false);
       setResultsTab(APP.ui.resultsTab);
+      renderRunHistory();
 
       hide($("uploadSummary"));
       show($("dropZone"));

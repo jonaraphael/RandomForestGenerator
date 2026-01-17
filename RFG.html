@@ -626,29 +626,29 @@
       <div class="hint">You can drop a file anywhere on this page.</div>
     </div>
   </div>
-	  <div class="topbar">
-	    <div class="topline">
-	      <div>
-	        <div class="heroKicker">CSV to ML Model in a Single Click</div>
-	        <h1>Random Forest Generator</h1>
-	        <div class="sub">
-	          No uploads, no sign-up, results in realtime, export your model and go.
-	        </div>
-	        <div class="heroNote">
-	          Everything runs in this browser tab--no data leaves your computer.
-	        </div>
-	      </div>
-	    </div>
+    <div class="topbar">
+      <div class="topline">
+        <div>
+          <div class="heroKicker">CSV to ML Model in a Single Click</div>
+          <h1>Random Forest Generator</h1>
+          <div class="sub">
+            No uploads, no sign-up, results in realtime, export your model and go.
+          </div>
+          <div class="heroNote">
+            Everything runs in this browser tab--no data leaves your computer.
+          </div>
+        </div>
+      </div>
 
-		    <div class="stepbar">
-		      <div class="stepper" id="stepper"></div>
-		      <div class="row" style="gap:10px;flex-wrap:nowrap;">
-		        <button class="btn" id="globalBackBtn" type="button">Back</button>
-		        <button class="btn danger hidden" id="globalStopBtn" type="button" disabled>Stop</button>
-		        <button class="btn primary" id="globalContinueBtn" type="button" disabled>Continue</button>
-		      </div>
-		    </div>
-		  </div>
+        <div class="stepbar">
+          <div class="stepper" id="stepper"></div>
+          <div class="row" style="gap:10px;flex-wrap:nowrap;">
+            <button class="btn" id="globalBackBtn" type="button">Back</button>
+            <button class="btn danger hidden" id="globalStopBtn" type="button" disabled>Stop</button>
+            <button class="btn primary" id="globalContinueBtn" type="button" disabled>Continue</button>
+          </div>
+        </div>
+      </div>
 
   <div class="wrap">
     <div class="row" id="stateChips" style="margin:12px 0 16px;"></div>
@@ -658,62 +658,62 @@
       <section class="card" id="panelUpload">
         <h2>Upload</h2>
 
-	        <div class="drop" id="dropZone">
-	          <div>
-	            <div style="font-weight:650;margin-bottom:6px;">Drop a CSV here to start</div>
-	            <div class="muted2" style="margin-top:10px;">First row must be column headers.</div>
-	            <div class="muted2" style="margin-top:10px;"></div>
-	            <div class="muted"><button class="btn" id="browseBtn">Browse…</button> <button class="btn ghost" id="sampleBtn">Use Titanic sample</button></div>
-	            <input id="fileInput" type="file" accept=".csv,text/csv" />
-	          </div>
-	        </div>
+          <div class="drop" id="dropZone">
+            <div>
+              <div style="font-weight:650;margin-bottom:6px;">Drop a CSV here to start</div>
+              <div class="muted2" style="margin-top:10px;">First row must be column headers.</div>
+              <div class="muted2" style="margin-top:10px;"></div>
+              <div class="muted"><button class="btn" id="browseBtn">Browse…</button> <button class="btn ghost" id="sampleBtn">Use Titanic sample</button></div>
+              <input id="fileInput" type="file" accept=".csv,text/csv" />
+            </div>
+          </div>
 
-	        <div id="uploadSummary" class="hidden" style="margin-top:12px;">
-	          <div class="hr"></div>
-	          <div class="row space" style="margin-top:10px;align-items:center;">
-	            <div class="muted">Preview (first 12 rows)</div>
-	            <input id="targetSearch" type="text" placeholder="Filter columns…" aria-label="Filter preview columns" style="width:260px;max-width:45vw;" />
-	          </div>
-	          <div class="muted2">Click a column to set the target.</div>
-	          <div class="scroll" style="margin-top:8px;max-height:320px;">
-	            <table id="previewTable"></table>
-	          </div>
-	        </div>
+          <div id="uploadSummary" class="hidden" style="margin-top:12px;">
+            <div class="hr"></div>
+            <div class="row space" style="margin-top:10px;align-items:center;">
+              <div class="muted">Preview (first 12 rows)</div>
+              <input id="targetSearch" type="text" placeholder="Filter columns…" aria-label="Filter preview columns" style="width:260px;max-width:45vw;" />
+            </div>
+            <div class="muted2">Click a column to set the target.</div>
+            <div class="scroll" style="margin-top:8px;max-height:320px;">
+              <table id="previewTable"></table>
+            </div>
+          </div>
       </section>
 
-	      <!-- STEP 2: SETUP -->
-	      <section class="card hidden" id="panelSetup">
-	        <div class="row" style="align-items:baseline;gap:10px;">
-	          <h2 style="margin:0;">Settings</h2>
-	          <button class="textLinkBtn" id="toggleAdvancedSettingsBtn" type="button">[Show Advanced]</button>
-	        </div>
+        <!-- STEP 2: SETUP -->
+        <section class="card hidden" id="panelSetup">
+          <div class="row" style="align-items:baseline;gap:10px;">
+            <h2 style="margin:0;">Settings</h2>
+            <button class="textLinkBtn" id="toggleAdvancedSettingsBtn" type="button">[Show Advanced]</button>
+          </div>
 
-	        <div class="three">
-	          <div>
-	            <div class="groupBox">
-	              <div class="groupTitle">Target</div>
-	              <div class="two">
-	                <div class="field span2" id="targetSelectField">
-	                  <label for="targetSelect" title="Choose the column you want the model to predict (the output/label).">What do you want to predict?</label>
-	                  <select id="targetSelect"></select>
-	                </div>
-	                <div class="field hidden" id="taskModeField">
-	                  <label for="taskMode" title="Regression predicts a number (e.g., price). Classification predicts a category (e.g., yes/no). The app usually chooses this automatically.">Task type</label>
-	                  <select id="taskMode">
-	                    <option value="regression" selected>Regression</option>
-	                    <option value="classification">Classification</option>
-	                  </select>
-	                </div>
-	              </div>
+          <div class="three">
+            <div>
+              <div class="groupBox">
+                <div class="groupTitle">Target</div>
+                <div class="two">
+                  <div class="field span2" id="targetSelectField">
+                    <label for="targetSelect" title="Choose the column you want the model to predict (the output/label).">What do you want to predict?</label>
+                    <select id="targetSelect"></select>
+                  </div>
+                  <div class="field hidden" id="taskModeField">
+                    <label for="taskMode" title="Regression predicts a number (e.g., price). Classification predicts a category (e.g., yes/no). The app usually chooses this automatically.">Task type</label>
+                    <select id="taskMode">
+                      <option value="regression" selected>Regression</option>
+                      <option value="classification">Classification</option>
+                    </select>
+                  </div>
+                </div>
 
-	              <div class="field hidden" id="targetTransformField" style="margin-top:10px;">
-	                <label for="targetTransform" title="Optional: transform the target before training. Useful when the target is skewed (e.g., incomes). Predictions are converted back to the original scale.">Target transformation</label>
-	                <select id="targetTransform">
-	                  <option value="none" selected>None</option>
-	                  <option value="log1p">log1p (for non-negative targets)</option>
-	                </select>
-	                <div class="muted2">If enabled, we train on transformed targets and invert predictions back.</div>
-	              </div>
+                <div class="field hidden" id="targetTransformField" style="margin-top:10px;">
+                  <label for="targetTransform" title="Optional: transform the target before training. Useful when the target is skewed (e.g., incomes). Predictions are converted back to the original scale.">Target transformation</label>
+                  <select id="targetTransform">
+                    <option value="none" selected>None</option>
+                    <option value="log1p">log1p (for non-negative targets)</option>
+                  </select>
+                  <div class="muted2">If enabled, we train on transformed targets and invert predictions back.</div>
+                </div>
 
                 <div class="field hidden" id="targetPreviewField" style="margin-top:12px;">
                   <div class="row space" style="margin-bottom:8px;">
@@ -730,124 +730,124 @@
                   </div>
                 </div>
 
-	              <div id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
-	                <div class="hr"></div>
-	                <div class="muted" style="margin-bottom:8px;">Advanced (classification)</div>
+                <div id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
+                  <div class="hr"></div>
+                  <div class="muted" style="margin-bottom:8px;">Advanced (classification)</div>
 
-	                <div class="callout" id="multiClassSummaryCallout"></div>
+                  <div class="callout" id="multiClassSummaryCallout"></div>
 
-	                <div class="hr"></div>
+                  <div class="hr"></div>
 
-	                <div class="callout">
-	                  <div style="font-weight:650;margin-bottom:6px;">Keep top N classes (map the rest → <span class="mono">RARE</span>)</div>
-	                  <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">
-	                    <label class="row" style="gap:8px;align-items:center;margin:0;" title="For classification with many labels: keep only the most common classes and group the rest as RARE. This can make training and charts easier to interpret.">
-	                      <input type="checkbox" id="topNEnable" />
-	                      <span>Enable</span>
-	                    </label>
-	                    <div class="row" style="gap:8px;align-items:center;">
-	                      <label class="muted2" for="topNKeep" title="How many of the most frequent classes to keep. All other classes are mapped to RARE.">Keep</label>
-	                      <input id="topNKeep" type="number" min="1" step="1" value="5" style="width:110px;" />
-	                      <span class="muted2">most frequent classes</span>
-	                    </div>
-	                  </div>
-	                  <div class="muted2" id="topNSummary" style="margin-top:8px;">—</div>
-	                </div>
+                  <div class="callout">
+                    <div style="font-weight:650;margin-bottom:6px;">Keep top N classes (map the rest → <span class="mono">RARE</span>)</div>
+                    <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">
+                      <label class="row" style="gap:8px;align-items:center;margin:0;" title="For classification with many labels: keep only the most common classes and group the rest as RARE. This can make training and charts easier to interpret.">
+                        <input type="checkbox" id="topNEnable" />
+                        <span>Enable</span>
+                      </label>
+                      <div class="row" style="gap:8px;align-items:center;">
+                        <label class="muted2" for="topNKeep" title="How many of the most frequent classes to keep. All other classes are mapped to RARE.">Keep</label>
+                        <input id="topNKeep" type="number" min="1" step="1" value="5" style="width:110px;" />
+                        <span class="muted2">most frequent classes</span>
+                      </div>
+                    </div>
+                    <div class="muted2" id="topNSummary" style="margin-top:8px;">—</div>
+                  </div>
 
-	                <div class="hr"></div>
+                  <div class="hr"></div>
 
-	                <div class="callout">
-	                  <div style="font-weight:650;margin-bottom:6px;">Derived boolean target (binary) from a pythonic expression</div>
-	                  <div class="muted2">
-	                    Use <span class="mono" id="derivedTargetValueIdent">target</span> for the target-cell value. Examples:
-	                    <span class="mono" id="derivedTargetExprExample1">target in (6,7,8)</span>,
-	                    <span class="mono" id="derivedTargetExprExample2">len(target) &gt; 5</span>.
-	                  </div>
-	                  <div class="muted2" style="margin-top:6px;">
-	                    Assumptions: the value is converted to a trimmed string; comparisons (<span class="mono">&lt;</span>, <span class="mono">&gt;=</span>, etc.) use numeric compare only if both sides parse as numbers, otherwise string compare; <span class="mono">in (...) </span> / <span class="mono">not in (...) </span> accept only literal lists (numbers/strings/true/false/none). No regex, arithmetic, or access to other columns.
-	                  </div>
+                  <div class="callout">
+                    <div style="font-weight:650;margin-bottom:6px;">Derived boolean target (binary) from a pythonic expression</div>
+                    <div class="muted2">
+                      Use <span class="mono" id="derivedTargetValueIdent">target</span> for the target-cell value. Examples:
+                      <span class="mono" id="derivedTargetExprExample1">target in (6,7,8)</span>,
+                      <span class="mono" id="derivedTargetExprExample2">len(target) &gt; 5</span>.
+                    </div>
+                    <div class="muted2" style="margin-top:6px;">
+                      Assumptions: the value is converted to a trimmed string; comparisons (<span class="mono">&lt;</span>, <span class="mono">&gt;=</span>, etc.) use numeric compare only if both sides parse as numbers, otherwise string compare; <span class="mono">in (...) </span> / <span class="mono">not in (...) </span> accept only literal lists (numbers/strings/true/false/none). No regex, arithmetic, or access to other columns.
+                    </div>
 
-	                  <div class="two" style="margin-top:10px;">
-	                    <div class="field" style="margin:0;">
-	                      <label for="derivedTargetColName" title="Name for the new true/false column that will be created from your expression and used as the target.">New column name</label>
-	                      <input id="derivedTargetColName" type="text" placeholder="e.g. is_positive" />
-	                    </div>
-	                    <div class="field" style="margin:0;">
-	                      <label for="derivedTargetExpr" title="A simple rule that returns true/false for each row, using the target value as 'target'. Example: target in ('A','B')">Expression</label>
-	                      <input id="derivedTargetExpr" type="text" placeholder='e.g. target in (6,7,8) or len(target) > 5' />
-	                    </div>
-	                  </div>
+                    <div class="two" style="margin-top:10px;">
+                      <div class="field" style="margin:0;">
+                        <label for="derivedTargetColName" title="Name for the new true/false column that will be created from your expression and used as the target.">New column name</label>
+                        <input id="derivedTargetColName" type="text" placeholder="e.g. is_positive" />
+                      </div>
+                      <div class="field" style="margin:0;">
+                        <label for="derivedTargetExpr" title="A simple rule that returns true/false for each row, using the target value as 'target'. Example: target in ('A','B')">Expression</label>
+                        <input id="derivedTargetExpr" type="text" placeholder='e.g. target in (6,7,8) or len(target) > 5' />
+                      </div>
+                    </div>
 
-	                  <div class="row" style="margin-top:10px;">
-	                    <button class="btn primary" id="applyDerivedTargetBtn">Create column + use as target</button>
-	                    <button class="btn ghost" id="undoDerivedTargetBtn">Undo</button>
-	                  </div>
+                    <div class="row" style="margin-top:10px;">
+                      <button class="btn primary" id="applyDerivedTargetBtn">Create column + use as target</button>
+                      <button class="btn ghost" id="undoDerivedTargetBtn">Undo</button>
+                    </div>
 
-	                  <div class="muted2" id="derivedTargetStatus" style="margin-top:8px;">—</div>
-	                </div>
-	              </div>
-	            </div>
+                    <div class="muted2" id="derivedTargetStatus" style="margin-top:8px;">—</div>
+                  </div>
+                </div>
+              </div>
 
-	            <div class="groupBox" style="margin-top:12px;">
-	              <div class="groupTitle">Data</div>
-	              <div class="two">
-	                <div class="field">
-	                  <label for="maxRows" title="Limit how many rows to use from the CSV for faster experiments. Use 0 to use every row.">Max rows (0 = all)</label>
-	                  <input id="maxRows" type="number" min="0" step="1000" value="1000" />
-	                </div>
+              <div class="groupBox" style="margin-top:12px;">
+                <div class="groupTitle">Data</div>
+                <div class="two">
+                  <div class="field">
+                    <label for="maxRows" title="Limit how many rows to use from the CSV for faster experiments. Use 0 to use every row.">Max rows (0 = all)</label>
+                    <input id="maxRows" type="number" min="0" step="1000" value="1000" />
+                  </div>
 
-	                <div class="field hidden" id="testFracField">
-	                  <label for="testFrac" title="Fraction of rows held out for testing (not used for training). Typical values: 0.1–0.3.">Test fraction</label>
-	                  <input id="testFrac" type="number" value="0.1" />
-	                  <div class="muted2">What fraction [0-1] of the data to use for testing.</div>
-	                </div>
-	              </div>
+                  <div class="field hidden" id="testFracField">
+                    <label for="testFrac" title="Fraction of rows held out for testing (not used for training). Typical values: 0.1–0.3.">Test fraction</label>
+                    <input id="testFrac" type="number" value="0.1" />
+                    <div class="muted2">What fraction [0-1] of the data to use for testing.</div>
+                  </div>
+                </div>
 
-	              <div class="field hidden" id="splitStrategyField" style="margin-top:10px;">
-	                <label for="splitStrategy" title="How to choose the test split. Random is the default. Stratified keeps class proportions similar. Time split tests on later dates to simulate 'future' data.">Split strategy</label>
-	                <select id="splitStrategy">
-	                  <option value="random" selected>Random</option>
-	                </select>
-	              </div>
+                <div class="field hidden" id="splitStrategyField" style="margin-top:10px;">
+                  <label for="splitStrategy" title="How to choose the test split. Random is the default. Stratified keeps class proportions similar. Time split tests on later dates to simulate 'future' data.">Split strategy</label>
+                  <select id="splitStrategy">
+                    <option value="random" selected>Random</option>
+                  </select>
+                </div>
 
-	              <div id="timeSplitSettings" class="two hidden" style="margin-top:10px;">
-	                <div class="field">
-	                  <label for="splitDateCol" title="When using a time-based split, pick the column that represents time (date/time). The test set will be later than the training set.">Time column</label>
-	                  <select id="splitDateCol"></select>
-	                </div>
+                <div id="timeSplitSettings" class="two hidden" style="margin-top:10px;">
+                  <div class="field">
+                    <label for="splitDateCol" title="When using a time-based split, pick the column that represents time (date/time). The test set will be later than the training set.">Time column</label>
+                    <select id="splitDateCol"></select>
+                  </div>
 
-	                <div class="field">
-	                  <label for="splitMethod" title="How to create the time-based test set: either everything after a cutoff date, or a fraction of the latest rows.">Validation rule</label>
-	                  <select id="splitMethod">
-	                    <option value="cutoff" selected>Cutoff date (recommended)</option>
-	                    <option value="fraction">Test fraction</option>
-	                  </select>
-	                </div>
-	              </div>
+                  <div class="field">
+                    <label for="splitMethod" title="How to create the time-based test set: either everything after a cutoff date, or a fraction of the latest rows.">Validation rule</label>
+                    <select id="splitMethod">
+                      <option value="cutoff" selected>Cutoff date (recommended)</option>
+                      <option value="fraction">Test fraction</option>
+                    </select>
+                  </div>
+                </div>
 
-		              <div class="field hidden" id="cutoffField" style="margin-top:10px;">
-		                <label for="cutoffDate" title="For time split with cutoff: rows before this date train the model; rows on/after this date are used for testing.">Cutoff date</label>
-		                <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
-		              </div>
+                  <div class="field hidden" id="cutoffField" style="margin-top:10px;">
+                    <label for="cutoffDate" title="For time split with cutoff: rows before this date train the model; rows on/after this date are used for testing.">Cutoff date</label>
+                    <input id="cutoffDate" type="text" placeholder="YYYY-MM-DD" inputmode="numeric" />
+                  </div>
 
-		              <div id="timeCutoffPicker" class="hidden" style="margin-top:10px;">
-		                <div class="muted2" style="margin-bottom:8px;">Pick a cutoff date visually</div>
-		                <div class="chartBox" style="height:180px;">
-		                  <canvas id="timeCutoffChart"></canvas>
-		                  <div id="timeCutoffPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Building date histogram…</div>
-		                </div>
-		                <div class="field" style="margin-top:10px;">
-		                  <label for="timeCutoffSlider" title="Choose where to cut the timeline into train (earlier) vs test (later). Higher values mean more training data and a smaller test set.">Cutoff percentile</label>
-		                  <input id="timeCutoffSlider" type="range" min="1" max="99" step="1" value="90" />
-		                  <div class="muted2" id="timeCutoffHint">—</div>
-		                </div>
-		              </div>
+                  <div id="timeCutoffPicker" class="hidden" style="margin-top:10px;">
+                    <div class="muted2" style="margin-bottom:8px;">Pick a cutoff date visually</div>
+                    <div class="chartBox" style="height:180px;">
+                      <canvas id="timeCutoffChart"></canvas>
+                      <div id="timeCutoffPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Building date histogram…</div>
+                    </div>
+                    <div class="field" style="margin-top:10px;">
+                      <label for="timeCutoffSlider" title="Choose where to cut the timeline into train (earlier) vs test (later). Higher values mean more training data and a smaller test set.">Cutoff percentile</label>
+                      <input id="timeCutoffSlider" type="range" min="1" max="99" step="1" value="90" />
+                      <div class="muted2" id="timeCutoffHint">—</div>
+                    </div>
+                  </div>
 
-		              <div id="splitPreview" class="callout hidden" style="margin-top:10px;"></div>
-		            </div>
+                  <div id="splitPreview" class="callout hidden" style="margin-top:10px;"></div>
+                </div>
 
-	            <div class="groupBox" id="hyperparametersGroupBox" style="margin-top:12px;">
-	              <div class="groupTitle">Hyperparameters</div>
+              <div class="groupBox" id="hyperparametersGroupBox" style="margin-top:12px;">
+                <div class="groupTitle">Hyperparameters</div>
                 <div class="field" style="margin-bottom:10px;">
                   <div class="presetRow">
                     <button class="btn presetBtn" id="presetFastBtn" type="button" title="Fast training for quick iteration.">Fast</button>
@@ -857,106 +857,106 @@
                 </div>
 
                 <div id="hyperparametersAdvancedFields" class="hidden">
-  	              <div class="two">
-  	                <div class="field">
-  	                  <label for="nEstimators" title="Number of trees in the forest. More trees usually improve stability/accuracy but take longer to train.">Trees</label>
-  	                  <input id="nEstimators" type="number" min="10" step="10" value="100" />
-  	                </div>
-  	                <div class="field">
-  	                  <label for="maxFeaturesMode" title="How many features (columns) each split is allowed to consider. Using fewer features can speed up training.">Features per split</label>
-  	                  <select id="maxFeaturesMode">
-  	                    <option value="all" selected>All features (1.0)</option>
-  	                    <option value="sqrt">Square root (sqrt)</option>
-  	                    <option value="log2">Log base 2 (log2)</option>
-  	                    <option value="fraction">Fraction of features</option>
-  	                    <option value="count">Fixed number of features</option>
-  	                  </select>
-  	                  <input id="maxFeaturesValue" class="hidden" type="number" placeholder="e.g. 0.33" />
-  	                </div>
-  	              </div>
+                  <div class="two">
+                    <div class="field">
+                      <label for="nEstimators" title="Number of trees in the forest. More trees usually improve stability/accuracy but take longer to train.">Trees</label>
+                      <input id="nEstimators" type="number" min="10" step="10" value="100" />
+                    </div>
+                    <div class="field">
+                      <label for="maxFeaturesMode" title="How many features (columns) each split is allowed to consider. Using fewer features can speed up training.">Features per split</label>
+                      <select id="maxFeaturesMode">
+                        <option value="all" selected>All features (1.0)</option>
+                        <option value="sqrt">Square root (sqrt)</option>
+                        <option value="log2">Log base 2 (log2)</option>
+                        <option value="fraction">Fraction of features</option>
+                        <option value="count">Fixed number of features</option>
+                      </select>
+                      <input id="maxFeaturesValue" class="hidden" type="number" placeholder="e.g. 0.33" />
+                    </div>
+                  </div>
 
-  	              <div class="two" style="margin-top:10px;">
-  	                <div class="field">
-  	                  <label for="maxDepth" title="Maximum depth of each tree. Smaller depths make simpler, faster trees; deeper trees can overfit. Leave blank for no limit.">Maximum tree depth</label>
-  	                  <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
-  	                </div>
-  	                <div class="field">
-  	                  <label for="minNumSamples" title="Minimum number of training rows required to split a node. Higher values make trees simpler and can reduce overfitting. Leave blank to use the library default.">Minimum samples to split</label>
-  	                  <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
-  	                </div>
-  	              </div>
+                  <div class="two" style="margin-top:10px;">
+                    <div class="field">
+                      <label for="maxDepth" title="Maximum depth of each tree. Smaller depths make simpler, faster trees; deeper trees can overfit. Leave blank for no limit.">Maximum tree depth</label>
+                      <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
+                    </div>
+                    <div class="field">
+                      <label for="minNumSamples" title="Minimum number of training rows required to split a node. Higher values make trees simpler and can reduce overfitting. Leave blank to use the library default.">Minimum samples to split</label>
+                      <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
+                    </div>
+                  </div>
 
-  	              <div class="two" style="margin-top:10px;">
-  	                <div class="field">
-  	                  <label for="seed" title="Controls randomness (splits, sampling). Using the same seed makes results repeatable.">Random seed</label>
-  	                  <input id="seed" type="number" value="42" />
-  	                </div>
-  	                <div class="field">
-  	                  <label for="replacement" title="Whether feature sampling is done with replacement (the same feature can be selected more than once). Usually leave this off.">Feature sampling with replacement</label>
-  	                  <select id="replacement">
-  	                    <option value="false" selected>false</option>
-  	                    <option value="true">true</option>
-  	                  </select>
-  	                </div>
-  	              </div>
+                  <div class="two" style="margin-top:10px;">
+                    <div class="field">
+                      <label for="seed" title="Controls randomness (splits, sampling). Using the same seed makes results repeatable.">Random seed</label>
+                      <input id="seed" type="number" value="42" />
+                    </div>
+                    <div class="field">
+                      <label for="replacement" title="Whether feature sampling is done with replacement (the same feature can be selected more than once). Usually leave this off.">Feature sampling with replacement</label>
+                      <select id="replacement">
+                        <option value="false" selected>false</option>
+                        <option value="true">true</option>
+                      </select>
+                    </div>
+                  </div>
 
                   <div class="muted2" style="margin-top:10px;">
                     Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
                   </div>
                 </div>
-	            </div>
+              </div>
               <div class="muted2" style="margin-top:10px;">
                 Hover over a setting name to see what it does.
               </div>
-	            <div id="setupCallout" class="callout hidden" style="margin-top:12px;"></div>
+              <div id="setupCallout" class="callout hidden" style="margin-top:12px;"></div>
 
-	          </div>
+            </div>
 
-	          <div>
-	            <div class="groupBox" id="reviewDetails">
-	              <div class="groupTitle">Review columns</div>
-	              <div style="margin-bottom:10px;" class="hidden" id="maxCardFieldWrap">
-	                <div class="field">
-	                  <label for="maxCard" title="If an integer column has at most this many unique values, treat it as categorical (one-hot/label encoding) instead of continuous.">Categorical threshold (max unique values)</label>
-	                  <input id="maxCard" type="number" min="1" step="1" value="50" />
-	                  <div class="muted2">If an integer column has ≤ this many unique values, treat it as categorical.</div>
-	                </div>
-	              </div>
+            <div>
+              <div class="groupBox" id="reviewDetails">
+                <div class="groupTitle">Review columns</div>
+                <div style="margin-bottom:10px;" class="hidden" id="maxCardFieldWrap">
+                  <div class="field">
+                    <label for="maxCard" title="If an integer column has at most this many unique values, treat it as categorical (one-hot/label encoding) instead of continuous.">Categorical threshold (max unique values)</label>
+                    <input id="maxCard" type="number" min="1" step="1" value="50" />
+                    <div class="muted2">If an integer column has ≤ this many unique values, treat it as categorical.</div>
+                  </div>
+                </div>
 
-	              <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
-	                <div class="field hidden" id="colFilterField" style="margin:0;min-width:240px;">
-	                  <label for="colFilter" title="Filter the column list below by name to quickly find a feature.">Search columns</label>
-	                  <input id="colFilter" type="text" placeholder="Filter by column name" />
-	                </div>
-	              </div>
+                <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;">
+                  <div class="field hidden" id="colFilterField" style="margin:0;min-width:240px;">
+                    <label for="colFilter" title="Filter the column list below by name to quickly find a feature.">Search columns</label>
+                    <input id="colFilter" type="text" placeholder="Filter by column name" />
+                  </div>
+                </div>
 
-	              <div class="scroll" style="max-height:420px;">
-	                <table id="reviewColumnsTable">
-	                  <thead>
-	                    <tr>
-	                      <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
-	                      <th class="sortable" data-sort="name">
-	                        Column <span class="sort-indicator"></span>
-	                        <button class="btn ghost" id="toggleColFilterBtn" type="button" aria-label="Filter columns" style="padding:2px 8px;font-size:11px;margin-left:6px;">
-	                          <svg aria-hidden="true" viewBox="0 0 24 24" width="12" height="12" style="display:block" fill="currentColor">
-	                            <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
-	                          </svg>
-	                        </button>
-	                      </th>
-	                      <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
-	                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
-	                      <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
-	                      <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
-	                      <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
-	                    </tr>
-	                  </thead>
-	                  <tbody id="colConfigBody"></tbody>
-	                </table>
-	              </div>
-	            </div>
-	          </div>
-	        </div>
-	      </section>
+                <div class="scroll" style="max-height:420px;">
+                  <table id="reviewColumnsTable">
+                    <thead>
+                      <tr>
+                        <th class="sortable" data-sort="include">Use <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="name">
+                          Column <span class="sort-indicator"></span>
+                          <button class="btn ghost" id="toggleColFilterBtn" type="button" aria-label="Filter columns" style="padding:2px 8px;font-size:11px;margin-left:6px;">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="12" height="12" style="display:block" fill="currentColor">
+                              <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+                            </svg>
+                          </button>
+                        </th>
+                        <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
+                      </tr>
+                    </thead>
+                    <tbody id="colConfigBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
       <!-- STEP 3: RESULTS -->
       <section class="card hidden" id="panelResults">
@@ -1299,44 +1299,44 @@
         shift: null,
         dropped: { unusableTargetRows: 0, unseenTestLabels: 0, sampledRows: 0, usableRows: 0 }
       },
-	      ui: {
-	        charts: {
-	          fi: null,
-	          secondary: null,
-	          shift: null,
-	          errUnc: null,
-	          targetPreview: null,
-	          timeCutoff: null,
-	        },
-	        chips: {
-	          order: [
-	            "file",
-	            "data",
-	            "maxRows",
-	            "target",
-	            "targetWarn",
-	            "task",
-	            "extrapolation",
-	            "split",
-	            "test",
-	            "typing",
-	            "maxCard",
+        ui: {
+          charts: {
+            fi: null,
+            secondary: null,
+            shift: null,
+            errUnc: null,
+            targetPreview: null,
+            timeCutoff: null,
+          },
+          chips: {
+            order: [
+              "file",
+              "data",
+              "maxRows",
+              "target",
+              "targetWarn",
+              "task",
+              "extrapolation",
+              "split",
+              "test",
+              "typing",
+              "maxCard",
             "topN",
             "derived",
             "excluded",
             "forced",
           ],
-	          items: {
-	            file: { label: "File", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            data: { label: "Data", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            maxRows: { label: "Max rows", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            target: { label: "Target", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            targetWarn: { label: "Target warn", value: "", visible: false, kind: "warn", title: "", setByStep: null },
-	            task: { label: "Task", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            extrapolation: { label: "Extrapolation", value: "", visible: false, kind: "warn", title: "", setByStep: null },
-	            split: { label: "Split", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            test: { label: "Test", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            typing: { label: "Typing", value: "", visible: false, kind: "", title: "", setByStep: null },
+            items: {
+              file: { label: "File", value: "", visible: false, kind: "", title: "", setByStep: null },
+              data: { label: "Data", value: "", visible: false, kind: "", title: "", setByStep: null },
+              maxRows: { label: "Max rows", value: "", visible: false, kind: "", title: "", setByStep: null },
+              target: { label: "Target", value: "", visible: false, kind: "", title: "", setByStep: null },
+              targetWarn: { label: "Target warn", value: "", visible: false, kind: "warn", title: "", setByStep: null },
+              task: { label: "Task", value: "", visible: false, kind: "", title: "", setByStep: null },
+              extrapolation: { label: "Extrapolation", value: "", visible: false, kind: "warn", title: "", setByStep: null },
+              split: { label: "Split", value: "", visible: false, kind: "", title: "", setByStep: null },
+              test: { label: "Test", value: "", visible: false, kind: "", title: "", setByStep: null },
+              typing: { label: "Typing", value: "", visible: false, kind: "", title: "", setByStep: null },
             maxCard: { label: "Categorical threshold", value: "", visible: false, kind: "", title: "", setByStep: null },
             topN: { label: "Top N", value: "", visible: false, kind: "", title: "", setByStep: null },
             derived: { label: "Derived", value: "", visible: false, kind: "", title: "", setByStep: null },
@@ -1733,14 +1733,14 @@
       APP.train.fiBase = [];
       APP.train.shift = null;
 
-	      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
-	      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
-	      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
-	      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
-	      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
-	      APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
-	      APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
-	    }
+        APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+        APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+        APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+        APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+        APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+      }
 
     function downloadBlob(blob, filename) {
       const url = URL.createObjectURL(blob);
@@ -2372,30 +2372,30 @@
       return decideTaskFromTarget(rows, targetCol, null, meta);
     }
 
-	    function syncSetupUI() {
-	      const hasTarget = !!APP.raw.targetCol;
-	      const showAdv = Boolean(APP.ui.showAdvancedSettings);
+      function syncSetupUI() {
+        const hasTarget = !!APP.raw.targetCol;
+        const showAdv = Boolean(APP.ui.showAdvancedSettings);
 
-	      const decidedTask = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
+        const decidedTask = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
 
-	      const dateCols = listDateColumns();
-	      const splitMethod = $("splitMethod").value || "cutoff";
-	      const cutoff = $("cutoffDate").value || "";
-	      APP.setup.splitMethod = splitMethod;
-	      APP.setup.cutoffDate = cutoff;
-	      const hasDates = dateCols.length > 0;
-	      const splitSel = $("splitStrategy");
-	      if (splitSel) {
-	        const cur = APP.setup.splitStrategy || splitSel.value || "random";
-	        const userSet = splitSel.dataset.userSet === "true";
-	        const options = [`<option value="random">Random</option>`];
-	        if (decidedTask === "classification") {
-	          options.push(`<option value="stratified">Stratified (classification)</option>`);
-	        }
-	        if (hasDates) {
-	          options.push(`<option value="time">Time-based</option>`);
-	        }
-	        splitSel.innerHTML = options.join("");
+        const dateCols = listDateColumns();
+        const splitMethod = $("splitMethod").value || "cutoff";
+        const cutoff = $("cutoffDate").value || "";
+        APP.setup.splitMethod = splitMethod;
+        APP.setup.cutoffDate = cutoff;
+        const hasDates = dateCols.length > 0;
+        const splitSel = $("splitStrategy");
+        if (splitSel) {
+          const cur = APP.setup.splitStrategy || splitSel.value || "random";
+          const userSet = splitSel.dataset.userSet === "true";
+          const options = [`<option value="random">Random</option>`];
+          if (decidedTask === "classification") {
+            options.push(`<option value="stratified">Stratified (classification)</option>`);
+          }
+          if (hasDates) {
+            options.push(`<option value="time">Time-based</option>`);
+          }
+          splitSel.innerHTML = options.join("");
         if (userSet && cur === "time" && hasDates) {
           splitSel.value = "time";
         } else if ((userSet && cur === "stratified") || (!userSet && decidedTask === "classification")) {
@@ -2405,10 +2405,10 @@
         } else {
           splitSel.value = "random";
         }
-	        splitSel.disabled = !showAdv || options.length <= 1;
-	      }
-	      APP.setup.splitStrategy = $("splitStrategy")?.value || "random";
-	      const splitMode = effectiveSplitMode();
+          splitSel.disabled = !showAdv || options.length <= 1;
+        }
+        APP.setup.splitStrategy = $("splitStrategy")?.value || "random";
+        const splitMode = effectiveSplitMode();
 
       $("splitDateCol").innerHTML = dateCols.length
         ? dateCols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")
@@ -2417,46 +2417,46 @@
       if (!APP.setup.splitDateCol && dateCols.length) APP.setup.splitDateCol = dateCols[0];
       if (APP.setup.splitDateCol && dateCols.includes(APP.setup.splitDateCol)) $("splitDateCol").value = APP.setup.splitDateCol;
 
-	      $("timeSplitSettings").classList.toggle("hidden", !(showAdv && hasDates && splitMode === "time"));
-	      $("cutoffField").classList.toggle("hidden", !(showAdv && splitMode === "time" && splitMethod === "cutoff"));
-	      $("cutoffDate").disabled = !(showAdv && splitMode === "time" && splitMethod === "cutoff");
-	      $("testFrac").disabled = !showAdv || !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
+        $("timeSplitSettings").classList.toggle("hidden", !(showAdv && hasDates && splitMode === "time"));
+        $("cutoffField").classList.toggle("hidden", !(showAdv && splitMode === "time" && splitMethod === "cutoff"));
+        $("cutoffDate").disabled = !(showAdv && splitMode === "time" && splitMethod === "cutoff");
+        $("testFrac").disabled = !showAdv || !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
 
-	      if ($("targetTransformField")) $("targetTransformField").classList.toggle("hidden", !showAdv);
-	      if ($("targetPreviewField")) $("targetPreviewField").classList.toggle("hidden", !showAdv);
-	      if ($("taskModeField")) $("taskModeField").classList.toggle("hidden", !showAdv);
-	      if ($("targetSelectField")) $("targetSelectField").classList.toggle("span2", !showAdv);
-	      if ($("maxCardFieldWrap")) $("maxCardFieldWrap").classList.toggle("hidden", !showAdv);
-	      if ($("testFracField")) $("testFracField").classList.toggle("hidden", !showAdv);
-	      if ($("splitStrategyField")) $("splitStrategyField").classList.toggle("hidden", !showAdv);
-	      if ($("hyperparametersAdvancedFields")) $("hyperparametersAdvancedFields").classList.toggle("hidden", !showAdv);
-	      const advBtn = $("toggleAdvancedSettingsBtn");
-	      if (advBtn) {
-	        advBtn.textContent = showAdv ? "[Hide Advanced]" : "[Show Advanced]";
-	        advBtn.setAttribute("aria-label", showAdv ? "Hide advanced settings" : "Show advanced settings");
-	      }
+        if ($("targetTransformField")) $("targetTransformField").classList.toggle("hidden", !showAdv);
+        if ($("targetPreviewField")) $("targetPreviewField").classList.toggle("hidden", !showAdv);
+        if ($("taskModeField")) $("taskModeField").classList.toggle("hidden", !showAdv);
+        if ($("targetSelectField")) $("targetSelectField").classList.toggle("span2", !showAdv);
+        if ($("maxCardFieldWrap")) $("maxCardFieldWrap").classList.toggle("hidden", !showAdv);
+        if ($("testFracField")) $("testFracField").classList.toggle("hidden", !showAdv);
+        if ($("splitStrategyField")) $("splitStrategyField").classList.toggle("hidden", !showAdv);
+        if ($("hyperparametersAdvancedFields")) $("hyperparametersAdvancedFields").classList.toggle("hidden", !showAdv);
+        const advBtn = $("toggleAdvancedSettingsBtn");
+        if (advBtn) {
+          advBtn.textContent = showAdv ? "[Hide Advanced]" : "[Show Advanced]";
+          advBtn.setAttribute("aria-label", showAdv ? "Hide advanced settings" : "Show advanced settings");
+        }
 
-	      const c = $("setupCallout");
-	      if (!hasTarget) {
-	        c.className = "callout";
-	        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Click a column name to select the target</div>
-	                       <div class="muted2">Or use the dropdown on the left.</div>`;
-	        show(c);
-	      } else {
-	        c.innerHTML = "";
-	        hide(c);
-	      }
+        const c = $("setupCallout");
+        if (!hasTarget) {
+          c.className = "callout";
+          c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Click a column name to select the target</div>
+                         <div class="muted2">Or use the dropdown on the left.</div>`;
+          show(c);
+        } else {
+          c.innerHTML = "";
+          hide(c);
+        }
 
-	        renderTrainingPresetButtons();
-		      syncAdvancedTargetUI();
-		      renderTimeCutoffPicker();
-		      const splitModeAfter = effectiveSplitMode();
-		      const splitMethodAfter = $("splitMethod")?.value || "cutoff";
-		      const cutoffAfter = $("cutoffDate")?.value || "";
-		      $("testFrac").disabled = !showAdv || !(splitModeAfter === "random" || (splitModeAfter === "time" && splitMethodAfter === "fraction") || (splitModeAfter === "time" && splitMethodAfter === "cutoff" && !cutoffAfter));
-		      updateSplitPreview();
-	        renderTargetPreview();
-		    }
+          renderTrainingPresetButtons();
+          syncAdvancedTargetUI();
+          renderTimeCutoffPicker();
+          const splitModeAfter = effectiveSplitMode();
+          const splitMethodAfter = $("splitMethod")?.value || "cutoff";
+          const cutoffAfter = $("cutoffDate")?.value || "";
+          $("testFrac").disabled = !showAdv || !(splitModeAfter === "random" || (splitModeAfter === "time" && splitMethodAfter === "fraction") || (splitModeAfter === "time" && splitMethodAfter === "cutoff" && !cutoffAfter));
+          updateSplitPreview();
+          renderTargetPreview();
+        }
 
     // ----------------------------
     // Advanced target options (multi-class classification)
@@ -2509,34 +2509,34 @@
         .sort((a, b) => (b[1] - a[1]) || String(a[0]).localeCompare(String(b[0])));
     }
 
-	    function defaultDerivedTargetColName(sourceCol) {
-	      const base = normStr(sourceCol) || "target";
-	      return `${base}_is`;
-	    }
+      function defaultDerivedTargetColName(sourceCol) {
+        const base = normStr(sourceCol) || "target";
+        return `${base}_is`;
+      }
 
-	    function isValidExprValueIdent(word) {
-	      if (!word) return false;
-	      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(word)) return false;
-	      const kw = word.toLowerCase();
-	      return !(kw === "and" || kw === "or" || kw === "not" || kw === "in" || kw === "len" || kw === "true" || kw === "false" || kw === "none");
-	    }
+      function isValidExprValueIdent(word) {
+        if (!word) return false;
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(word)) return false;
+        const kw = word.toLowerCase();
+        return !(kw === "and" || kw === "or" || kw === "not" || kw === "in" || kw === "len" || kw === "true" || kw === "false" || kw === "none");
+      }
 
-	    function exprValueIdentForColumnName(col) {
-	      const raw = normStr(col);
-	      if (!raw) return "o";
-	      if (isValidExprValueIdent(raw)) return raw;
-	      let out = raw.replace(/[^A-Za-z0-9_]/g, "_").replace(/_+/g, "_");
-	      if (!out) out = "o";
-	      if (!/^[A-Za-z_]/.test(out)) out = `_${out}`;
-	      if (!isValidExprValueIdent(out)) out = `${out}_`;
-	      return out;
-	    }
+      function exprValueIdentForColumnName(col) {
+        const raw = normStr(col);
+        if (!raw) return "o";
+        if (isValidExprValueIdent(raw)) return raw;
+        let out = raw.replace(/[^A-Za-z0-9_]/g, "_").replace(/_+/g, "_");
+        if (!out) out = "o";
+        if (!/^[A-Za-z_]/.test(out)) out = `_${out}`;
+        if (!isValidExprValueIdent(out)) out = `${out}_`;
+        return out;
+      }
 
-	    function compilePythonicBoolExpr(exprRaw, { valueIdent = "o" } = {}) {
-	      const expr = normStr(exprRaw);
-	      if (!expr) throw new Error("Expression is required.");
+      function compilePythonicBoolExpr(exprRaw, { valueIdent = "o" } = {}) {
+        const expr = normStr(exprRaw);
+        if (!expr) throw new Error("Expression is required.");
 
-	      const s = expr;
+        const s = expr;
       const tokens = [];
       let i = 0;
 
@@ -2597,20 +2597,20 @@
           continue;
         }
 
-	        if (isIdentStart(c)) {
-	          const start = i;
-	          i++;
-	          while (i < s.length && isIdentChar(s[i])) i++;
-	          const word = s.slice(start, i);
-	          const kw = word.toLowerCase();
-	          if (kw === "and" || kw === "or" || kw === "not" || kw === "in" || kw === "len") push("kw", kw);
-	          else if (kw === "true") push("boolean", true);
-	          else if (kw === "false") push("boolean", false);
-	          else if (kw === "none") push("none", null);
-	          else if (word === "o" || word === valueIdent) push("ident", "o");
-	          else throw new Error(`Unknown identifier: ${word}`);
-	          continue;
-	        }
+          if (isIdentStart(c)) {
+            const start = i;
+            i++;
+            while (i < s.length && isIdentChar(s[i])) i++;
+            const word = s.slice(start, i);
+            const kw = word.toLowerCase();
+            if (kw === "and" || kw === "or" || kw === "not" || kw === "in" || kw === "len") push("kw", kw);
+            else if (kw === "true") push("boolean", true);
+            else if (kw === "false") push("boolean", false);
+            else if (kw === "none") push("none", null);
+            else if (word === "o" || word === valueIdent) push("ident", "o");
+            else throw new Error(`Unknown identifier: ${word}`);
+            continue;
+          }
 
         const two = s.slice(i, i + 2);
         if (two === "==" || two === "!=" || two === "<=" || two === ">=") { push("op", two); i += 2; continue; }
@@ -2717,13 +2717,13 @@
           expect(")");
           return { t: "len", a: arg };
         }
-	        if (eat("(")) {
-	          const inner = parseExpr();
-	          expect(")");
-	          return inner;
-	        }
-	        throw new Error("Expected a value (number/string/identifier/len(...)/(...)).");
-	      };
+          if (eat("(")) {
+            const inner = parseExpr();
+            expect(")");
+            return inner;
+          }
+          throw new Error("Expected a value (number/string/identifier/len(...)/(...)).");
+        };
 
       const ast = parseExpr();
       expect("eof");
@@ -2833,9 +2833,9 @@
       return (o) => Boolean(truthy(evalNode(ast, normStr(o))));
     }
 
-	    function applyDerivedTargetFromExpr() {
-	      const dt = APP.setup.multiClass?.derivedTarget || null;
-	      if (!dt) return;
+      function applyDerivedTargetFromExpr() {
+        const dt = APP.setup.multiClass?.derivedTarget || null;
+        if (!dt) return;
 
       const currentTarget = APP.raw.targetCol;
       const sourceCol = (dt.enabled && dt.derivedCol && dt.sourceCol && currentTarget === dt.derivedCol)
@@ -2860,8 +2860,8 @@
         APP.setup.excluded.delete(prev);
       }
 
-	      const valueIdent = exprValueIdentForColumnName(sourceCol);
-	      const pred = compilePythonicBoolExpr(expr, { valueIdent });
+        const valueIdent = exprValueIdentForColumnName(sourceCol);
+        const pred = compilePythonicBoolExpr(expr, { valueIdent });
 
       let tCount = 0, fCount = 0;
       for (const r of APP.raw.rows) {
@@ -2926,33 +2926,33 @@
       if (statusEl) statusEl.textContent = "—";
     }
 
-		    function syncAdvancedTargetUI() {
-		      const details = $("advancedTargetDetails");
-		      if (!details) return;
+        function syncAdvancedTargetUI() {
+          const details = $("advancedTargetDetails");
+          if (!details) return;
 
-	      const topNState = APP.setup.multiClass?.topN || { enabled: false, keep: 5, rareLabel: "RARE" };
-	      const dt = APP.setup.multiClass?.derivedTarget || { enabled: false, sourceCol: null, derivedCol: "", expr: "", lastStatus: "", lastError: "" };
+        const topNState = APP.setup.multiClass?.topN || { enabled: false, keep: 5, rareLabel: "RARE" };
+        const dt = APP.setup.multiClass?.derivedTarget || { enabled: false, sourceCol: null, derivedCol: "", expr: "", lastStatus: "", lastError: "" };
 
-	      const targetCol = APP.raw.targetCol;
-	      const hasTarget = Boolean(targetCol);
-	      const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
+        const targetCol = APP.raw.targetCol;
+        const hasTarget = Boolean(targetCol);
+        const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
 
-	      const sourceCol = (dt.enabled && dt.sourceCol) ? dt.sourceCol : targetCol;
-	      const canShow = Boolean(APP.ui.showAdvancedSettings && hasTarget && task === "classification" && sourceCol);
+        const sourceCol = (dt.enabled && dt.sourceCol) ? dt.sourceCol : targetCol;
+        const canShow = Boolean(APP.ui.showAdvancedSettings && hasTarget && task === "classification" && sourceCol);
 
-	      if (!canShow) {
-	        details.classList.add("hidden");
-	        return;
-	      }
+        if (!canShow) {
+          details.classList.add("hidden");
+          return;
+        }
 
-	      const info = computeCategoricalCounts(APP.raw.rows, sourceCol, { maxSample: 8000, seed: 1337 });
-	      const numClasses = info.counts.size;
-	      details.classList.remove("hidden");
+        const info = computeCategoricalCounts(APP.raw.rows, sourceCol, { maxSample: 8000, seed: 1337 });
+        const numClasses = info.counts.size;
+        details.classList.remove("hidden");
 
-	      const callout = $("multiClassSummaryCallout");
-	      if (callout) {
-	        const top = sortedCountEntries(info.counts).slice(0, 6);
-	        const topText = top.length
+        const callout = $("multiClassSummaryCallout");
+        if (callout) {
+          const top = sortedCountEntries(info.counts).slice(0, 6);
+          const topText = top.length
           ? top.map(([k, v]) => `${escapeHtml(truncate(k, 30))} (${v})`).join(", ")
           : "—";
         const missTxt = info.nMissing ? ` · missing=${info.nMissing}` : "";
@@ -2989,28 +2989,28 @@
         }
       }
 
-	      const applyBtn = $("applyDerivedTargetBtn");
-	      const undoBtn = $("undoDerivedTargetBtn");
-	      const nameEl = $("derivedTargetColName");
-	      const exprEl = $("derivedTargetExpr");
-	      const valueIdent = exprValueIdentForColumnName(sourceCol);
+        const applyBtn = $("applyDerivedTargetBtn");
+        const undoBtn = $("undoDerivedTargetBtn");
+        const nameEl = $("derivedTargetColName");
+        const exprEl = $("derivedTargetExpr");
+        const valueIdent = exprValueIdentForColumnName(sourceCol);
 
-	      const valueIdentEl = $("derivedTargetValueIdent");
-	      if (valueIdentEl) valueIdentEl.textContent = valueIdent;
-	      const ex1El = $("derivedTargetExprExample1");
-	      if (ex1El) ex1El.textContent = `${valueIdent} in (6,7,8)`;
-	      const ex2El = $("derivedTargetExprExample2");
-	      if (ex2El) ex2El.textContent = `len(${valueIdent}) > 5`;
+        const valueIdentEl = $("derivedTargetValueIdent");
+        if (valueIdentEl) valueIdentEl.textContent = valueIdent;
+        const ex1El = $("derivedTargetExprExample1");
+        if (ex1El) ex1El.textContent = `${valueIdent} in (6,7,8)`;
+        const ex2El = $("derivedTargetExprExample2");
+        if (ex2El) ex2El.textContent = `len(${valueIdent}) > 5`;
 
-	      if (nameEl && !normStr(nameEl.value)) {
-	        nameEl.placeholder = defaultDerivedTargetColName(sourceCol);
-	      }
-	      if (exprEl) {
-	        exprEl.placeholder = `e.g. ${valueIdent} in (6,7,8) or len(${valueIdent}) > 5`;
-	      }
-	      if (exprEl && dt.enabled && normStr(dt.expr) && !exprEl.dataset.userSet) {
-	        exprEl.value = dt.expr;
-	      }
+        if (nameEl && !normStr(nameEl.value)) {
+          nameEl.placeholder = defaultDerivedTargetColName(sourceCol);
+        }
+        if (exprEl) {
+          exprEl.placeholder = `e.g. ${valueIdent} in (6,7,8) or len(${valueIdent}) > 5`;
+        }
+        if (exprEl && dt.enabled && normStr(dt.expr) && !exprEl.dataset.userSet) {
+          exprEl.value = dt.expr;
+        }
       if (nameEl && dt.enabled && dt.derivedCol && !nameEl.dataset.userSet) {
         nameEl.value = dt.derivedCol;
       }
@@ -3889,15 +3889,15 @@
       return d.toISOString().slice(0, 10);
     }
 
-	    function updateSplitPreview() {
-	      const callout = $("splitPreview");
-	      if (!callout) return;
-	      const allowWhenCollapsed = (effectiveSplitMode() === "time");
-	      if (!APP.ui.showAdvancedSettings && !allowWhenCollapsed) {
-	        callout.className = "callout hidden";
-	        callout.innerHTML = "";
-	        return;
-	      }
+      function updateSplitPreview() {
+        const callout = $("splitPreview");
+        if (!callout) return;
+        const allowWhenCollapsed = (effectiveSplitMode() === "time");
+        if (!APP.ui.showAdvancedSettings && !allowWhenCollapsed) {
+          callout.className = "callout hidden";
+          callout.innerHTML = "";
+          return;
+        }
 
       const rows = APP.raw.rows || [];
       const targetCol = APP.raw.targetCol;
@@ -4053,305 +4053,305 @@
         : "";
 
       callout.className = `callout${warn ? " warn" : ""}`;
-	      callout.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
-	        <div>Train rows ≈ <span class="mono">${formatPreviewCount(trainCount)}</span> / Test rows ≈ <span class="mono">${formatPreviewCount(testCount)}</span></div>
-	        <div class="muted2">Based on ${formatPreviewCount(previewRows)} sampled rows${maxRowsNote}${droppedTargets ? ` (${formatPreviewCount(droppedTargets)} dropped)` : ""}.</div>
-	        ${detailHtml}
-	        ${warnNote}`;
-	    }
+        callout.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Split preview</div>
+          <div>Train rows ≈ <span class="mono">${formatPreviewCount(trainCount)}</span> / Test rows ≈ <span class="mono">${formatPreviewCount(testCount)}</span></div>
+          <div class="muted2">Based on ${formatPreviewCount(previewRows)} sampled rows${maxRowsNote}${droppedTargets ? ` (${formatPreviewCount(droppedTargets)} dropped)` : ""}.</div>
+          ${detailHtml}
+          ${warnNote}`;
+      }
 
-	    function buildTimeSplitTimestampSample({ maxPoints = 5000 } = {}) {
-	      const splitMode = effectiveSplitMode();
-	      if (splitMode !== "time") return { dateCol: null, timestamps: [] };
-	      const dateCol = $("splitDateCol")?.value || APP.setup.splitDateCol || null;
-	      if (!dateCol) return { dateCol: null, timestamps: [] };
+      function buildTimeSplitTimestampSample({ maxPoints = 5000 } = {}) {
+        const splitMode = effectiveSplitMode();
+        if (splitMode !== "time") return { dateCol: null, timestamps: [] };
+        const dateCol = $("splitDateCol")?.value || APP.setup.splitDateCol || null;
+        if (!dateCol) return { dateCol: null, timestamps: [] };
 
-	      const rows = APP.raw.rows || [];
-	      if (!rows.length) return { dateCol, timestamps: [] };
+        const rows = APP.raw.rows || [];
+        if (!rows.length) return { dateCol, timestamps: [] };
 
-	      const seed = Math.floor(parseNum($("seed")?.value) || 42);
-	      const maxRowsSetting = Math.max(0, Math.floor(parseNum($("maxRows")?.value) || 0));
-	      const baseIdx = sampleRowIndices(rows.length, maxRowsSetting, seed, "time");
-	      const idx = (baseIdx.length > maxPoints)
-	        ? (() => {
-	          const out = [];
-	          const step = baseIdx.length / maxPoints;
-	          for (let i = 0; i < maxPoints; i++) out.push(baseIdx[Math.floor(i * step)]);
-	          return out;
-	        })()
-	        : baseIdx;
+        const seed = Math.floor(parseNum($("seed")?.value) || 42);
+        const maxRowsSetting = Math.max(0, Math.floor(parseNum($("maxRows")?.value) || 0));
+        const baseIdx = sampleRowIndices(rows.length, maxRowsSetting, seed, "time");
+        const idx = (baseIdx.length > maxPoints)
+          ? (() => {
+            const out = [];
+            const step = baseIdx.length / maxPoints;
+            for (let i = 0; i < maxPoints; i++) out.push(baseIdx[Math.floor(i * step)]);
+            return out;
+          })()
+          : baseIdx;
 
-	      const timestamps = [];
-	      for (const i of idx) {
-	        const d = parseDate(rows[i]?.[dateCol]);
-	        if (!d) continue;
-	        const t = d.getTime();
-	        if (Number.isFinite(t)) timestamps.push(t);
-	      }
-	      timestamps.sort((a, b) => a - b);
-	      return { dateCol, timestamps };
-	    }
+        const timestamps = [];
+        for (const i of idx) {
+          const d = parseDate(rows[i]?.[dateCol]);
+          if (!d) continue;
+          const t = d.getTime();
+          if (Number.isFinite(t)) timestamps.push(t);
+        }
+        timestamps.sort((a, b) => a - b);
+        return { dateCol, timestamps };
+      }
 
-	    function lowerBound(arr, x) {
-	      let lo = 0;
-	      let hi = arr.length;
-	      while (lo < hi) {
-	        const mid = (lo + hi) >> 1;
-	        if (arr[mid] < x) lo = mid + 1;
-	        else hi = mid;
-	      }
-	      return lo;
-	    }
+      function lowerBound(arr, x) {
+        let lo = 0;
+        let hi = arr.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          if (arr[mid] < x) lo = mid + 1;
+          else hi = mid;
+        }
+        return lo;
+      }
 
-	    function cutoffMsFromPercentile(timestamps, pct) {
-	      const n = timestamps.length;
-	      if (!n) return null;
-	      const p = Math.max(1, Math.min(99, Math.floor(Number(pct) || 0)));
-	      const idx = Math.max(0, Math.min(n - 1, Math.round((p / 100) * (n - 1))));
-	      return timestamps[idx];
-	    }
+      function cutoffMsFromPercentile(timestamps, pct) {
+        const n = timestamps.length;
+        if (!n) return null;
+        const p = Math.max(1, Math.min(99, Math.floor(Number(pct) || 0)));
+        const idx = Math.max(0, Math.min(n - 1, Math.round((p / 100) * (n - 1))));
+        return timestamps[idx];
+      }
 
-	    function percentileFromCutoffMs(timestamps, cutoffMs) {
-	      const n = timestamps.length;
-	      if (!n || !Number.isFinite(cutoffMs)) return null;
-	      const idx = lowerBound(timestamps, cutoffMs);
-	      if (n <= 1) return 50;
-	      const p = Math.round(100 * (idx / (n - 1)));
-	      return Math.max(1, Math.min(99, p));
-	    }
+      function percentileFromCutoffMs(timestamps, cutoffMs) {
+        const n = timestamps.length;
+        if (!n || !Number.isFinite(cutoffMs)) return null;
+        const idx = lowerBound(timestamps, cutoffMs);
+        if (n <= 1) return 50;
+        const p = Math.round(100 * (idx / (n - 1)));
+        return Math.max(1, Math.min(99, p));
+      }
 
-	    function parseCutoffDateToMs(cutoffStr) {
-	      const s = normStr(cutoffStr);
-	      if (!s) return null;
-	      const d = new Date(`${s}T00:00:00`);
-	      const t = d.getTime();
-	      return Number.isFinite(t) ? t : null;
-	    }
+      function parseCutoffDateToMs(cutoffStr) {
+        const s = normStr(cutoffStr);
+        if (!s) return null;
+        const d = new Date(`${s}T00:00:00`);
+        const t = d.getTime();
+        return Number.isFinite(t) ? t : null;
+      }
 
-	    function formatIsoDateFromMs(ms) {
-	      if (!Number.isFinite(ms)) return "";
-	      const d = new Date(ms);
-	      if (!Number.isFinite(d.getTime())) return "";
-	      const y = d.getFullYear();
-	      const m = String(d.getMonth() + 1).padStart(2, "0");
-	      const day = String(d.getDate()).padStart(2, "0");
-	      return `${y}-${m}-${day}`;
-	    }
+      function formatIsoDateFromMs(ms) {
+        if (!Number.isFinite(ms)) return "";
+        const d = new Date(ms);
+        if (!Number.isFinite(d.getTime())) return "";
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+      }
 
-	    function timeCutoffCacheKey() {
-	      const splitMode = effectiveSplitMode();
-	      if (splitMode !== "time") return "";
-	      const dateCol = $("splitDateCol")?.value || APP.setup.splitDateCol || "";
-	      const rowsN = APP.raw.rows?.length || 0;
-	      const seed = Math.floor(parseNum($("seed")?.value) || 42);
-	      const maxRowsSetting = Math.max(0, Math.floor(parseNum($("maxRows")?.value) || 0));
-	      return `${APP.ui.parseSeq || 0}|${dateCol}|${rowsN}|${seed}|${maxRowsSetting}`;
-	    }
+      function timeCutoffCacheKey() {
+        const splitMode = effectiveSplitMode();
+        if (splitMode !== "time") return "";
+        const dateCol = $("splitDateCol")?.value || APP.setup.splitDateCol || "";
+        const rowsN = APP.raw.rows?.length || 0;
+        const seed = Math.floor(parseNum($("seed")?.value) || 42);
+        const maxRowsSetting = Math.max(0, Math.floor(parseNum($("maxRows")?.value) || 0));
+        return `${APP.ui.parseSeq || 0}|${dateCol}|${rowsN}|${seed}|${maxRowsSetting}`;
+      }
 
-	    function renderTimeCutoffPicker() {
-	      const wrap = $("timeCutoffPicker");
-	      const canvas = $("timeCutoffChart");
-	      const placeholder = $("timeCutoffPlaceholder");
-	      const slider = $("timeCutoffSlider");
-	      const hint = $("timeCutoffHint");
-	      if (!wrap || !canvas || !slider || !hint || !placeholder) return;
+      function renderTimeCutoffPicker() {
+        const wrap = $("timeCutoffPicker");
+        const canvas = $("timeCutoffChart");
+        const placeholder = $("timeCutoffPlaceholder");
+        const slider = $("timeCutoffSlider");
+        const hint = $("timeCutoffHint");
+        if (!wrap || !canvas || !slider || !hint || !placeholder) return;
 
-	      const splitMode = effectiveSplitMode();
-	      const splitMethod = $("splitMethod")?.value || "cutoff";
-	      const show = (splitMode === "time" && splitMethod === "cutoff");
-	      wrap.classList.toggle("hidden", !show);
-	      if (!show) {
-	        placeholder.classList.add("hidden");
-	        hint.textContent = "—";
-	        slider.disabled = true;
-	        APP.ui.timeCutoffCache = null;
-	        if (APP.ui.timeCutoffRaf) cancelAnimationFrame(APP.ui.timeCutoffRaf);
-	        APP.ui.timeCutoffRaf = 0;
-	        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
-	        return;
-	      }
+        const splitMode = effectiveSplitMode();
+        const splitMethod = $("splitMethod")?.value || "cutoff";
+        const show = (splitMode === "time" && splitMethod === "cutoff");
+        wrap.classList.toggle("hidden", !show);
+        if (!show) {
+          placeholder.classList.add("hidden");
+          hint.textContent = "—";
+          slider.disabled = true;
+          APP.ui.timeCutoffCache = null;
+          if (APP.ui.timeCutoffRaf) cancelAnimationFrame(APP.ui.timeCutoffRaf);
+          APP.ui.timeCutoffRaf = 0;
+          APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+          return;
+        }
 
-	      const key = timeCutoffCacheKey();
-	      let cache = APP.ui.timeCutoffCache;
-	      const cacheHit = Boolean(cache && cache.key === key);
-	      if (!cacheHit) {
-	        placeholder.classList.remove("hidden");
-	        const built = buildTimeSplitTimestampSample({ maxPoints: 7000 });
-	        placeholder.classList.add("hidden");
+        const key = timeCutoffCacheKey();
+        let cache = APP.ui.timeCutoffCache;
+        const cacheHit = Boolean(cache && cache.key === key);
+        if (!cacheHit) {
+          placeholder.classList.remove("hidden");
+          const built = buildTimeSplitTimestampSample({ maxPoints: 7000 });
+          placeholder.classList.add("hidden");
 
-	        const timestamps = built.timestamps || [];
-	        const dateCol = built.dateCol || null;
+          const timestamps = built.timestamps || [];
+          const dateCol = built.dateCol || null;
 
-	        if (!dateCol) {
-	          APP.ui.timeCutoffCache = null;
-	          hint.textContent = "Pick a time column to enable the cutoff picker.";
-	          slider.disabled = true;
-	          APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
-	          return;
-	        }
+          if (!dateCol) {
+            APP.ui.timeCutoffCache = null;
+            hint.textContent = "Pick a time column to enable the cutoff picker.";
+            slider.disabled = true;
+            APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+            return;
+          }
 
-	        if (timestamps.length < 2) {
-	          APP.ui.timeCutoffCache = null;
-	          hint.textContent = `No parseable dates found in "${dateCol}". Try forcing a date type or pick a different column.`;
-	          slider.disabled = true;
-	          APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
-	          return;
-	        }
+          if (timestamps.length < 2) {
+            APP.ui.timeCutoffCache = null;
+            hint.textContent = `No parseable dates found in "${dateCol}". Try forcing a date type or pick a different column.`;
+            slider.disabled = true;
+            APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+            return;
+          }
 
-	        const nBins = Math.min(30, Math.max(10, Math.round(Math.sqrt(timestamps.length))));
-	        const min = timestamps[0];
-	        const max = timestamps[timestamps.length - 1];
-	        const span = Math.max(1, max - min);
-	        const binW = span / nBins;
-	        const counts = new Array(nBins).fill(0);
-	        const labels = new Array(nBins).fill("");
-	        for (let b = 0; b < nBins; b++) labels[b] = formatPreviewDate(min + (b * binW));
+          const nBins = Math.min(30, Math.max(10, Math.round(Math.sqrt(timestamps.length))));
+          const min = timestamps[0];
+          const max = timestamps[timestamps.length - 1];
+          const span = Math.max(1, max - min);
+          const binW = span / nBins;
+          const counts = new Array(nBins).fill(0);
+          const labels = new Array(nBins).fill("");
+          for (let b = 0; b < nBins; b++) labels[b] = formatPreviewDate(min + (b * binW));
 
-	        for (const t of timestamps) {
-	          const b = Math.min(nBins - 1, Math.max(0, Math.floor((t - min) / binW)));
-	          counts[b]++;
-	        }
+          for (const t of timestamps) {
+            const b = Math.min(nBins - 1, Math.max(0, Math.floor((t - min) / binW)));
+            counts[b]++;
+          }
 
-	        cache = { key, dateCol, timestamps, nBins, min, binW, labels, counts };
-	        APP.ui.timeCutoffCache = cache;
-	        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
-	      }
+          cache = { key, dateCol, timestamps, nBins, min, binW, labels, counts };
+          APP.ui.timeCutoffCache = cache;
+          APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+        }
 
-	      slider.disabled = false;
+        slider.disabled = false;
 
-	      const { dateCol, timestamps, nBins, min, binW, labels, counts } = cache;
-	      const cutoffEl = $("cutoffDate");
-	      const currentCutoffStr = cutoffEl ? (cutoffEl.value || "") : (APP.setup.cutoffDate || "");
-	      const currentCutoffMs = parseCutoffDateToMs(currentCutoffStr);
+        const { dateCol, timestamps, nBins, min, binW, labels, counts } = cache;
+        const cutoffEl = $("cutoffDate");
+        const currentCutoffStr = cutoffEl ? (cutoffEl.value || "") : (APP.setup.cutoffDate || "");
+        const currentCutoffMs = parseCutoffDateToMs(currentCutoffStr);
 
-	      let sliderPct = (currentCutoffMs !== null)
-	        ? percentileFromCutoffMs(timestamps, currentCutoffMs)
-	        : null;
+        let sliderPct = (currentCutoffMs !== null)
+          ? percentileFromCutoffMs(timestamps, currentCutoffMs)
+          : null;
 
-	      if (sliderPct === null) {
-	        const testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac")?.value) || 0.1));
-	        sliderPct = Math.max(1, Math.min(99, Math.round(100 * (1 - testFrac))));
-	      }
+        if (sliderPct === null) {
+          const testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac")?.value) || 0.1));
+          sliderPct = Math.max(1, Math.min(99, Math.round(100 * (1 - testFrac))));
+        }
 
-	      slider.value = String(sliderPct);
-	      const cutoffMs = cutoffMsFromPercentile(timestamps, sliderPct);
-	      const cutoffStr = formatIsoDateFromMs(cutoffMs);
+        slider.value = String(sliderPct);
+        const cutoffMs = cutoffMsFromPercentile(timestamps, sliderPct);
+        const cutoffStr = formatIsoDateFromMs(cutoffMs);
 
-	      if (cutoffEl && !normStr(currentCutoffStr) && cutoffStr) {
-	        cutoffEl.value = cutoffStr;
-	        APP.setup.cutoffDate = cutoffStr;
-	      }
+        if (cutoffEl && !normStr(currentCutoffStr) && cutoffStr) {
+          cutoffEl.value = cutoffStr;
+          APP.setup.cutoffDate = cutoffStr;
+        }
 
-	      const trainCount = lowerBound(timestamps, cutoffMs);
-	      const testCount = timestamps.length - trainCount;
-	      hint.textContent = `Cutoff: ${cutoffStr} · Train ≈ ${formatPreviewCount(trainCount)} / Test ≈ ${formatPreviewCount(testCount)} (date rows sampled=${formatPreviewCount(timestamps.length)})`;
+        const trainCount = lowerBound(timestamps, cutoffMs);
+        const testCount = timestamps.length - trainCount;
+        hint.textContent = `Cutoff: ${cutoffStr} · Train ≈ ${formatPreviewCount(trainCount)} / Test ≈ ${formatPreviewCount(testCount)} (date rows sampled=${formatPreviewCount(timestamps.length)})`;
 
-	      const colors = new Array(nBins).fill("");
-	      for (let b = 0; b < nBins; b++) {
-	        const mid = (min + (b * binW)) + (binW / 2);
-	        colors[b] = (mid < cutoffMs) ? "rgba(139,92,246,0.22)" : "rgba(139,92,246,0.08)";
-	      }
+        const colors = new Array(nBins).fill("");
+        for (let b = 0; b < nBins; b++) {
+          const mid = (min + (b * binW)) + (binW / 2);
+          colors[b] = (mid < cutoffMs) ? "rgba(139,92,246,0.22)" : "rgba(139,92,246,0.08)";
+        }
 
-	      const ctx = canvas.getContext("2d");
-	      if (!ctx) return;
-	      if (!APP.ui.charts.timeCutoff) {
-	        APP.ui.charts.timeCutoff = new Chart(ctx, {
-	          type: "bar",
-	          data: {
-	            labels,
-	            datasets: [{
-	              label: "Rows (sampled)",
-	              data: counts,
-	              backgroundColor: colors,
-	              borderColor: "rgba(139,92,246,0.35)",
-	              borderWidth: 1,
-	            }],
-	          },
-	          options: {
-	            responsive: true,
-	            maintainAspectRatio: false,
-	            plugins: {
-	              legend: { display: false },
-	              tooltip: {
-	                callbacks: {
-	                  title: (items) => items?.[0]?.label || "",
-	                },
-	              },
-	            },
-	            scales: {
-	              x: {
-	                ticks: { autoSkip: true, maxRotation: 0 },
-	                grid: { display: false },
-	              },
-	              y: {
-	                beginAtZero: true,
-	                ticks: { precision: 0 },
-	                grid: { color: "rgba(234,240,255,0.08)" },
-	              },
-	            },
-	          },
-	        });
-	      } else {
-	        APP.ui.charts.timeCutoff.data.labels = labels;
-	        APP.ui.charts.timeCutoff.data.datasets[0].data = counts;
-	        APP.ui.charts.timeCutoff.data.datasets[0].backgroundColor = colors;
-	        APP.ui.charts.timeCutoff.update("none");
-	      }
-	    }
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        if (!APP.ui.charts.timeCutoff) {
+          APP.ui.charts.timeCutoff = new Chart(ctx, {
+            type: "bar",
+            data: {
+              labels,
+              datasets: [{
+                label: "Rows (sampled)",
+                data: counts,
+                backgroundColor: colors,
+                borderColor: "rgba(139,92,246,0.35)",
+                borderWidth: 1,
+              }],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  callbacks: {
+                    title: (items) => items?.[0]?.label || "",
+                  },
+                },
+              },
+              scales: {
+                x: {
+                  ticks: { autoSkip: true, maxRotation: 0 },
+                  grid: { display: false },
+                },
+                y: {
+                  beginAtZero: true,
+                  ticks: { precision: 0 },
+                  grid: { color: "rgba(234,240,255,0.08)" },
+                },
+              },
+            },
+          });
+        } else {
+          APP.ui.charts.timeCutoff.data.labels = labels;
+          APP.ui.charts.timeCutoff.data.datasets[0].data = counts;
+          APP.ui.charts.timeCutoff.data.datasets[0].backgroundColor = colors;
+          APP.ui.charts.timeCutoff.update("none");
+        }
+      }
 
-	    function updateTimeCutoffFromSlider() {
-	      const slider = $("timeCutoffSlider");
-	      const hint = $("timeCutoffHint");
-	      if (!slider || !hint) return;
-	      const splitMode = effectiveSplitMode();
-	      const splitMethod = $("splitMethod")?.value || "cutoff";
-	      if (!(splitMode === "time" && splitMethod === "cutoff")) return;
+      function updateTimeCutoffFromSlider() {
+        const slider = $("timeCutoffSlider");
+        const hint = $("timeCutoffHint");
+        if (!slider || !hint) return;
+        const splitMode = effectiveSplitMode();
+        const splitMethod = $("splitMethod")?.value || "cutoff";
+        if (!(splitMode === "time" && splitMethod === "cutoff")) return;
 
-	      const key = timeCutoffCacheKey();
-	      const cache = APP.ui.timeCutoffCache;
-	      if (!cache || cache.key !== key || !Array.isArray(cache.timestamps) || cache.timestamps.length < 2) {
-	        renderTimeCutoffPicker();
-	        return;
-	      }
+        const key = timeCutoffCacheKey();
+        const cache = APP.ui.timeCutoffCache;
+        if (!cache || cache.key !== key || !Array.isArray(cache.timestamps) || cache.timestamps.length < 2) {
+          renderTimeCutoffPicker();
+          return;
+        }
 
-	      const pct = Math.max(1, Math.min(99, Math.floor(parseNum(slider.value) || 0)));
-	      const cutoffMs = cutoffMsFromPercentile(cache.timestamps, pct);
-	      const cutoffStr = formatIsoDateFromMs(cutoffMs);
-	      if (!cutoffStr) return;
+        const pct = Math.max(1, Math.min(99, Math.floor(parseNum(slider.value) || 0)));
+        const cutoffMs = cutoffMsFromPercentile(cache.timestamps, pct);
+        const cutoffStr = formatIsoDateFromMs(cutoffMs);
+        if (!cutoffStr) return;
 
-	      const cutoffEl = $("cutoffDate");
-	      if (cutoffEl) cutoffEl.value = cutoffStr;
-	      APP.setup.cutoffDate = cutoffStr;
-	      markSetupDirty();
+        const cutoffEl = $("cutoffDate");
+        if (cutoffEl) cutoffEl.value = cutoffStr;
+        APP.setup.cutoffDate = cutoffStr;
+        markSetupDirty();
 
-	      const trainCount = lowerBound(cache.timestamps, cutoffMs);
-	      const testCount = cache.timestamps.length - trainCount;
-	      hint.textContent = `Cutoff: ${cutoffStr} · Train ≈ ${formatPreviewCount(trainCount)} / Test ≈ ${formatPreviewCount(testCount)} (date rows sampled=${formatPreviewCount(cache.timestamps.length)})`;
+        const trainCount = lowerBound(cache.timestamps, cutoffMs);
+        const testCount = cache.timestamps.length - trainCount;
+        hint.textContent = `Cutoff: ${cutoffStr} · Train ≈ ${formatPreviewCount(trainCount)} / Test ≈ ${formatPreviewCount(testCount)} (date rows sampled=${formatPreviewCount(cache.timestamps.length)})`;
 
-	      const nBins = cache.nBins;
-	      const colors = new Array(nBins).fill("");
-	      for (let b = 0; b < nBins; b++) {
-	        const mid = (cache.min + (b * cache.binW)) + (cache.binW / 2);
-	        colors[b] = (mid < cutoffMs) ? "rgba(139,92,246,0.22)" : "rgba(139,92,246,0.08)";
-	      }
+        const nBins = cache.nBins;
+        const colors = new Array(nBins).fill("");
+        for (let b = 0; b < nBins; b++) {
+          const mid = (cache.min + (b * cache.binW)) + (cache.binW / 2);
+          colors[b] = (mid < cutoffMs) ? "rgba(139,92,246,0.22)" : "rgba(139,92,246,0.08)";
+        }
 
-	      if (APP.ui.charts.timeCutoff) {
-	        APP.ui.charts.timeCutoff.data.datasets[0].backgroundColor = colors;
-	        APP.ui.charts.timeCutoff.update("none");
-	      }
+        if (APP.ui.charts.timeCutoff) {
+          APP.ui.charts.timeCutoff.data.datasets[0].backgroundColor = colors;
+          APP.ui.charts.timeCutoff.update("none");
+        }
 
-	      if (APP.ui.timeCutoffRaf) cancelAnimationFrame(APP.ui.timeCutoffRaf);
-	      APP.ui.timeCutoffRaf = requestAnimationFrame(() => {
-	        APP.ui.timeCutoffRaf = 0;
-	        updateSplitPreview();
-	        renderStateChips();
-	      });
-	    }
+        if (APP.ui.timeCutoffRaf) cancelAnimationFrame(APP.ui.timeCutoffRaf);
+        APP.ui.timeCutoffRaf = requestAnimationFrame(() => {
+          APP.ui.timeCutoffRaf = 0;
+          updateSplitPreview();
+          renderStateChips();
+        });
+      }
 
-	    function renderTargetPreview() {
-	      const field = $("targetPreviewField");
-	      const canvas = $("targetPreviewChart");
-	      const pill = $("targetPreviewPill");
+      function renderTargetPreview() {
+        const field = $("targetPreviewField");
+        const canvas = $("targetPreviewChart");
+        const pill = $("targetPreviewPill");
       const placeholder = $("targetPreviewPlaceholder");
       const hintRow = $("targetPreviewHintRow");
       const hintText = $("targetPreviewHintText");
@@ -5725,7 +5725,7 @@
         `<span class="muted2">${prog} · Elapsed <span class="mono">${formatDuration(elapsedMs)}</span> · ETA <span class="mono">${etaText}</span></span>`;
     }
 
-	    function trainingCalloutBodyHtml(task, completedUnits, totalUnits, startMs) {
+      function trainingCalloutBodyHtml(task, completedUnits, totalUnits, startMs) {
       const elapsedMs = performance.now() - startMs;
       let etaText = "estimating…";
       if (completedUnits > 0 && totalUnits > 0) {
@@ -6610,22 +6610,22 @@
         }
       }
 
-	      APP.train.runSummary = {
-	        runId: Date.now(),
-	        task: pipeline.task,
-	        test: testSummary,
-	        oob: oobSummary,
-	        includedCols: currentIncludedFeatureCols().length,
-	        excludedCols: APP.setup.excluded?.size || 0,
-	        pruneReason: APP.ui.pruneJustApplied ? (APP.ui.pruneUndoReason || "") : "",
-	      };
-	      APP.ui.pruneJustApplied = false;
-	      pushRunHistoryEntry();
+        APP.train.runSummary = {
+          runId: Date.now(),
+          task: pipeline.task,
+          test: testSummary,
+          oob: oobSummary,
+          includedCols: currentIncludedFeatureCols().length,
+          excludedCols: APP.setup.excluded?.size || 0,
+          pruneReason: APP.ui.pruneJustApplied ? (APP.ui.pruneUndoReason || "") : "",
+        };
+        APP.ui.pruneJustApplied = false;
+        pushRunHistoryEntry();
 
-	      // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
-	      setResultsTab("overview");
-	      renderResults();
-	      gotoStep(2);
+        // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
+        setResultsTab("overview");
+        renderResults();
+        gotoStep(2);
 
       $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
       showToast("Training complete", "good");
@@ -6981,16 +6981,16 @@
       $("predFilter").value = "";
       if ($("predFullDetails")) $("predFullDetails").open = true;
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
-	      updateUncertaintyPills();
-	      renderPredInsights();
-	      renderPredTable();
-	      updatePruneMiniUi();
-	      renderRunHistory();
+        updateUncertaintyPills();
+        renderPredInsights();
+        renderPredTable();
+        updatePruneMiniUi();
+        renderRunHistory();
 
-	      forceDetailsOpen("shiftDetails");
-	      forceDetailsOpen("predFullDetails");
-	      updateExportUI();
-	    }
+        forceDetailsOpen("shiftDetails");
+        forceDetailsOpen("predFullDetails");
+        updateExportUI();
+      }
 
     // ----------------------------
     // Export
@@ -7316,7 +7316,7 @@ raise NotImplementedError(
       renderStateChips();
     }
 
-	    function hardReset() {
+      function hardReset() {
       try { APP.ui.training.abortController?.abort(); } catch {}
       try { APP.ui.training.diagAbortController?.abort(); } catch {}
       APP.ui.training.abortController = null;
@@ -7336,7 +7336,7 @@ raise NotImplementedError(
         cutoffDate: "",
         splitStrategy: "stratified",
         testFrac: 0.1,
-	        taskMode: "regression",
+          taskMode: "regression",
         targetTransform: "none",
         maxRows: 1000,
         maxCard: 50,
@@ -7399,26 +7399,26 @@ raise NotImplementedError(
       APP.ui.predFilter = "";
       APP.ui.previewFilter = "";
       APP.ui.showAdvancedSettings = false;
-	      APP.ui.resultsTab = "overview";
-	      APP.ui.setupDirty = false;
-	      APP.ui.prevRunSummary = null;
-	      APP.ui.runHistory = [];
-	      APP.ui.timeCutoffCache = null;
-	      APP.ui.timeCutoffRaf = 0;
-	      APP.ui.pruneUndoExcluded = null;
-	      APP.ui.pruneUndoReason = "";
-	      APP.ui.pruneJustApplied = false;
-	      APP.ui.maxUnlockedStep = 0;
+        APP.ui.resultsTab = "overview";
+        APP.ui.setupDirty = false;
+        APP.ui.prevRunSummary = null;
+        APP.ui.runHistory = [];
+        APP.ui.timeCutoffCache = null;
+        APP.ui.timeCutoffRaf = 0;
+        APP.ui.pruneUndoExcluded = null;
+        APP.ui.pruneUndoReason = "";
+        APP.ui.pruneJustApplied = false;
+        APP.ui.maxUnlockedStep = 0;
 
-	      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
-	      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
-	      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
-	      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
-	      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
-	      APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+        APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+        APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+        APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+        APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+        APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
 
       $("trainStatus").innerHTML = "";
-	      setTrainingUi(false);
+        setTrainingUi(false);
       setResultsTab(APP.ui.resultsTab);
 
       hide($("uploadSummary"));
@@ -7427,14 +7427,14 @@ raise NotImplementedError(
       if ($("targetSearch")) $("targetSearch").value = "";
       $("predTable").innerHTML = "";
       $("worstErrTable").innerHTML = "";
-	      $("highUncTable").innerHTML = "";
-	      $("resultsCallouts").innerHTML = "";
-	      if ($("runHistoryList")) {
-	        $("runHistoryList").className = "muted2";
-	        $("runHistoryList").textContent = "No runs yet.";
-	      }
-	      $("uncertaintyPill").textContent = "Uncertainty: —";
-	      $("uncertaintyPill").className = "pill";
+        $("highUncTable").innerHTML = "";
+        $("resultsCallouts").innerHTML = "";
+        if ($("runHistoryList")) {
+          $("runHistoryList").className = "muted2";
+          $("runHistoryList").textContent = "No runs yet.";
+        }
+        $("uncertaintyPill").textContent = "Uncertainty: —";
+        $("uncertaintyPill").className = "pill";
       $("errUncPill").textContent = "—";
       $("errUncPill").className = "pill";
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
@@ -7460,7 +7460,7 @@ raise NotImplementedError(
       $("maxDepth").value = "20";
       $("minNumSamples").value = "10";
       $("replacement").value = "false";
-	      $("taskMode").value = "regression";
+        $("taskMode").value = "regression";
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";
       $("splitStrategy").value = "stratified";
@@ -7493,12 +7493,12 @@ raise NotImplementedError(
       gotoStep(0);
     }
 
-	    function resetForNewFile() {
-	      const taskModeRaw = $("taskMode").value;
-	      const taskMode =
-	        (taskModeRaw === "regression" || taskModeRaw === "classification")
-	          ? taskModeRaw
-	          : "regression";
+      function resetForNewFile() {
+        const taskModeRaw = $("taskMode").value;
+        const taskMode =
+          (taskModeRaw === "regression" || taskModeRaw === "classification")
+            ? taskModeRaw
+            : "regression";
       const splitStrategyUserSet = $("splitStrategy").dataset.userSet === "true";
       const prefs = {
         testFrac: parseNum($("testFrac").value) || 0.1,
@@ -7904,23 +7904,23 @@ raise NotImplementedError(
       renderStateChips();
     });
 
-	    $("cutoffDate").addEventListener("change", () => {
-	      markSetupDirty();
-	      APP.setup.cutoffDate = $("cutoffDate").value || "";
-	      syncSetupUI();
-	      renderStateChips();
-	    });
+      $("cutoffDate").addEventListener("change", () => {
+        markSetupDirty();
+        APP.setup.cutoffDate = $("cutoffDate").value || "";
+        syncSetupUI();
+        renderStateChips();
+      });
 
-	    $("timeCutoffSlider")?.addEventListener("input", () => {
-	      updateTimeCutoffFromSlider();
-	    });
-	    $("timeCutoffSlider")?.addEventListener("change", () => {
-	      updateTimeCutoffFromSlider();
-	    });
+      $("timeCutoffSlider")?.addEventListener("input", () => {
+        updateTimeCutoffFromSlider();
+      });
+      $("timeCutoffSlider")?.addEventListener("change", () => {
+        updateTimeCutoffFromSlider();
+      });
 
-	    $("testFrac").addEventListener("change", () => {
-	      markSetupDirty();
-	      APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
+      $("testFrac").addEventListener("change", () => {
+        markSetupDirty();
+        APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
       syncSetupUI();
       renderStateChips();
     });
@@ -8045,25 +8045,25 @@ raise NotImplementedError(
       releaseAllResources();
     });
 
-	    $("importanceMode").addEventListener("change", () => {
-	      if (!APP.train.model) return;
-	      const mode = $("importanceMode").value;
-	      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance", "derived");
-	      else renderFIChart(APP.train.fiBase, "importance", "base");
-	    });
+      $("importanceMode").addEventListener("change", () => {
+        if (!APP.train.model) return;
+        const mode = $("importanceMode").value;
+        if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance", "derived");
+        else renderFIChart(APP.train.fiBase, "importance", "base");
+      });
 
-	    $("runHistoryList")?.addEventListener("click", (e) => {
-	      const btn = e.target?.closest?.("button[data-run-action][data-run-id]");
-	      if (!btn) return;
-	      const action = btn.dataset.runAction || "";
-	      const runId = btn.dataset.runId || "";
-	      if (action === "restore") restoreRunHistorySettings(runId);
-	      else if (action === "compare") compareRunHistoryToCurrent(runId);
-	    });
+      $("runHistoryList")?.addEventListener("click", (e) => {
+        const btn = e.target?.closest?.("button[data-run-action][data-run-id]");
+        if (!btn) return;
+        const action = btn.dataset.runAction || "";
+        const runId = btn.dataset.runId || "";
+        if (action === "restore") restoreRunHistorySettings(runId);
+        else if (action === "compare") compareRunHistoryToCurrent(runId);
+      });
 
-	    $("predFilter").addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });
-	    $("pageSize").addEventListener("change", () => { APP.ui.predPage = 0; renderPredTable(); });
-	    $("predTopK").addEventListener("change", () => { renderPredInsights(); });
+      $("predFilter").addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });
+      $("pageSize").addEventListener("change", () => { APP.ui.predPage = 0; renderPredTable(); });
+      $("predTopK").addEventListener("change", () => { renderPredInsights(); });
     $("predInsightsDetails").addEventListener("toggle", () => {
       if ($("predInsightsDetails").open) {
         renderPredInsights();

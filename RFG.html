@@ -712,6 +712,21 @@
 	                <div class="muted2">If enabled, we train on transformed targets and invert predictions back.</div>
 	              </div>
 
+                <div class="field hidden" id="targetPreviewField" style="margin-top:12px;">
+                  <div class="row space" style="margin-bottom:8px;">
+                    <div class="muted">Target distribution</div>
+                    <span class="pill" id="targetPreviewPill">—</span>
+                  </div>
+                  <div class="chartBox" style="height:240px;">
+                    <canvas id="targetPreviewChart"></canvas>
+                    <div id="targetPreviewPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting…</div>
+                  </div>
+                  <div class="row hidden" id="targetPreviewHintRow" style="margin-top:10px;">
+                    <div class="muted2" id="targetPreviewHintText">—</div>
+                    <button class="btn ghost hidden" id="targetPreviewLog1pBtn" type="button">Apply log1p</button>
+                  </div>
+                </div>
+
 	              <div id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
 	                <div class="hr"></div>
 	                <div class="muted" style="margin-bottom:8px;">Advanced (classification)</div>
@@ -1264,6 +1279,7 @@
           secondary: null,
           shift: null,
           errUnc: null,
+          targetPreview: null,
         },
 	        chips: {
 	          order: [
@@ -1317,6 +1333,7 @@
 	        showAdvancedSettings: false,
           trainingPreset: "",
           hasVisitedSetup: false,
+          targetPreviewKey: "",
 	        parseSeq: 0,
 	        predPage: 0,
 	        predFilter: "",
@@ -1683,6 +1700,7 @@
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
       APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
       APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
     }
 
     function downloadBlob(blob, filename) {
@@ -2342,6 +2360,7 @@
 	      $("testFrac").disabled = !showAdv || !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
 
 	      if ($("targetTransformField")) $("targetTransformField").classList.toggle("hidden", !showAdv);
+	      if ($("targetPreviewField")) $("targetPreviewField").classList.toggle("hidden", !showAdv);
 	      if ($("taskModeField")) $("taskModeField").classList.toggle("hidden", !showAdv);
 	      if ($("targetSelectField")) $("targetSelectField").classList.toggle("span2", !showAdv);
 	      if ($("maxCardFieldWrap")) $("maxCardFieldWrap").classList.toggle("hidden", !showAdv);
@@ -2368,6 +2387,7 @@
         renderTrainingPresetButtons();
 	      syncAdvancedTargetUI();
 	      updateSplitPreview();
+        renderTargetPreview();
 	    }
 
     // ----------------------------
@@ -3968,6 +3988,259 @@
         <div class="muted2">Based on ${formatPreviewCount(previewRows)} sampled rows${maxRowsNote}${droppedTargets ? ` (${formatPreviewCount(droppedTargets)} dropped)` : ""}.</div>
         ${detailHtml}
         ${warnNote}`;
+    }
+
+    function renderTargetPreview() {
+      const field = $("targetPreviewField");
+      const canvas = $("targetPreviewChart");
+      const pill = $("targetPreviewPill");
+      const placeholder = $("targetPreviewPlaceholder");
+      const hintRow = $("targetPreviewHintRow");
+      const hintText = $("targetPreviewHintText");
+      const hintBtn = $("targetPreviewLog1pBtn");
+
+      if (!field || !canvas || !pill || !placeholder || !hintRow || !hintText || !hintBtn) return;
+
+      if (!APP.ui.showAdvancedSettings) {
+        field.classList.add("hidden");
+        return;
+      }
+
+      field.classList.remove("hidden");
+      hintRow.classList.add("hidden");
+      hintBtn.classList.add("hidden");
+
+      const rows = APP.raw.rows || [];
+      const targetCol = APP.raw.targetCol;
+      if (!rows.length || !targetCol) {
+        pill.className = "pill";
+        pill.textContent = "—";
+        APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+        placeholder.classList.remove("hidden");
+        hintText.textContent = "Select a target to preview its distribution.";
+        return;
+      }
+
+      const splitMode = effectiveSplitMode();
+      const splitDateCol = (splitMode === "time") ? ($("splitDateCol")?.value || APP.setup.splitDateCol) : "";
+      const seed = parseNum($("seed")?.value) || 42;
+      const maxRowsSetting = Math.max(0, Math.floor(parseNum($("maxRows")?.value) || 0));
+      const taskMode = $("taskMode")?.value || APP.setup.taskMode;
+      const transformMode = $("targetTransform")?.value || APP.setup.targetTransform || "none";
+      const task = decideTaskFromTarget(rows, targetCol, taskMode, APP.raw.colMeta);
+
+      const key = [
+        APP.ui.parseSeq || 0,
+        APP.ui.showAdvancedSettings ? "adv" : "basic",
+        targetCol,
+        task,
+        transformMode,
+        splitMode,
+        splitDateCol,
+        maxRowsSetting,
+        seed,
+        rows.length,
+      ].join("|");
+      if (APP.ui.targetPreviewKey === key) return;
+      APP.ui.targetPreviewKey = key;
+
+      const maxSample = 5000;
+      const baseIdx = sampleRowIndices(rows.length, maxRowsSetting, seed, splitMode);
+      let sampleIdx = baseIdx;
+      if (baseIdx.length > maxSample) {
+        if (splitMode === "time") {
+          sampleIdx = baseIdx.slice(Math.max(0, baseIdx.length - maxSample));
+        } else {
+          const pick = sampleIndicesNoAlloc(baseIdx.length, maxSample, (seed ^ 0x7f4a7c15) >>> 0);
+          sampleIdx = pick.map(j => baseIdx[j]);
+        }
+      }
+
+      const values = [];
+      let dropped = 0;
+      for (const i of sampleIdx) {
+        const tv = getRowTargetValue(rows[i], targetCol, task, (task === "regression") ? transformMode : "none", APP.raw.colMeta);
+        if (!tv) { dropped++; continue; }
+        values.push(tv.y);
+      }
+
+      if (!values.length) {
+        pill.className = "pill warn";
+        pill.textContent = "No usable values";
+        APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+        placeholder.classList.remove("hidden");
+        hintText.textContent = "No usable target values found in the preview sample.";
+        return;
+      }
+
+      const ctx = canvas.getContext("2d");
+      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+      placeholder.classList.add("hidden");
+
+      const baseColor = "rgba(139,92,246,0.70)";
+      const borderColor = "rgba(139,92,246,1)";
+
+      if (task === "regression") {
+        const nums = values.map(v => Number(v)).filter(v => Number.isFinite(v));
+        if (!nums.length) {
+          pill.className = "pill warn";
+          pill.textContent = "No numeric values";
+          placeholder.classList.remove("hidden");
+          hintText.textContent = "Target values are not numeric.";
+          return;
+        }
+
+        const n = nums.length;
+        const min = Math.min(...nums);
+        const max = Math.max(...nums);
+        const nBins = 30;
+        const counts = new Array(nBins).fill(0);
+
+        if (min === max) {
+          counts[0] = n;
+        } else {
+          const w = (max - min) / nBins;
+          for (const v of nums) {
+            const idx = Math.min(nBins - 1, Math.max(0, Math.floor((v - min) / w)));
+            counts[idx]++;
+          }
+        }
+
+        const fmt = (x) => {
+          const ax = Math.abs(x);
+          if (ax >= 1000) return String(Math.round(x));
+          if (ax >= 10) return x.toFixed(1);
+          return x.toFixed(2);
+        };
+
+        const labels = (min === max)
+          ? [fmt(min)]
+          : Array.from({ length: nBins }, (_, k) => {
+              const a = min + (k * (max - min) / nBins);
+              const b = min + ((k + 1) * (max - min) / nBins);
+              return `${fmt(a)}–${fmt(b)}`;
+            });
+
+        pill.className = "pill";
+        const tfTag = (transformMode === "log1p") ? " · log1p" : "";
+        pill.textContent = `n=${nums.length.toLocaleString()}${dropped ? ` (${dropped.toLocaleString()} dropped)` : ""}${tfTag}`;
+
+        APP.ui.charts.targetPreview = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Count",
+                data: (min === max) ? [nums.length] : counts,
+                backgroundColor: baseColor,
+                borderColor,
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (item) => `Count: ${Number(item.raw || 0).toLocaleString()}`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: { color: "rgba(234,240,255,0.75)", maxRotation: 0, autoSkip: true },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: "rgba(234,240,255,0.75)" },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+            },
+          },
+        });
+
+        const zeros = nums.reduce((a, v) => a + ((v === 0) ? 1 : 0), 0);
+        const zerosFrac = zeros / Math.max(1, n);
+        const nonNeg = min >= 0;
+        const mean = nums.reduce((a, v) => a + v, 0) / Math.max(1, n);
+        const m2 = nums.reduce((a, v) => { const d = v - mean; return a + d * d; }, 0) / Math.max(1, n);
+        const sd = Math.sqrt(m2);
+        const m3 = nums.reduce((a, v) => { const d = v - mean; return a + d * d * d; }, 0) / Math.max(1, n);
+        const skew = (sd > 0) ? (m3 / Math.pow(sd, 3)) : 0;
+        const shouldSuggest = (transformMode !== "log1p") && nonNeg && (zerosFrac >= 0.25 || Math.abs(skew) >= 1.5);
+        const transformEl = $("targetTransform");
+        const canApply = Boolean(transformEl && transformEl.value !== "log1p");
+
+        if (shouldSuggest) {
+          hintRow.classList.remove("hidden");
+          hintText.textContent = "Consider log1p transform (skewed / many zeros).";
+          hintBtn.classList.toggle("hidden", !canApply);
+        }
+        if (!shouldSuggest && transformMode === "log1p") {
+          hintRow.classList.remove("hidden");
+          hintText.textContent = "Preview shows log1p-transformed target (training uses the transformed scale).";
+          hintBtn.classList.add("hidden");
+        }
+
+      } else {
+        const counts = new Map();
+        for (const v of values) {
+          const s = normStr(v) || "#na#";
+          counts.set(s, (counts.get(s) || 0) + 1);
+        }
+
+        const entries = Array.from(counts.entries())
+          .map(([label, c]) => ({ label, c }))
+          .sort((a, b) => (b.c - a.c) || a.label.localeCompare(b.label));
+
+        const top = entries.slice(0, 10);
+        const topSum = top.reduce((a, x) => a + x.c, 0);
+        const other = entries.reduce((a, x) => a + x.c, 0) - topSum;
+        const labels = top.map(x => x.label).concat(other > 0 ? ["Other"] : []);
+        const data = top.map(x => x.c).concat(other > 0 ? [other] : []);
+
+        pill.className = "pill";
+        pill.textContent = `n=${values.length.toLocaleString()}${dropped ? ` (${dropped.toLocaleString()} dropped)` : ""}`;
+
+        APP.ui.charts.targetPreview = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Count",
+                data,
+                backgroundColor: baseColor,
+                borderColor,
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+            },
+            scales: {
+              x: {
+                ticks: { color: "rgba(234,240,255,0.75)", maxRotation: 0, autoSkip: true },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: "rgba(234,240,255,0.75)" },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+            },
+          },
+        });
+      }
     }
 
     // ----------------------------
@@ -6548,6 +6821,7 @@ raise NotImplementedError(
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
       APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
       APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
 
       $("trainStatus").innerHTML = "";
 	      setTrainingUi(false);
@@ -6897,6 +7171,14 @@ raise NotImplementedError(
       syncButtons();
     });
 
+    $("targetPreviewLog1pBtn")?.addEventListener("click", () => {
+      const sel = $("targetTransform");
+      if (!sel) return;
+      sel.value = "log1p";
+      sel.dispatchEvent(new Event("change"));
+      showToast("Applied log1p target transform", "good");
+    });
+
     function setResultsTab(name) {
       const tabs = {
         overview: { button: "tabOverview", panel: "resultsOverview" },
@@ -6977,11 +7259,13 @@ raise NotImplementedError(
       syncSetupUI();
       renderStateChips();
       applyAutoTrainDefaults();
+      renderTargetPreview();
     });
 
     $("targetTransform").addEventListener("change", () => {
       APP.setup.targetTransform = $("targetTransform").value;
       syncSetupUI();
+      renderTargetPreview();
     });
 
     $("maxRows").addEventListener("change", () => {

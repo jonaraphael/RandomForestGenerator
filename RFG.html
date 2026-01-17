@@ -414,6 +414,20 @@
       width: 100%;
       height: 320px;
     }
+    .chartPlaceholder{
+      position:absolute;
+      inset:0;
+      display:grid;
+      place-items:center;
+      padding:12px;
+      border:1px dashed rgba(234,240,255,0.14);
+      border-radius:14px;
+      background:rgba(255,255,255,0.02);
+      color:var(--muted2);
+      font-size:12px;
+      pointer-events:none;
+      text-align:center;
+    }
     .chartBox canvas {
       display: block;
       width: 100% !important;
@@ -517,14 +531,15 @@
       </div>
     </div>
 
-    <div class="stepbar">
-      <div class="stepper" id="stepper"></div>
-      <div class="row" style="gap:10px;flex-wrap:nowrap;">
-        <button class="btn" id="globalBackBtn" type="button">Back</button>
-        <button class="btn primary" id="globalContinueBtn" type="button" disabled>Continue</button>
-      </div>
-    </div>
-  </div>
+	    <div class="stepbar">
+	      <div class="stepper" id="stepper"></div>
+	      <div class="row" style="gap:10px;flex-wrap:nowrap;">
+	        <button class="btn" id="globalBackBtn" type="button">Back</button>
+	        <button class="btn danger hidden" id="globalStopBtn" type="button" disabled>Stop</button>
+	        <button class="btn primary" id="globalContinueBtn" type="button" disabled>Continue</button>
+	      </div>
+	    </div>
+	  </div>
 
   <div class="wrap">
     <div class="row" id="stateChips" style="margin:12px 0 16px;"></div>
@@ -558,7 +573,7 @@
 
       <!-- STEP 2: SETUP -->
       <section class="card hidden" id="panelSetup">
-        <h2>Choose target & confirm setup</h2>
+        <h2>Settings</h2>
 
         <div class="three">
           <div>
@@ -637,6 +652,51 @@
             <div class="hr"></div>
 
             <div id="setupCallout" class="callout hidden"></div>
+
+            <details id="advancedTrainDetails" style="margin-top:12px;" open>
+              <summary>Training (random forest)</summary>
+              <div class="hr"></div>
+
+              <div class="two">
+                <div class="field">
+                  <label for="seed">Random seed</label>
+                  <input id="seed" type="number" value="42" />
+                </div>
+                <div class="field">
+                  <label for="replacement">Feature sampling replacement</label>
+                  <select id="replacement">
+                    <option value="false" selected>false</option>
+                    <option value="true">true</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="two" style="margin-top:10px;">
+                <div class="field">
+                  <label for="nEstimators">Trees</label>
+                  <input id="nEstimators" type="number" min="10" step="10" value="100" />
+                </div>
+                <div class="field">
+                  <label for="maxFeatures">maxFeatures</label>
+                  <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. sqrt, log2, 0.33, or 12" />
+                </div>
+              </div>
+
+              <div class="two" style="margin-top:10px;">
+                <div class="field">
+                  <label for="maxDepth">maxDepth</label>
+                  <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
+                </div>
+                <div class="field">
+                  <label for="minNumSamples">minNumSamples</label>
+                  <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
+                </div>
+              </div>
+
+              <div class="muted2" style="margin-top:10px;">
+                Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
+              </div>
+            </details>
 
             <details id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
               <summary>Advanced (multi-class target)</summary>
@@ -749,72 +809,11 @@
         </div>
       </section>
 
-      <!-- STEP 3: TRAIN -->
-      <section class="card hidden" id="panelTrain">
-        <h2>Train</h2>
-
-        <div class="muted" style="margin-bottom:10px;">
-          Defaults are tuned for a solid baseline. Adjust if you want faster iteration or more thorough training.
-        </div>
-
-        <details id="advancedTrainDetails" style="margin-top:12px;" open>
-          <summary>Settings</summary>
-          <div class="hr"></div>
-
-          <div class="two">
-            <div class="field">
-              <label for="seed">Random seed</label>
-              <input id="seed" type="number" value="42" />
-            </div>
-            <div class="field">
-              <label for="replacement">Feature sampling replacement</label>
-              <select id="replacement">
-                <option value="false" selected>false</option>
-                <option value="true">true</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="two" style="margin-top:10px;">
-            <div class="field">
-              <label for="nEstimators">Trees</label>
-              <input id="nEstimators" type="number" min="10" step="10" value="100" />
-            </div>
-            <div class="field">
-              <label for="maxFeatures">maxFeatures</label>
-              <input id="maxFeatures" type="text" value="1.0" placeholder="e.g. sqrt, log2, 0.33, or 12" />
-            </div>
-          </div>
-
-          <div class="two" style="margin-top:10px;">
-            <div class="field">
-              <label for="maxDepth">maxDepth</label>
-              <input id="maxDepth" type="number" min="1" step="1" value="20" placeholder="blank = unlimited" />
-            </div>
-            <div class="field">
-              <label for="minNumSamples">minNumSamples</label>
-              <input id="minNumSamples" type="number" min="1" step="1" value="10" placeholder="blank = 1" />
-            </div>
-          </div>
-
-          <div class="muted2" style="margin-top:10px;">
-            Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
-          </div>
-        </details>
-
-        <div class="hr"></div>
-
-        <div class="row space">
-          <div class="row">
-            <div id="trainStatus" class="muted2"></div>
-            <button class="btn danger" id="stopBtn" disabled>Stop</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- STEP 4: RESULTS -->
+      <!-- STEP 3: RESULTS -->
       <section class="card hidden" id="panelResults">
         <h2>Results</h2>
+
+        <div id="trainStatus" class="hidden"></div>
 
         <div class="kpiGrid">
           <div class="kpi">
@@ -857,6 +856,7 @@
             </div>
             <div class="chartBox">
               <canvas id="fiChart"></canvas>
+              <div id="fiChartPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
             </div>
             <div class="muted2" style="margin-top:8px;">
               Aggregation groups derived features (e.g. date parts + missing indicators) back to their original column.
@@ -887,6 +887,7 @@
             <div class="chartBox">
               <canvas id="secondaryChart"></canvas>
               <div id="secondaryMatrix" class="hidden"></div>
+              <div id="secondaryPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
             </div>
             <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
           </div>
@@ -1019,7 +1020,7 @@
         </div>
       </section>
 
-      <!-- STEP 5: EXPORT -->
+      <!-- STEP 4: EXPORT -->
       <section class="card hidden" id="panelExport">
         <h2>Export</h2>
 
@@ -1064,8 +1065,7 @@
     // ----------------------------
     const STEPS = [
       { key: "upload",  title: "Upload" },
-      { key: "setup",   title: "Target" },
-      { key: "train",   title: "Train" },
+      { key: "setup",   title: "Settings" },
       { key: "results", title: "Results" },
       { key: "export",  title: "Export" },
     ];
@@ -1191,6 +1191,7 @@
           abortController: null,
           diagAbortController: null,
           runSeq: 0,
+          autoStartOnResults: false,
         },
         parseSeq: 0,
         predPage: 0,
@@ -1483,11 +1484,15 @@
       return msg.toLowerCase().includes("abort");
     }
 
+    function isModelReady() {
+      return Boolean(APP.train.model && APP.train.pipeline && APP.train.runSummary);
+    }
+
     function setTrainingUi(isTraining) {
       APP.ui.training.isTraining = Boolean(isTraining);
-      $("stopBtn").disabled = !APP.ui.training.isTraining;
       syncGlobalContinueBtn();
       syncGlobalBackBtn();
+      syncGlobalStopBtn();
     }
 
     function requestStopTraining() {
@@ -1495,7 +1500,7 @@
       if (APP.ui.training.stopRequested) return;
       APP.ui.training.stopRequested = true;
       try { APP.ui.training.abortController?.abort(); } catch {}
-      $("stopBtn").disabled = true;
+      syncGlobalStopBtn();
       $("trainStatus").innerHTML =
         `<span class="spinner"></span> Stopping… <span class="muted2">Will stop after the current tree finishes, then score a partial model.</span>`;
     }
@@ -1603,9 +1608,8 @@
       const panels = {
         0: $("panelUpload"),
         1: $("panelSetup"),
-        2: $("panelTrain"),
-        3: $("panelResults"),
-        4: $("panelExport"),
+        2: $("panelResults"),
+        3: $("panelExport"),
       };
 
       Object.entries(panels).forEach(([k, el]) => {
@@ -1614,6 +1618,24 @@
       });
 
       syncButtons();
+
+      if (APP.step === 2 && isModelReady() && !APP.ui.training.isTraining && !APP.ui.training.autoStartOnResults) {
+        renderResults();
+      }
+
+      if (APP.step === 2 && APP.ui.training.autoStartOnResults && !APP.ui.training.isTraining) {
+        APP.ui.training.autoStartOnResults = false;
+        if (isModelReady()) {
+          renderResults();
+          return;
+        }
+        renderResultsPlaceholders();
+        setTimeout(() => {
+          if (APP.step !== 2) return;
+          if (APP.ui.training.isTraining) return;
+          trainModel();
+        }, 0);
+      }
     }
 
     // ----------------------------
@@ -4687,6 +4709,8 @@
       const includeOob = Boolean(!model.noOOB && model.useSampleBagging);
       const oobEntries = includeOob ? new Array(nEstimators) : null;
       const yieldEvery = Math.max(1, Math.floor(nEstimators / 100));
+      const MIN_YIELD_MS = 2000;
+      let lastYieldMs = performance.now();
 
       let trainedEstimators = 0;
       for (let t = 0; t < nEstimators; t++) {
@@ -4712,8 +4736,12 @@
         trainedEstimators = t + 1;
         onProgress(trainedEstimators, nEstimators);
 
-        if ((t + 1) < nEstimators && ((t + 1) % yieldEvery === 0)) {
+        const now = performance.now();
+        const shouldYieldByCount = ((t + 1) < nEstimators && ((t + 1) % yieldEvery === 0));
+        const shouldYieldByTime = ((t + 1) < nEstimators && (now - lastYieldMs) >= MIN_YIELD_MS);
+        if (shouldYieldByCount || shouldYieldByTime) {
           await new Promise(r => setTimeout(r, 0));
+          lastYieldMs = performance.now();
         }
       }
 
@@ -4817,11 +4845,88 @@
       let trainInfo;
       try {
         model = (task === "regression") ? new RandomForestRegression(rfOptions) : new RandomForestClassifier(rfOptions);
+
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
+        if (APP.step === 2) renderResultsPlaceholders();
+
+        const invTarget = buildInverseMapping(pipeline.target.mapping);
+        APP.train.rfOptions = rfOptions;
+        APP.train.model = model;
+        APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
+        APP.train.featureNames = featureNames;
+        APP.train.baseForDerived = baseForDerived;
+        APP.train.derivedTypeByFeature = buildDerivedTypeByFeature(featureNames, baseForDerived);
+        APP.train.split = {
+          trainIdx: Array.from({ length: Xtrain.length }, (_, i) => i),
+          testIdx: Array.from({ length: Xtest.length }, (_, i) => i)
+        };
+        APP.train.testRowRefs = testRowRefs;
+        APP.train.dropped = dropped;
+        APP.train.shift = null;
+
+        const transform = pipeline.targetTransform;
+        const ytestRaw = (pipeline.task === "regression" && transform === "log1p")
+          ? ytest.map(v => Math.expm1(v))
+          : ytest.slice();
+        APP.train.yTest = ytestRaw;
+        APP.train.yPred = [];
+        APP.train.fiDerived = [];
+        APP.train.fiBase = [];
+
+        const LIVE_MIN_MS = 2000;
+        let liveLastMs = performance.now();
+        let liveTimer = null;
+        let liveRefreshing = false;
+        let livePending = false;
+
+        const runSeqForLive = runSeq;
+        const queueLiveUpdate = (force = false) => {
+          if (runSeqForLive !== APP.ui.training.runSeq) return;
+          if (!APP.ui.training.isTraining) return;
+          const now = performance.now();
+          const dueIn = force ? 0 : Math.max(0, (liveLastMs + LIVE_MIN_MS) - now);
+          if (liveTimer) return;
+          liveTimer = setTimeout(async () => {
+            liveTimer = null;
+            if (runSeqForLive !== APP.ui.training.runSeq) return;
+            if (liveRefreshing) { livePending = true; return; }
+            if (APP.ui.training.completedUnits <= 0) return;
+            liveRefreshing = true;
+            try {
+              const ypredNow = model.predict(Xtest);
+              const ypredRaw = (pipeline.task === "regression" && transform === "log1p")
+                ? ypredNow.map(v => Math.expm1(v))
+                : (pipeline.task === "regression")
+                  ? ypredNow.slice()
+                  : ypredNow.map(v => Number(v));
+
+              APP.train.yPred = ypredRaw;
+
+              let fi = null;
+              try { fi = model.featureImportance(); } catch { fi = null; }
+              APP.train.fiDerived = (fi && fi.length === featureNames.length)
+                ? featureNames.map((name, i) => ({ name, imp: Number.isFinite(fi[i]) ? fi[i] : 0 }))
+                    .sort((a,b)=>b.imp-a.imp)
+                : [];
+              APP.train.fiBase = (fi && fi.length === featureNames.length)
+                ? aggregateFI(fi, featureNames, baseForDerived)
+                : [];
+
+              if (APP.step === 2) renderResultsLivePartial();
+              liveLastMs = performance.now();
+            } catch {}
+            liveRefreshing = false;
+            if (livePending) { livePending = false; queueLiveUpdate(true); }
+          }, dueIn);
+        };
+
         trainInfo = await trainForestWithProgress(model, Xtrain, ytrain, {
           onProgress: (completedUnits, totalUnits) => {
             APP.ui.training.completedUnits = completedUnits;
             APP.ui.training.totalUnits = totalUnits;
             $("trainStatus").innerHTML = trainingStatusHtml(task, completedUnits, totalUnits, APP.ui.training.startMs);
+            queueLiveUpdate(false);
           },
           signal: abortController.signal,
         });
@@ -4901,7 +5006,7 @@
       APP.train.rfOptions = rfOptions;
       APP.train.model = model;
       APP.train.pipeline = { ...pipeline, targetInvMapping: invTarget };
-      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 3);
+      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
       renderStepper();
       APP.train.featureNames = featureNames;
       APP.train.baseForDerived = baseForDerived;
@@ -4996,7 +5101,7 @@
 
       // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
       renderResults();
-      gotoStep(3);
+      gotoStep(2);
 
       $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
       showToast("Training complete", "good");
@@ -5112,9 +5217,135 @@
       updatePruneMiniUi();
     }
 
+    function renderResultsPlaceholders() {
+      const targetCol = APP.raw.targetCol || "—";
+      const splitMode = effectiveSplitMode();
+      const splitText = splitMode === "time" ? `time-based (${APP.setup.splitDateCol || "—"})` : "random";
+      const testText = `${Math.round((APP.setup.testFrac || 0.1) * 100)}%`;
+      const maxRowsTxt = String(APP.setup.maxRows || 0) === "0" ? "all" : String(APP.setup.maxRows || "—");
+      const estFeatures = estimateDerivedFeatureCount();
+
+      $("setupSummary").textContent = `Target=${targetCol} · Split=${splitText} · Test=${testText}`;
+      $("featureSummary").textContent = `Max rows=${maxRowsTxt} · Est. features≈${estFeatures || "—"}`;
+
+      $("primaryMetricLabel").textContent = "Test metric";
+      $("primaryMetricValue").textContent = "—";
+      $("primaryMetricSub").textContent = "Training will start and update automatically.";
+
+      const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
+      const totalTxt = total ? `/${total}` : "";
+      $("resultsCallouts").innerHTML =
+        `<div class="callout">` +
+        `<div style="font-weight:650;margin-bottom:6px;">Training</div>` +
+        `<div class="muted2"><span class="spinner"></span> Starting… Trees <span class="mono">0${escapeHtml(totalTxt)}</span></div>` +
+        `</div>`;
+
+      $("secondaryChartTitle").textContent = "Test chart";
+      $("secondaryChartPill").textContent = "—";
+      $("secondaryChartHint").textContent = "Charts will populate as trees finish.";
+
+      clearSecondaryViz();
+      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+      $("secondaryPlaceholder").classList.remove("hidden");
+      $("fiChartPlaceholder").classList.remove("hidden");
+    }
+
+    function renderResultsLivePartial() {
+      const pl = APP.train.pipeline;
+      if (!pl) return;
+
+      const task = pl.task;
+      const splitMode = effectiveSplitMode();
+      const splitText = splitMode === "time"
+        ? `time-based (${APP.setup.splitDateCol})`
+        : "random";
+
+      $("setupSummary").textContent =
+        `Target=${pl.targetCol} · Task=${task} · Split=${splitText} · Test=${Math.round(APP.setup.testFrac*100)}%`;
+
+      $("featureSummary").textContent =
+        `Rows: train=${APP.train.split.trainIdx.length}, test=${APP.train.split.testIdx.length} · Features=${APP.train.featureNames.length} · Transform=${pl.targetTransform}`;
+
+      const trained = Math.max(0, Math.floor(APP.ui.training.completedUnits || 0));
+      const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
+
+      $("resultsCallouts").innerHTML = "";
+      const addCallout = (cls, title, body) => {
+        const el = document.createElement("div");
+        el.className = `callout ${cls || ""}`.trim();
+        el.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">${escapeHtml(title)}</div>
+                        <div class="muted2">${body}</div>`;
+        $("resultsCallouts").appendChild(el);
+      };
+
+      if (APP.ui.training.isTraining) {
+        addCallout("", "Training", trainingStatusHtml(task, trained, total, APP.ui.training.startMs));
+      }
+
+      if (APP.train.dropped?.unusableTargetRows) {
+        addCallout("warn", "Some rows were dropped (target not usable)",
+          `Dropped <span class="mono">${APP.train.dropped.unusableTargetRows}</span> rows due to missing/invalid target values (or incompatible log1p).`
+        );
+      }
+      if (APP.train.dropped?.unseenTestLabels) {
+        addCallout("warn", "Some test rows were dropped (unseen labels)",
+          `Dropped <span class="mono">${APP.train.dropped.unseenTestLabels}</span> test rows because their label never appeared in the training split (train-only label encoding).`
+        );
+      }
+
+      const hasPred = Array.isArray(APP.train.yPred) && APP.train.yPred.length;
+      const hasFi = (Array.isArray(APP.train.fiBase) && APP.train.fiBase.length) || (Array.isArray(APP.train.fiDerived) && APP.train.fiDerived.length);
+      $("secondaryPlaceholder").classList.toggle("hidden", Boolean(hasPred));
+      $("fiChartPlaceholder").classList.toggle("hidden", Boolean(hasFi));
+
+      if (task === "regression") {
+        const yTrue = APP.train.yTest;
+        const yPred = APP.train.yPred;
+
+        const rm = rmse(yTrue, yPred);
+        const ma = mae(yTrue, yPred);
+        const r = r2(yTrue, yPred);
+        const rl = rmsle(yTrue, yPred);
+
+        $("primaryMetricLabel").textContent = "Test RMSE";
+        $("primaryMetricValue").textContent = formatNum(rm, 6);
+        $("primaryMetricSub").textContent = `MAE=${formatNum(ma,6)} · R²=${formatNum(r,6)} · RMSLE=${rl===null?"n/a":formatNum(rl,6)}`;
+
+        $("secondaryChartTitle").textContent = "Predicted vs true (scatter)";
+        $("secondaryChartPill").textContent = `trees=${trained}${total ? `/${total}` : ""}`;
+        $("secondaryChartHint").textContent = "Updates periodically during training.";
+        renderRegressionScatter(APP.train.yTest, APP.train.yPred);
+
+      } else {
+        const yTrue = APP.train.yTest.map(v => Number(v));
+        const yPred = APP.train.yPred.map(v => Number(v));
+
+        const acc = accuracy(yTrue, yPred);
+        const f1 = f1Macro(yTrue, yPred);
+
+        $("primaryMetricLabel").textContent = "Test Accuracy";
+        $("primaryMetricValue").textContent = formatNum(acc, 6);
+        $("primaryMetricSub").textContent = `Macro-F1=${formatNum(f1,6)} · Classes=${pl.target.numClasses}`;
+
+        $("secondaryChartTitle").textContent = "Confusion matrix (top classes)";
+        $("secondaryChartPill").textContent = `trees=${trained}${total ? `/${total}` : ""}`;
+        $("secondaryChartHint").textContent = "Updates periodically during training.";
+        renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 15);
+      }
+
+      const mode = $("importanceMode").value;
+      if (hasFi) {
+        if (mode === "derived") renderFIChart(APP.train.fiDerived || [], "importance", "derived");
+        else renderFIChart(APP.train.fiBase || [], "importance", "base");
+      }
+    }
+
     function renderResults() {
       const pl = APP.train.pipeline;
       const task = pl.task;
+
+      $("secondaryPlaceholder").classList.add("hidden");
+      $("fiChartPlaceholder").classList.add("hidden");
 
       const splitMode = effectiveSplitMode();
       const splitText = splitMode === "time"
@@ -5239,6 +5470,7 @@
     // Export
     // ----------------------------
     function buildArtifact() {
+      if (APP.ui.training.isTraining) return null;
       const model = APP.train.model;
       const pipeline = APP.train.pipeline;
       if (!model || !pipeline) return null;
@@ -5412,7 +5644,7 @@ function invertTargetIfNeeded(yPred, artifact){
       $("artifactDetailPill").textContent = `task=${artifact.task} · features=${artifact.derivedFeatureNames.length}`;
       $("downloadZipBtn").disabled = false;
       $("sampleCode").textContent = buildSampleCode(artifact);
-      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 4);
+      APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 3);
       renderStepper();
     }
 
@@ -5434,19 +5666,13 @@ function invertTargetIfNeeded(yPred, artifact){
       }
 
       btn.classList.remove("hidden");
-      if (step === 2) {
-        btn.title = "Train model";
-        btn.setAttribute("aria-label", "Train model");
-      } else {
-        btn.title = `Continue to ${STEPS[next].title}`;
-        btn.setAttribute("aria-label", `Continue to ${STEPS[next].title}`);
-      }
+      btn.title = `Continue to ${STEPS[next].title}`;
+      btn.setAttribute("aria-label", `Continue to ${STEPS[next].title}`);
 
       let canContinue = true;
       if (step === 0) canContinue = (APP.raw.rows.length && APP.raw.columns.length);
       if (step === 1) canContinue = Boolean(APP.raw.targetCol);
-      if (step === 2) canContinue = Boolean(APP.raw.targetCol) && !APP.ui.training.isTraining;
-      if (step === 3) canContinue = Boolean(buildArtifact());
+      if (step === 2) canContinue = Boolean(buildArtifact());
 
       btn.disabled = !canContinue;
     }
@@ -5470,11 +5696,35 @@ function invertTargetIfNeeded(yPred, artifact){
       btn.disabled = Boolean(APP.ui.training.isTraining);
     }
 
+    function syncGlobalStopBtn() {
+      const btn = $("globalStopBtn");
+      if (!btn) return;
+      const isTraining = Boolean(APP.ui.training.isTraining);
+      const showRetrain = (!isTraining && (APP.step === 2) && isModelReady());
+      btn.classList.toggle("hidden", !(isTraining || showRetrain));
+
+      if (isTraining) {
+        btn.className = "btn danger";
+        btn.textContent = "Stop";
+        btn.disabled = Boolean(APP.ui.training.stopRequested);
+        btn.title = "Stop training";
+        btn.setAttribute("aria-label", "Stop training");
+      } else {
+        btn.className = "btn";
+        btn.textContent = "Retrain";
+        btn.disabled = false;
+        btn.title = "Retrain model";
+        btn.setAttribute("aria-label", "Retrain model");
+      }
+    }
+
     function syncButtons() {
       setTrainingUi(APP.ui.training.isTraining);
       updateExportUI();
+      if ($("jumpToExportBtn")) $("jumpToExportBtn").disabled = APP.ui.training.isTraining || !APP.train.model || !APP.train.pipeline;
       syncGlobalContinueBtn();
       syncGlobalBackBtn();
+      syncGlobalStopBtn();
       renderStateChips();
     }
 
@@ -5485,6 +5735,7 @@ function invertTargetIfNeeded(yPred, artifact){
       APP.ui.training.diagAbortController = null;
       APP.ui.training.isTraining = false;
       APP.ui.training.stopRequested = false;
+      APP.ui.training.autoStartOnResults = false;
       APP.ui.training.runSeq = 0;
       APP.ui.shiftAutoExpandedRunSeq = 0;
 
@@ -5908,22 +6159,27 @@ function invertTargetIfNeeded(yPred, artifact){
       }
 
       if (APP.step === 1) {
+        APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
+        renderStepper();
+        if (!isModelReady()) {
+          APP.ui.training.completedUnits = 0;
+          APP.ui.training.totalUnits = 0;
+          APP.ui.training.stopRequested = false;
+          APP.ui.training.autoStartOnResults = true;
+        } else {
+          APP.ui.training.autoStartOnResults = false;
+        }
         gotoStep(2);
         return;
       }
 
       if (APP.step === 2) {
-        trainModel();
-        return;
-      }
-
-      if (APP.step === 3) {
-        gotoStep(4);
+        gotoStep(3);
         return;
       }
     });
 
-    $("jumpToExportBtn").addEventListener("click", () => gotoStep(4));
+    $("jumpToExportBtn").addEventListener("click", () => gotoStep(3));
 
     $("globalBackBtn").addEventListener("click", () => {
       const btn = $("globalBackBtn");
@@ -5931,6 +6187,22 @@ function invertTargetIfNeeded(yPred, artifact){
       const prev = (APP.step || 0) - 1;
       if (prev < 0) return;
       gotoStep(prev);
+    });
+
+    $("globalStopBtn").addEventListener("click", () => {
+      const btn = $("globalStopBtn");
+      if (!btn || btn.disabled) return;
+      if (APP.ui.training.isTraining) {
+        requestStopTraining();
+        return;
+      }
+      if (APP.step !== 2) return;
+      if (!isModelReady()) return;
+      APP.ui.training.completedUnits = 0;
+      APP.ui.training.totalUnits = 0;
+      APP.ui.training.stopRequested = false;
+      renderResultsPlaceholders();
+      trainModel();
     });
 
     $("targetSelect").addEventListener("change", () => {
@@ -6106,7 +6378,6 @@ function invertTargetIfNeeded(yPred, artifact){
       });
     });
 
-    $("stopBtn").addEventListener("click", requestStopTraining);
 
     window.addEventListener("pagehide", (e) => {
       if (e.persisted) return;
@@ -6242,13 +6513,6 @@ Compatibility
       }
 
       if (APP.step === 3) {
-        if ($("globalContinueBtn")?.disabled) return;
-        e.preventDefault();
-        $("globalContinueBtn").click();
-        return;
-      }
-
-      if (APP.step === 4) {
         if ($("downloadZipBtn")?.disabled) return;
         e.preventDefault();
         $("downloadZipBtn").click();

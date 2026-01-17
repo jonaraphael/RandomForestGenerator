@@ -73,9 +73,20 @@
       color:var(--muted);font-size:12px;white-space:nowrap;
     }
 
+    .stepbar{
+      max-width:1200px;
+      margin:14px auto 0;
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
     .stepper{
-      max-width:1200px;margin:14px auto 0;
-      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      flex:1;
+      min-width:0;
     }
     .step{
       display:flex;align-items:center;gap:10px;
@@ -506,7 +517,13 @@
       </div>
     </div>
 
-    <div class="stepper" id="stepper"></div>
+    <div class="stepbar">
+      <div class="stepper" id="stepper"></div>
+      <div class="row" style="gap:10px;flex-wrap:nowrap;">
+        <button class="btn" id="globalBackBtn" type="button">Back</button>
+        <button class="btn primary" id="globalContinueBtn" type="button" disabled>Continue</button>
+      </div>
+    </div>
   </div>
 
   <div class="wrap">
@@ -526,29 +543,17 @@
 	          </div>
 	        </div>
 
-        <div id="uploadStatus" class="row" style="margin-top:12px;"></div>
-
-        <div id="uploadSummary" class="hidden" style="margin-top:12px;">
-          <div class="row space">
-            <div class="row">
-              <span class="pill good" id="dsLoadedPill">Loaded</span>
-              <span class="pill" id="dsShapePill">—</span>
-              <span class="pill" id="dsPreviewPill">Preview</span>
-            </div>
-            <button class="btn primary" id="continueToSetupBtn" disabled>Continue</button>
-          </div>
-
-          <div class="hr"></div>
-          <div class="field" style="margin-bottom:8px;">
-            <label for="targetSearch">Search target column</label>
-            <input id="targetSearch" type="text" placeholder="Search columns…" />
-            <div class="muted2">Type to filter the preview columns below.</div>
-          </div>
-          <div class="muted2" style="margin-top:10px;">Preview (first 12 rows)</div>
-          <div class="scroll" style="margin-top:8px;max-height:320px;">
-            <table id="previewTable"></table>
-          </div>
-        </div>
+	        <div id="uploadSummary" class="hidden" style="margin-top:12px;">
+	          <div class="hr"></div>
+	          <div class="row space" style="margin-top:10px;align-items:center;">
+	            <div class="muted">Preview (first 12 rows)</div>
+	            <input id="targetSearch" type="text" placeholder="Filter columns…" aria-label="Filter preview columns" style="width:260px;max-width:45vw;" />
+	          </div>
+	          <div class="muted2">Click a column to set the target.</div>
+	          <div class="scroll" style="margin-top:8px;max-height:320px;">
+	            <table id="previewTable"></table>
+	          </div>
+	        </div>
       </section>
 
       <!-- STEP 2: SETUP -->
@@ -573,12 +578,6 @@
                   <span class="pill hidden" id="taskModeDetectedPill" title="Based on target column inferred type + sample uniqueness.">—</span>
                 </div>
               </div>
-            </div>
-
-            <div class="row" style="margin-top:10px;">
-              <span class="pill" id="rowsPill">Rows: —</span>
-              <span class="pill" id="colsPill">Columns: —</span>
-              <span class="pill" id="reviewPill">Needs review: —</span>
             </div>
 
             <div class="hr"></div>
@@ -700,10 +699,6 @@
               </div>
             </details>
 
-            <div class="row space" style="margin-top:12px;">
-              <button class="btn" id="backToUploadBtn">Back</button>
-              <button class="btn primary" id="continueToTrainBtn" disabled>Continue</button>
-            </div>
           </div>
 
           <div>
@@ -810,11 +805,9 @@
         <div class="hr"></div>
 
         <div class="row space">
-          <button class="btn" id="backToSetupBtn">Back</button>
           <div class="row">
             <div id="trainStatus" class="muted2"></div>
             <button class="btn danger" id="stopBtn" disabled>Stop</button>
-            <button class="btn primary" id="trainBtn" disabled>Train model</button>
           </div>
         </div>
       </section>
@@ -841,7 +834,6 @@
             <div class="small">Export a portable artifact (model + preprocessing + sample loader).</div>
             <div class="row" style="margin-top:10px;">
               <button class="btn primary" id="jumpToExportBtn">Export</button>
-              <button class="btn" id="backToTrainBtn">Back</button>
             </div>
           </div>
         </div>
@@ -1037,7 +1029,6 @@
             <span class="pill" id="artifactDetailPill">—</span>
           </div>
           <div class="row">
-            <button class="btn" id="backToResultsBtn">Back</button>
             <button class="btn primary" id="downloadZipBtn" disabled>Download rf_artifact.zip</button>
           </div>
         </div>
@@ -1158,6 +1149,38 @@
           secondary: null,
           shift: null,
           errUnc: null,
+        },
+        chips: {
+          order: [
+            "file",
+            "data",
+            "target",
+            "task",
+            "split",
+            "test",
+            "maxRows",
+            "typing",
+            "maxCard",
+            "topN",
+            "derived",
+            "excluded",
+            "forced",
+          ],
+          items: {
+            file: { label: "File", value: "", visible: false, kind: "", title: "", setByStep: null },
+            data: { label: "Data", value: "", visible: false, kind: "", title: "", setByStep: null },
+            target: { label: "Target", value: "", visible: false, kind: "", title: "", setByStep: null },
+            task: { label: "Task", value: "", visible: false, kind: "", title: "", setByStep: null },
+            split: { label: "Split", value: "", visible: false, kind: "", title: "", setByStep: null },
+            test: { label: "Test", value: "", visible: false, kind: "", title: "", setByStep: null },
+            maxRows: { label: "Max rows", value: "", visible: false, kind: "", title: "", setByStep: null },
+            typing: { label: "Typing", value: "", visible: false, kind: "", title: "", setByStep: null },
+            maxCard: { label: "max_card", value: "", visible: false, kind: "", title: "", setByStep: null },
+            topN: { label: "TopN", value: "", visible: false, kind: "", title: "", setByStep: null },
+            derived: { label: "Derived", value: "", visible: false, kind: "", title: "", setByStep: null },
+            excluded: { label: "Excluded", value: "", visible: false, kind: "", title: "", setByStep: null },
+            forced: { label: "Forced", value: "", visible: false, kind: "", title: "", setByStep: null },
+          },
         },
         training: {
           startMs: 0,
@@ -1462,9 +1485,9 @@
 
     function setTrainingUi(isTraining) {
       APP.ui.training.isTraining = Boolean(isTraining);
-      const canTrain = Boolean(APP.raw.targetCol) && !APP.ui.training.isTraining;
-      $("trainBtn").disabled = !canTrain;
       $("stopBtn").disabled = !APP.ui.training.isTraining;
+      syncGlobalContinueBtn();
+      syncGlobalBackBtn();
     }
 
     function requestStopTraining() {
@@ -1668,8 +1691,6 @@
       $("targetSelect").dispatchEvent(new Event("change"));
 
       if (advanceStep) {
-        $("uploadStatus").innerHTML =
-          `<span class="pill good">Target selected</span><span class="muted2">Proceed to configure split & training.</span>`;
         APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
         renderStepper();
         gotoStep(1);
@@ -2065,14 +2086,7 @@
     }
 
     function syncSetupUI() {
-      $("rowsPill").textContent = `Rows: ${APP.raw.rows.length}`;
-      $("colsPill").textContent = `Columns: ${APP.raw.columns.length}`;
-
-      const { counts, maxCard } = computeTypeCounts();
-      $("reviewPill").textContent = `Typing: cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date} · max_card=${maxCard}`;
-
       const hasTarget = !!APP.raw.targetCol;
-      $("continueToTrainBtn").disabled = !hasTarget;
 
       const decidedTask = hasTarget ? decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
 
@@ -2139,14 +2153,6 @@
                        <div class="muted2">Or use the dropdown on the left.</div>`;
         show(c);
       } else {
-        const splitText = (splitMode === "time")
-          ? (splitMethod === "cutoff" && cutoff
-            ? `Time-based split: train &lt; <span class="mono">${escapeHtml(cutoff)}</span>, valid ≥ cutoff (column <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span>).`
-            : `Time-based split using <span class="mono">${escapeHtml(APP.setup.splitDateCol || dateCols[0] || "")}</span> (fraction fallback).`)
-          : (APP.setup.splitStrategy === "stratified" && decidedTask === "classification")
-            ? `Stratified split (classification).`
-            : `Random split.`;
-
         const idLike = APP.raw.columns.filter(cc => APP.raw.colMeta[cc]?.include && APP.raw.colMeta[cc]?.flags?.idLike);
         const idHint = idLike.length
           ? `<div class="muted2" style="margin-top:6px;">We flagged ${idLike.length} ID-like column(s). Consider excluding them in “Review columns” if you care about robustness.</div>`
@@ -2157,10 +2163,15 @@
                Forests can’t extrapolate beyond the target range. If your target trends over time, expect systematic underprediction on future rows.</div>`
           : "";
 
-        c.className = (splitMode === "time") ? "callout warn" : "callout";
-        c.innerHTML = `<div style="font-weight:650;margin-bottom:6px;">Ready</div>
-                       <div class="muted2">${splitText} You can train immediately.</div>${extrapolationWarn}${idHint}`;
-        show(c);
+        const blocks = [extrapolationWarn, idHint].filter(Boolean);
+        if (!blocks.length) {
+          c.innerHTML = "";
+          hide(c);
+        } else {
+          c.className = (splitMode === "time") ? "callout warn" : "callout";
+          c.innerHTML = blocks.join("");
+          show(c);
+        }
       }
 
       syncAdvancedTargetUI();
@@ -2756,72 +2767,132 @@
       if (APP.raw.targetCol) $("targetSelect").value = APP.raw.targetCol;
     }
 
+    function resetStateChips({ clearValues = false } = {}) {
+      const items = APP.ui?.chips?.items;
+      if (!items) return;
+      Object.values(items).forEach(item => {
+        item.visible = false;
+        item.kind = "";
+        item.title = "";
+        if (clearValues) {
+          item.value = "";
+          item.setByStep = null;
+        }
+      });
+    }
+
+    function updateStateChip(key, { value, visible = true, kind = "", title = "", setByStep = null } = {}) {
+      const item = APP.ui?.chips?.items?.[key];
+      if (!item) return;
+      if (value !== undefined) {
+        const prev = (item.value === null || item.value === undefined) ? "" : String(item.value);
+        const next = (value === null || value === undefined) ? "" : String(value);
+        if (prev !== next) {
+          item.value = value;
+          item.setByStep = (setByStep === null || setByStep === undefined) ? (APP.step || 0) : setByStep;
+        }
+      }
+      item.visible = Boolean(visible);
+      item.kind = kind || "";
+      item.title = title || "";
+    }
+
+    function syncStateChips() {
+      resetStateChips();
+
+      const hasData = APP.raw.rows.length && APP.raw.columns.length;
+      if (!hasData) return;
+
+      updateStateChip("file", { value: APP.raw.fileName || "—", visible: true, setByStep: 0 });
+      updateStateChip("data", { value: `${APP.raw.rows.length} rows · ${APP.raw.columns.length} cols`, visible: true, setByStep: 0 });
+
+      const step = APP.step || 0;
+      const hasTarget = Boolean(APP.raw.targetCol);
+      if (hasTarget) {
+        const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
+        updateStateChip("target", { value: APP.raw.targetCol, visible: true });
+        updateStateChip("task", { value: task, visible: true });
+      }
+
+      if (step < 1 || !hasTarget) return;
+
+      const splitMode = effectiveSplitMode();
+      if (splitMode === "time") {
+        const method = $("splitMethod")?.value || "cutoff";
+        const cutoff = $("cutoffDate")?.value || "";
+        const details = (method === "cutoff" && cutoff) ? `cutoff ${cutoff}` : `test ${Math.round(APP.setup.testFrac * 100)}%`;
+        updateStateChip("split", { value: `time (${APP.setup.splitDateCol || "—"}) · ${details}`, visible: true, setByStep: 1 });
+      } else {
+        const splitStrategy = $("splitStrategy")?.value || "random";
+        updateStateChip("split", { value: splitStrategy === "stratified" ? "stratified" : "random", visible: true, setByStep: 1 });
+      }
+      if (splitMode === "random") updateStateChip("test", { value: `${Math.round(APP.setup.testFrac * 100)}%`, visible: true, setByStep: 1 });
+
+      updateStateChip("maxRows", { value: String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows, visible: true, setByStep: 1 });
+
+      const { counts, maxCard } = computeTypeCounts();
+      updateStateChip("typing", { value: `cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date}`, visible: true, setByStep: 1 });
+      updateStateChip("maxCard", { value: maxCard, visible: true, setByStep: 1 });
+
+      const topNState = APP.setup.multiClass?.topN || null;
+      if (topNState?.enabled && !isDerivedTargetActive()) {
+        updateStateChip("topN", { value: `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`, visible: true, setByStep: 1 });
+      }
+
+      const dt = APP.setup.multiClass?.derivedTarget || null;
+      if (dt?.enabled && dt.sourceCol && dt.derivedCol && APP.raw.targetCol === dt.derivedCol) {
+        updateStateChip("derived", { value: `${dt.sourceCol} → ${dt.derivedCol}`, visible: true, setByStep: 1 });
+      }
+
+      const excludedCount = APP.setup.excluded?.size || 0;
+      const forcedCount =
+        (APP.setup.forcedTypes?.date?.size || 0) +
+        (APP.setup.forcedTypes?.categorical?.size || 0) +
+        (APP.setup.forcedTypes?.continuous?.size || 0);
+      if (excludedCount) updateStateChip("excluded", { value: excludedCount, visible: true, setByStep: 1 });
+      if (forcedCount) updateStateChip("forced", { value: forcedCount, visible: true, setByStep: 1 });
+    }
+
     function renderStateChips() {
       const el = $("stateChips");
       if (!el) return;
 
-      if (!APP.raw.rows.length || APP.step === 0) {
+      syncStateChips();
+
+      const sc = APP.ui?.chips;
+      const items = sc?.items;
+      const order = sc?.order;
+      if (!items || !Array.isArray(order)) {
         el.innerHTML = "";
         el.classList.add("hidden");
         return;
       }
-      el.classList.remove("hidden");
 
       const chips = [];
-      const add = (label, value) => {
-        if (value === null || value === undefined || value === "") return;
-        chips.push(`<span class="pill">${escapeHtml(label)}: <span class="mono">${escapeHtml(String(value))}</span></span>`);
-      };
-
-      if (APP.raw.fileName) add("File", APP.raw.fileName);
-      if (APP.raw.rows.length && APP.raw.columns.length) add("Data", `${APP.raw.rows.length} rows · ${APP.raw.columns.length} cols`);
-
-      if (APP.step > 1 && APP.raw.targetCol) {
-        add("Target", APP.raw.targetCol);
-        const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
-        add("Task", task);
+      const step = APP.step || 0;
+      for (const key of order) {
+        const item = items[key];
+        if (!item?.visible) continue;
+        if (item.value === null || item.value === undefined || item.value === "") continue;
+        const setBy = Number.isFinite(item.setByStep) ? item.setByStep : null;
+        if (setBy !== null && step <= setBy) continue;
+        const cls = ["pill", item.kind].filter(Boolean).join(" ");
+        const titleAttr = item.title ? ` title="${escapeHtml(item.title)}"` : "";
+        chips.push(
+          `<span class="${cls}"${titleAttr}>` +
+          `${escapeHtml(item.label)}: <span class="mono">${escapeHtml(String(item.value))}</span>` +
+          `</span>`
+        );
       }
 
-      if (APP.step > 1) {
-        const splitMode = effectiveSplitMode();
-        if (splitMode === "time") {
-          const method = $("splitMethod")?.value || "cutoff";
-          const cutoff = $("cutoffDate")?.value || "";
-          const details = (method === "cutoff" && cutoff) ? `cutoff ${cutoff}` : `test ${Math.round(APP.setup.testFrac * 100)}%`;
-          add("Split", `time (${APP.setup.splitDateCol || "—"}) · ${details}`);
-        }
-        else {
-          const splitStrategy = $("splitStrategy")?.value || "random";
-          add("Split", splitStrategy === "stratified" ? "stratified" : "random");
-        }
-        if (splitMode === "random") add("Test", `${Math.round(APP.setup.testFrac * 100)}%`);
-
-        add("Max rows", String(APP.setup.maxRows || 0) === "0" ? "all" : APP.setup.maxRows);
-
-        const { counts, maxCard } = computeTypeCounts();
-        add("Typing", `cont=${counts.continuous} · cat=${counts.categorical} · date=${counts.date}`);
-        add("max_card", maxCard);
-
-        const topNState = APP.setup.multiClass?.topN || null;
-        if (topNState?.enabled && !isDerivedTargetActive()) {
-          add("TopN", `${Math.max(1, Math.floor(topNState.keep || 1))} + ${topNState.rareLabel || "RARE"}`);
-        }
-
-        const dt = APP.setup.multiClass?.derivedTarget || null;
-        if (dt?.enabled && dt.sourceCol && dt.derivedCol && APP.raw.targetCol === dt.derivedCol) {
-          add("Derived", `${dt.sourceCol} → ${dt.derivedCol}`);
-        }
-
-        const excludedCount = APP.setup.excluded?.size || 0;
-        const forcedCount =
-          (APP.setup.forcedTypes?.date?.size || 0) +
-          (APP.setup.forcedTypes?.categorical?.size || 0) +
-          (APP.setup.forcedTypes?.continuous?.size || 0);
-        if (excludedCount) add("Excluded", excludedCount);
-        if (forcedCount) add("Forced", forcedCount);
+      if (!chips.length) {
+        el.innerHTML = "";
+        el.classList.add("hidden");
+        return;
       }
 
-      el.innerHTML = chips.length ? chips.join(" ") : `<span class="muted2">Pick a target to preview settings.</span>`;
+      el.classList.remove("hidden");
+      el.innerHTML = chips.join(" ");
     }
 
     function refreshSplitDateCol() {
@@ -5348,11 +5419,62 @@ function invertTargetIfNeeded(yPred, artifact){
     // ----------------------------
     // App wiring
     // ----------------------------
+    function syncGlobalContinueBtn() {
+      const btn = $("globalContinueBtn");
+      if (!btn) return;
+
+      const step = APP.step || 0;
+      const next = step + 1;
+      if (next >= STEPS.length) {
+        btn.classList.add("hidden");
+        btn.disabled = true;
+        btn.title = "";
+        btn.setAttribute("aria-label", "Continue");
+        return;
+      }
+
+      btn.classList.remove("hidden");
+      if (step === 2) {
+        btn.title = "Train model";
+        btn.setAttribute("aria-label", "Train model");
+      } else {
+        btn.title = `Continue to ${STEPS[next].title}`;
+        btn.setAttribute("aria-label", `Continue to ${STEPS[next].title}`);
+      }
+
+      let canContinue = true;
+      if (step === 0) canContinue = (APP.raw.rows.length && APP.raw.columns.length);
+      if (step === 1) canContinue = Boolean(APP.raw.targetCol);
+      if (step === 2) canContinue = Boolean(APP.raw.targetCol) && !APP.ui.training.isTraining;
+      if (step === 3) canContinue = Boolean(buildArtifact());
+
+      btn.disabled = !canContinue;
+    }
+
+    function syncGlobalBackBtn() {
+      const btn = $("globalBackBtn");
+      if (!btn) return;
+
+      const step = APP.step || 0;
+      if (step <= 0) {
+        btn.classList.add("hidden");
+        btn.disabled = true;
+        btn.title = "";
+        btn.setAttribute("aria-label", "Back");
+        return;
+      }
+
+      btn.classList.remove("hidden");
+      btn.title = `Back to ${STEPS[step - 1].title}`;
+      btn.setAttribute("aria-label", `Back to ${STEPS[step - 1].title}`);
+      btn.disabled = Boolean(APP.ui.training.isTraining);
+    }
+
     function syncButtons() {
-      $("continueToSetupBtn").disabled = !(APP.raw.rows.length && APP.raw.columns.length);
-      $("continueToTrainBtn").disabled = !APP.raw.targetCol;
       setTrainingUi(APP.ui.training.isTraining);
       updateExportUI();
+      syncGlobalContinueBtn();
+      syncGlobalBackBtn();
       renderStateChips();
     }
 
@@ -5406,6 +5528,7 @@ function invertTargetIfNeeded(yPred, artifact){
           },
         },
       };
+      resetStateChips({ clearValues: true });
       syncHiddenTypingLists();
       APP.train = {
         rfOptions: null,
@@ -5452,7 +5575,6 @@ function invertTargetIfNeeded(yPred, artifact){
 
       hide($("uploadSummary"));
       show($("dropZone"));
-      $("uploadStatus").innerHTML = "";
       $("previewTable").innerHTML = "";
       if ($("targetSearch")) $("targetSearch").value = "";
       $("predTable").innerHTML = "";
@@ -5576,7 +5698,7 @@ function invertTargetIfNeeded(yPred, artifact){
 
     function handleParsed(rows, cols, fileName) {
       if (!rows.length || !cols.length) {
-        $("uploadStatus").innerHTML = `<span class="pill bad">Parse failed</span><span class="muted2">No rows/columns found.</span>`;
+        showToast("Parse failed: no rows/columns found.", "bad");
         return;
       }
 
@@ -5590,22 +5712,14 @@ function invertTargetIfNeeded(yPred, artifact){
       applyDefaultColumnExclusions();
       recomputeColumnMeta();
 
-      $("dsLoadedPill").textContent = `Loaded: ${APP.raw.fileName}`;
-      $("dsShapePill").textContent = `${rows.length} rows · ${cols.length} cols`;
-
       APP.ui.previewFilter = "";
       renderPreviewTable(rows, cols);
       bindPreviewTargetPicker();
 
       hide($("dropZone"));
       show($("uploadSummary"));
-      $("uploadStatus").innerHTML =
-        `<span class="pill">Pick a target</span>` +
-        `<span class="muted2">Pick the column you want to predict (click a header or use search).</span>`;
 
       $("targetSearch").value = "";
-
-      $("continueToSetupBtn").disabled = false;
 
       APP.raw.targetCol = null;
       renderTargetSelect();
@@ -5619,7 +5733,6 @@ function invertTargetIfNeeded(yPred, artifact){
       if (!file) return;
 
       const parseSeq = (APP.ui.parseSeq = (APP.ui.parseSeq || 0) + 1);
-      $("uploadStatus").innerHTML = `<span class="spinner"></span><span class="muted2">Parsing <span class="mono">${escapeHtml(file.name)}</span>…</span>`;
 
       Papa.parse(file, {
         header: true,
@@ -5634,7 +5747,7 @@ function invertTargetIfNeeded(yPred, artifact){
         },
         error: (err) => {
           if (parseSeq !== APP.ui.parseSeq) return;
-          $("uploadStatus").innerHTML = `<span class="pill bad">Parse error</span><span class="mono">${escapeHtml(err?.message || String(err))}</span>`;
+          showToast(`Parse error: ${err?.message || String(err)}`, "bad");
         }
       });
     }
@@ -5782,24 +5895,52 @@ function invertTargetIfNeeded(yPred, artifact){
       setGlobalDropOverlayVisible(false);
     });
 
-    $("continueToSetupBtn").addEventListener("click", () => {
-      renderTargetSelect();
-      refreshSplitDateCol();
-      syncSetupUI();
-      renderColumnTable();
-      gotoStep(1);
+    $("globalContinueBtn").addEventListener("click", () => {
+      const btn = $("globalContinueBtn");
+      if (!btn || btn.disabled) return;
+      if (APP.step === 0) {
+        renderTargetSelect();
+        refreshSplitDateCol();
+        syncSetupUI();
+        renderColumnTable();
+        gotoStep(1);
+        return;
+      }
+
+      if (APP.step === 1) {
+        gotoStep(2);
+        return;
+      }
+
+      if (APP.step === 2) {
+        trainModel();
+        return;
+      }
+
+      if (APP.step === 3) {
+        gotoStep(4);
+        return;
+      }
     });
 
-    $("backToUploadBtn").addEventListener("click", () => gotoStep(0));
-    $("continueToTrainBtn").addEventListener("click", () => gotoStep(2));
-    $("backToSetupBtn").addEventListener("click", () => gotoStep(1));
-    $("backToTrainBtn").addEventListener("click", () => gotoStep(2));
     $("jumpToExportBtn").addEventListener("click", () => gotoStep(4));
-    $("backToResultsBtn").addEventListener("click", () => gotoStep(3));
+
+    $("globalBackBtn").addEventListener("click", () => {
+      const btn = $("globalBackBtn");
+      if (!btn || btn.disabled) return;
+      const prev = (APP.step || 0) - 1;
+      if (prev < 0) return;
+      gotoStep(prev);
+    });
 
     $("targetSelect").addEventListener("change", () => {
       APP.raw.targetCol = $("targetSelect").value;
       if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
+      if (APP.raw.targetCol) {
+        updateStateChip("target", { value: APP.raw.targetCol, visible: true });
+        const task = decideTaskFromTarget(APP.raw.rows, APP.raw.targetCol, APP.setup.taskMode, APP.raw.colMeta);
+        updateStateChip("task", { value: task, visible: true });
+      }
       if (APP.raw.targetCol) {
         APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
         renderStepper();
@@ -5965,7 +6106,6 @@ function invertTargetIfNeeded(yPred, artifact){
       });
     });
 
-    $("trainBtn").addEventListener("click", trainModel);
     $("stopBtn").addEventListener("click", requestStopTraining);
 
     window.addEventListener("pagehide", (e) => {
@@ -6081,29 +6221,30 @@ Compatibility
       if (APP.ui.training.isTraining) return;
 
       if (APP.step === 0) {
-        if ($("continueToSetupBtn")?.disabled) return;
+        if ($("globalContinueBtn")?.disabled) return;
         e.preventDefault();
-        gotoStep(1);
+        $("globalContinueBtn").click();
         return;
       }
 
       if (APP.step === 1) {
-        if ($("continueToTrainBtn")?.disabled) return;
+        if ($("globalContinueBtn")?.disabled) return;
         e.preventDefault();
-        gotoStep(2);
+        $("globalContinueBtn").click();
         return;
       }
 
       if (APP.step === 2) {
-        if ($("trainBtn")?.disabled) return;
+        if ($("globalContinueBtn")?.disabled) return;
         e.preventDefault();
-        trainModel();
+        $("globalContinueBtn").click();
         return;
       }
 
       if (APP.step === 3) {
+        if ($("globalContinueBtn")?.disabled) return;
         e.preventDefault();
-        gotoStep(4);
+        $("globalContinueBtn").click();
         return;
       }
 

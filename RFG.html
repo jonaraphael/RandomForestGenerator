@@ -735,9 +735,9 @@
                         </button>
                       </th>
                       <th class="sortable" data-sort="type">Type <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="missing">Missing% <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="unique">Unique (sample) <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort="flags">Flags <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort="examples">Examples <span class="sort-indicator"></span></th>
                     </tr>
                   </thead>
@@ -1896,7 +1896,7 @@
           return (sa < sb ? -1 : 1) * dirMul;
         });
 
-        rows.push(`<tr class="groupRow"><td colspan="7">${escapeHtml(g.title)} <span class="muted2">(${colsInGroup.length})</span></td></tr>`);
+          rows.push(`<tr class="groupRow"><td colspan="7">${escapeHtml(g.title)} <span class="muted2">(${colsInGroup.length})</span></td></tr>`);
 
         for (const col of colsInGroup) {
           const m = meta[col];
@@ -1919,6 +1919,7 @@
           `;
 
           const flags = [];
+          if (target && col === target) flags.push(`<span class="pill good">target</span>`);
           const autoReasons = (!m.include && APP.setup.autoExcludedReasons?.[col]) || [];
           const hasAutoIdLike = autoReasons.includes("ID-like");
           if (m.flags?.idLike && !hasAutoIdLike) {
@@ -1942,12 +1943,11 @@
               <td>${includeBox}</td>
               <td class="mono">
                 <span class="pickTarget ${target && col === target ? "active" : ""}" data-picktarget="${escapeHtml(col)}">${escapeHtml(col)}</span>
-                ${target && col === target ? `<span class="pill good" style="margin-left:8px;">target</span>` : ""}
               </td>
               <td>${typeSelect}</td>
+              <td>${flagsHtml}</td>
               <td>${escapeHtml(missPct.toFixed(1) + "%")}</td>
               <td>${escapeHtml(String(m.uniqueSample))}</td>
-              <td>${flagsHtml}</td>
               <td title="${escapeHtml(examples)}">${escapeHtml(examples)}</td>
             </tr>
           `);

@@ -1011,6 +1011,13 @@
               <div class="muted2" style="margin-top:8px;" id="secondaryChartHint">—</div>
             </div>
           </div>
+
+          <div class="hr"></div>
+
+          <div class="groupBox" id="runHistoryBox">
+            <div class="groupTitle">Run history</div>
+            <div id="runHistoryList" class="muted2">No runs yet.</div>
+          </div>
         </div>
 
         <div id="resultsDiagnostics" class="resultsTabPanel hidden">
@@ -1205,6 +1212,7 @@
     const AUTO_EXCLUDE_MISSING_PCT = 50;
     const AUTO_EXCLUDE_HIGH_CARD_MIN_UNIQUE = 50;
     const AUTO_EXCLUDE_HIGH_CARD_UNIQUE_RATIO = 0.60;
+    const RUN_HISTORY_LIMIT = 5;
 
     let APP = {
       step: 0,
@@ -1335,20 +1343,21 @@
           retrainOnResults: false,
         },
         resultsTab: "overview",
-	        exportLang: "js",
-	        showAdvancedSettings: false,
-          trainingPreset: "",
-          hasVisitedSetup: false,
-          targetPreviewKey: "",
-          setupDirty: false,
-	        parseSeq: 0,
-	        predPage: 0,
-	        predFilter: "",
-	        previewFilter: "",
+        exportLang: "js",
+        showAdvancedSettings: false,
+        trainingPreset: "",
+        hasVisitedSetup: false,
+        targetPreviewKey: "",
+        setupDirty: false,
+        parseSeq: 0,
+        predPage: 0,
+        predFilter: "",
+        previewFilter: "",
         colSort: { key: "name", dir: "asc" },
         maxUnlockedStep: 0,
         shiftAutoExpandedRunSeq: 0,
         prevRunSummary: null,
+        runHistory: [],
         pruneUndoExcluded: null,
         pruneUndoReason: "",
         pruneJustApplied: false,
@@ -1650,6 +1659,7 @@
       syncGlobalContinueBtn();
       syncGlobalBackBtn();
       syncGlobalStopBtn();
+      renderRunHistory();
       if (!APP.ui.training.isTraining && APP.step === 2) {
         const task = APP.train.pipeline?.task || "";
         renderResultsSidePanel(task);
@@ -5403,7 +5413,7 @@
         `<span class="muted2">${prog} · Elapsed <span class="mono">${formatDuration(elapsedMs)}</span> · ETA <span class="mono">${etaText}</span></span>`;
     }
 
-    function trainingCalloutBodyHtml(task, completedUnits, totalUnits, startMs) {
+	    function trainingCalloutBodyHtml(task, completedUnits, totalUnits, startMs) {
       const elapsedMs = performance.now() - startMs;
       let etaText = "estimating…";
       if (completedUnits > 0 && totalUnits > 0) {
@@ -5419,6 +5429,60 @@
       return `<span class="spinner"></span> ` +
         `<span class="mono">${escapeHtml(task)}</span> · ` +
         `<span class="muted2">${prog} · Elapsed <span class="mono">${formatDuration(elapsedMs)}</span> · ETA <span class="mono">${etaText}</span></span>`;
+    }
+
+    function captureTypingSnapshotForHistory() {
+      const list = (set) => Array.from(set || []).filter(Boolean).sort();
+      const forced = APP.setup.forcedTypes || {};
+      return {
+        targetCol: APP.raw.targetCol || "",
+        taskMode: APP.setup.taskMode || "regression",
+        targetTransform: APP.setup.targetTransform || "none",
+        maxRows: Math.floor(APP.setup.maxRows || 0),
+        maxCard: Math.floor(APP.setup.maxCard || 0),
+        excluded: list(APP.setup.excluded).filter(c => c !== APP.raw.targetCol),
+        forcedTypes: {
+          date: list(forced.date),
+          categorical: list(forced.categorical),
+          continuous: list(forced.continuous),
+        },
+        trainInputs: {
+          seed: $("seed")?.value ?? "",
+          replacement: $("replacement")?.value ?? "false",
+          nEstimators: $("nEstimators")?.value ?? "",
+          maxFeaturesMode: $("maxFeaturesMode")?.value ?? "",
+          maxFeaturesValue: $("maxFeaturesValue")?.value ?? "",
+          maxDepth: $("maxDepth")?.value ?? "",
+          minNumSamples: $("minNumSamples")?.value ?? "",
+        },
+        trainingPreset: APP.ui.trainingPreset || "",
+      };
+    }
+
+    function pushRunHistoryEntry() {
+      const cur = APP.train.runSummary;
+      if (!cur?.runId) return;
+      const last = APP.ui.runHistory?.[APP.ui.runHistory.length - 1];
+      if (last?.runId === cur.runId) return;
+
+      const entry = {
+        runId: cur.runId,
+        timestamp: cur.runId,
+        task: cur.task,
+        primaryMetric: JSON.parse(JSON.stringify(cur.test || null)),
+        oobMetric: JSON.parse(JSON.stringify(cur.oob || null)),
+        includedCols: currentIncludedFeatureCols().slice(),
+        excludedCols: Array.from(APP.setup.excluded || []).filter(c => c !== APP.raw.targetCol).sort(),
+        rfOptions: JSON.parse(JSON.stringify(APP.train.rfOptions || null)),
+        typingSnapshot: captureTypingSnapshotForHistory(),
+        runSummary: { ...cur },
+      };
+
+      if (!Array.isArray(APP.ui.runHistory)) APP.ui.runHistory = [];
+      APP.ui.runHistory.push(entry);
+      if (APP.ui.runHistory.length > RUN_HISTORY_LIMIT) {
+        APP.ui.runHistory = APP.ui.runHistory.slice(-RUN_HISTORY_LIMIT);
+      }
     }
 
     function setResultsSidePanel({ visible, title, bodyHtml, cls }) {
@@ -5724,6 +5788,180 @@
       }
 
       return { trainedEstimators, stoppedEarly: trainedEstimators !== nEstimators, oobPred: null, oobCovered: 0 };
+    }
+
+    function formatRunTimestamp(ts) {
+      const t = Number(ts);
+      if (!Number.isFinite(t) || t <= 0) return "—";
+      const d = new Date(t);
+      const date = d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
+      const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      return `${date} ${time}`;
+    }
+
+    function listPreview(items, limit = 16) {
+      const xs = (items || []).filter(Boolean);
+      if (!xs.length) return "";
+      const shown = xs.slice(0, limit);
+      const extra = xs.length - shown.length;
+      return shown.join(", ") + (extra > 0 ? ` (+${extra} more)` : "");
+    }
+
+    function renderRunHistory() {
+      const root = $("runHistoryList");
+      if (!root) return;
+      const hist = Array.isArray(APP.ui.runHistory) ? APP.ui.runHistory.slice() : [];
+      if (!hist.length) {
+        root.className = "muted2";
+        root.textContent = "No runs yet.";
+        return;
+      }
+
+      const curRunId = APP.train.runSummary?.runId || null;
+      const isTraining = Boolean(APP.ui.training.isTraining);
+      const items = hist.slice().reverse();
+
+      const rows = items.map((h) => {
+        const when = formatRunTimestamp(h.timestamp || h.runId);
+        const test = h.primaryMetric || {};
+        const oob = h.oobMetric || null;
+        const metricVal = (test && Number.isFinite(test.primary)) ? formatNum(test.primary, 6) : "—";
+        const metricLine = `${escapeHtml(test.primaryLabel || "Test metric")}: <span class="mono">${escapeHtml(metricVal)}</span>`;
+        const oobLine = oob && Number.isFinite(oob.value)
+          ? `<span class="muted2">${escapeHtml(oob.label || "OOB")}: <span class="mono">${escapeHtml(formatNum(oob.value, 6))}</span> · ${escapeHtml(oob.sub || "")}</span>`
+          : `<span class="muted2">OOB: —</span>`;
+
+        const included = Array.isArray(h.includedCols) ? h.includedCols : [];
+        const excluded = Array.isArray(h.excludedCols) ? h.excludedCols : [];
+        const colTitleParts = [];
+        if (included.length) colTitleParts.push(`Included: ${listPreview(included, 20)}`);
+        if (excluded.length) colTitleParts.push(`Excluded: ${listPreview(excluded, 20)}`);
+        const colsTitle = escapeHtml(colTitleParts.join("\n"));
+
+        const isCurrent = Boolean(curRunId && h.runId === curRunId);
+        const restoreDisabled = isTraining ? "disabled" : "";
+        const compareDisabled = (isTraining || !curRunId || isCurrent) ? "disabled" : "";
+        const currentPill = isCurrent ? `<span class="pill tiny good" style="margin-left:8px;">Current</span>` : "";
+
+        return `<tr>
+          <td style="white-space:nowrap;">
+            <div>${escapeHtml(when)}${currentPill}</div>
+            <div class="muted2">Run <span class="mono">${escapeHtml(String(h.runId || ""))}</span></div>
+          </td>
+          <td>
+            <div>${metricLine}</div>
+            <div>${oobLine}</div>
+          </td>
+          <td title="${colsTitle}">
+            <div><span class="mono">${included.length}</span> included</div>
+            <div class="muted2"><span class="mono">${excluded.length}</span> excluded</div>
+          </td>
+          <td style="text-align:right;">
+            <div class="row" style="justify-content:flex-end;gap:8px;flex-wrap:nowrap;">
+              <button class="btn" type="button" data-run-action="restore" data-run-id="${escapeHtml(String(h.runId || ""))}" ${restoreDisabled} title="Restore exclusions, forced types, and hyperparameters from this run">Restore settings</button>
+              <button class="btn ghost" type="button" data-run-action="compare" data-run-id="${escapeHtml(String(h.runId || ""))}" ${compareDisabled} title="Compare this run's metrics to the current run (side panel)">Compare to current</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join("");
+
+      root.className = "";
+      root.innerHTML = `
+        <div class="scroll" style="max-height:260px;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:190px;">When</th>
+                <th>Metric</th>
+                <th style="width:140px;">Included / excluded</th>
+                <th style="width:280px;text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function findRunHistoryEntryByRunId(runId) {
+      const id = String(runId || "");
+      const hist = Array.isArray(APP.ui.runHistory) ? APP.ui.runHistory : [];
+      return hist.find(h => String(h?.runId || "") === id) || null;
+    }
+
+    function compareRunHistoryToCurrent(runId) {
+      const entry = findRunHistoryEntryByRunId(runId);
+      if (!entry) { showToast("Run not found", "warn"); return; }
+      const cur = APP.train.runSummary;
+      if (!cur?.runId) { showToast("Train a model first", "warn"); return; }
+      if (entry.runId === cur.runId) { showToast("That run is already current", "warn"); return; }
+      if (entry.task !== cur.task) { showToast("Cannot compare runs across task types", "warn"); return; }
+
+      APP.ui.prevRunSummary = entry.runSummary
+        ? { ...entry.runSummary }
+        : { runId: entry.runId, task: entry.task, test: entry.primaryMetric || null, oob: entry.oobMetric || null };
+
+      renderResultsSidePanel(cur.task);
+      showToast("Comparing selected run to current", "");
+    }
+
+    function restoreRunHistorySettings(runId) {
+      const entry = findRunHistoryEntryByRunId(runId);
+      if (!entry) { showToast("Run not found", "warn"); return; }
+      if (!APP.raw.rows?.length) { showToast("Load data first", "warn"); return; }
+      if (APP.ui.training.isTraining) { showToast("Stop training before restoring", "warn"); return; }
+
+      const snap = entry.typingSnapshot || {};
+      const cols = new Set(APP.raw.columns || []);
+      const target = APP.raw.targetCol;
+
+      const filterCols = (xs) => (xs || []).filter(c => cols.has(c) && c !== target);
+      const excluded = filterCols(snap.excluded || entry.excludedCols || []);
+      const forced = snap.forcedTypes || {};
+
+      APP.setup.excluded = new Set(excluded);
+      APP.setup.forcedTypes = {
+        date: new Set(filterCols(forced.date)),
+        categorical: new Set(filterCols(forced.categorical)),
+        continuous: new Set(filterCols(forced.continuous)),
+      };
+      syncHiddenTypingLists();
+      recomputeColumnMeta();
+      refreshSplitDateCol();
+      syncSetupUI();
+      renderColumnTable();
+
+      const t = snap.trainInputs || {};
+      if ($("seed") && t.seed !== undefined) $("seed").value = String(t.seed);
+      if ($("replacement") && t.replacement !== undefined) $("replacement").value = String(t.replacement);
+      if ($("nEstimators") && t.nEstimators !== undefined) $("nEstimators").value = String(t.nEstimators);
+      if ($("maxFeaturesMode") && t.maxFeaturesMode !== undefined) {
+        $("maxFeaturesMode").value = String(t.maxFeaturesMode);
+        $("maxFeaturesMode").dataset.userSet = "1";
+      }
+      if ($("maxFeaturesValue") && t.maxFeaturesValue !== undefined) {
+        $("maxFeaturesValue").value = String(t.maxFeaturesValue);
+        $("maxFeaturesValue").dataset.userSet = "1";
+      }
+      if ($("maxDepth") && t.maxDepth !== undefined) {
+        $("maxDepth").value = String(t.maxDepth);
+        $("maxDepth").dataset.userSet = "1";
+      }
+      if ($("minNumSamples") && t.minNumSamples !== undefined) {
+        $("minNumSamples").value = String(t.minNumSamples);
+        $("minNumSamples").dataset.userSet = "1";
+      }
+      syncMaxFeaturesUi();
+
+      APP.ui.trainingPreset = snap.trainingPreset || "";
+      renderTrainingPresetButtons();
+      markSetupDirty();
+      syncButtons();
+
+      APP.ui.training.autoStartOnResults = true;
+      APP.ui.training.retrainOnResults = true;
+      gotoStep(2);
+      showToast("Restored settings and retraining…", "");
     }
 
     async function trainModel() {
@@ -6060,21 +6298,22 @@
         }
       }
 
-      APP.train.runSummary = {
-        runId: Date.now(),
-        task: pipeline.task,
-        test: testSummary,
-        oob: oobSummary,
-        includedCols: currentIncludedFeatureCols().length,
-        excludedCols: APP.setup.excluded?.size || 0,
-        pruneReason: APP.ui.pruneJustApplied ? (APP.ui.pruneUndoReason || "") : "",
-      };
-      APP.ui.pruneJustApplied = false;
+	      APP.train.runSummary = {
+	        runId: Date.now(),
+	        task: pipeline.task,
+	        test: testSummary,
+	        oob: oobSummary,
+	        includedCols: currentIncludedFeatureCols().length,
+	        excludedCols: APP.setup.excluded?.size || 0,
+	        pruneReason: APP.ui.pruneJustApplied ? (APP.ui.pruneUndoReason || "") : "",
+	      };
+	      APP.ui.pruneJustApplied = false;
+	      pushRunHistoryEntry();
 
-      // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
-      setResultsTab("overview");
-      renderResults();
-      gotoStep(2);
+	      // Render results ASAP (test metrics + plots). Diagnostics fill in asynchronously below.
+	      setResultsTab("overview");
+	      renderResults();
+	      gotoStep(2);
 
       $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
       showToast("Training complete", "good");
@@ -6430,15 +6669,16 @@
       $("predFilter").value = "";
       if ($("predFullDetails")) $("predFullDetails").open = true;
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
-      updateUncertaintyPills();
-      renderPredInsights();
-      renderPredTable();
-      updatePruneMiniUi();
+	      updateUncertaintyPills();
+	      renderPredInsights();
+	      renderPredTable();
+	      updatePruneMiniUi();
+	      renderRunHistory();
 
-      forceDetailsOpen("shiftDetails");
-      forceDetailsOpen("predFullDetails");
-      updateExportUI();
-    }
+	      forceDetailsOpen("shiftDetails");
+	      forceDetailsOpen("predFullDetails");
+	      updateExportUI();
+	    }
 
     // ----------------------------
     // Export
@@ -6847,13 +7087,14 @@ raise NotImplementedError(
       APP.ui.predFilter = "";
       APP.ui.previewFilter = "";
       APP.ui.showAdvancedSettings = false;
-      APP.ui.resultsTab = "overview";
-      APP.ui.setupDirty = false;
-      APP.ui.prevRunSummary = null;
-      APP.ui.pruneUndoExcluded = null;
-      APP.ui.pruneUndoReason = "";
-      APP.ui.pruneJustApplied = false;
-      APP.ui.maxUnlockedStep = 0;
+	      APP.ui.resultsTab = "overview";
+	      APP.ui.setupDirty = false;
+	      APP.ui.prevRunSummary = null;
+	      APP.ui.runHistory = [];
+	      APP.ui.pruneUndoExcluded = null;
+	      APP.ui.pruneUndoReason = "";
+	      APP.ui.pruneJustApplied = false;
+	      APP.ui.maxUnlockedStep = 0;
 
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
@@ -6871,10 +7112,14 @@ raise NotImplementedError(
       if ($("targetSearch")) $("targetSearch").value = "";
       $("predTable").innerHTML = "";
       $("worstErrTable").innerHTML = "";
-      $("highUncTable").innerHTML = "";
-      $("resultsCallouts").innerHTML = "";
-      $("uncertaintyPill").textContent = "Uncertainty: —";
-      $("uncertaintyPill").className = "pill";
+	      $("highUncTable").innerHTML = "";
+	      $("resultsCallouts").innerHTML = "";
+	      if ($("runHistoryList")) {
+	        $("runHistoryList").className = "muted2";
+	        $("runHistoryList").textContent = "No runs yet.";
+	      }
+	      $("uncertaintyPill").textContent = "Uncertainty: —";
+	      $("uncertaintyPill").className = "pill";
       $("errUncPill").textContent = "—";
       $("errUncPill").className = "pill";
       if ($("predInsightsDetails")) $("predInsightsDetails").open = false;
@@ -7478,16 +7723,25 @@ raise NotImplementedError(
       releaseAllResources();
     });
 
-    $("importanceMode").addEventListener("change", () => {
-      if (!APP.train.model) return;
-      const mode = $("importanceMode").value;
-      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance", "derived");
-      else renderFIChart(APP.train.fiBase, "importance", "base");
-    });
+	    $("importanceMode").addEventListener("change", () => {
+	      if (!APP.train.model) return;
+	      const mode = $("importanceMode").value;
+	      if (mode === "derived") renderFIChart(APP.train.fiDerived, "importance", "derived");
+	      else renderFIChart(APP.train.fiBase, "importance", "base");
+	    });
 
-    $("predFilter").addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });
-    $("pageSize").addEventListener("change", () => { APP.ui.predPage = 0; renderPredTable(); });
-    $("predTopK").addEventListener("change", () => { renderPredInsights(); });
+	    $("runHistoryList")?.addEventListener("click", (e) => {
+	      const btn = e.target?.closest?.("button[data-run-action][data-run-id]");
+	      if (!btn) return;
+	      const action = btn.dataset.runAction || "";
+	      const runId = btn.dataset.runId || "";
+	      if (action === "restore") restoreRunHistorySettings(runId);
+	      else if (action === "compare") compareRunHistoryToCurrent(runId);
+	    });
+
+	    $("predFilter").addEventListener("input", () => { APP.ui.predPage = 0; renderPredTable(); });
+	    $("pageSize").addEventListener("change", () => { APP.ui.predPage = 0; renderPredTable(); });
+	    $("predTopK").addEventListener("change", () => { renderPredInsights(); });
     $("predInsightsDetails").addEventListener("toggle", () => {
       if ($("predInsightsDetails").open) {
         renderPredInsights();

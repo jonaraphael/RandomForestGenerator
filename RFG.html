@@ -37,10 +37,13 @@
       margin:0;
       font-family:var(--sans);
       color:var(--text);
-      background:
+      background-image:
         radial-gradient(1000px 550px at 20% 0%, rgba(109,40,217,0.22), transparent 60%),
         radial-gradient(900px 520px at 95% 10%, rgba(139,92,246,0.16), transparent 62%),
-        linear-gradient(180deg, var(--bg0), var(--bg1));
+        linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 50%, var(--bg0) 100%);
+      background-repeat: no-repeat, no-repeat, repeat-y;
+      background-size: 100% 100%, 100% 100%, 100% 200vh;
+      background-attachment: fixed, fixed, scroll;
     }
 
     .wrap{max-width:1200px;margin:0 auto;padding:18px 16px 60px}
@@ -742,6 +745,21 @@
 	                <div class="muted2">If enabled, we train on transformed targets and invert predictions back.</div>
 	              </div>
 
+                <div class="field hidden" id="targetPreviewField" style="margin-top:12px;">
+                  <div class="row space" style="margin-bottom:8px;">
+                    <div class="muted">Target distribution</div>
+                    <span class="pill" id="targetPreviewPill">—</span>
+                  </div>
+                  <div class="chartBox" style="height:240px;">
+                    <canvas id="targetPreviewChart"></canvas>
+                    <div id="targetPreviewPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting…</div>
+                  </div>
+                  <div class="row hidden" id="targetPreviewHintRow" style="margin-top:10px;">
+                    <div class="muted2" id="targetPreviewHintText">—</div>
+                    <button class="btn ghost hidden" id="targetPreviewLog1pBtn" type="button">Apply log1p</button>
+                  </div>
+                </div>
+
 	              <div id="advancedTargetDetails" class="hidden" style="margin-top:12px;">
 	                <div class="hr"></div>
 	                <div class="muted" style="margin-bottom:8px;">Advanced (classification)</div>
@@ -801,7 +819,7 @@
 	            </div>
 
 	            <div class="groupBox" style="margin-top:12px;">
-	              <div class="groupTitle">Data split</div>
+	              <div class="groupTitle">Data</div>
 	              <div class="two">
 	                <div class="field">
 	                  <label for="maxRows" title="Limit how many rows to use from the CSV for faster experiments. Use 0 to use every row.">Max rows (0 = all)</label>
@@ -1227,6 +1245,9 @@
     ];
     const AUTO_EXCLUDE_MISSING_PCT = 50;
     const RUN_HISTORY_LIMIT = 5;
+    const AUTO_EXCLUDE_HIGH_CARD_MIN_UNIQUE = 50;
+    const AUTO_EXCLUDE_HIGH_CARD_UNIQUE_RATIO = 0.60;
+    const RUN_HISTORY_LIMIT = 5;
 
     let APP = {
       step: 0,
@@ -1234,7 +1255,7 @@
         fileName: null,
         rows: [],
         columns: [],
-        colMeta: {}, // {col: {inferredType, missingFrac, uniqueSample, examples[], flags:{idLike,idByName}, include:true}}
+        colMeta: {}, // {col: {inferredType, missingFrac, uniqueSample, examples[], flags:{idLike,idByName,highCardinality}, include:true}}
         targetCol: null
       },
       setup: {
@@ -1306,6 +1327,7 @@
           secondary: null,
           shift: null,
           errUnc: null,
+          targetPreview: null,
         },
 	        chips: {
 	          order: [
@@ -1353,12 +1375,15 @@
           diagAbortController: null,
           runSeq: 0,
           autoStartOnResults: false,
+          retrainOnResults: false,
         },
         resultsTab: "overview",
 	        exportLang: "js",
 	        showAdvancedSettings: false,
           trainingPreset: "",
           hasVisitedSetup: false,
+          targetPreviewKey: "",
+          setupDirty: false,
 	        parseSeq: 0,
 	        predPage: 0,
 	        predFilter: "",
@@ -1681,6 +1706,10 @@
       }
     }
 
+    function markSetupDirty() {
+      APP.ui.setupDirty = true;
+    }
+
     function requestStopTraining() {
       if (!APP.ui.training.isTraining) return;
       if (APP.ui.training.stopRequested) return;
@@ -1726,6 +1755,7 @@
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
       APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
       APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
     }
 
     function downloadBlob(blob, filename) {
@@ -1784,6 +1814,12 @@
             showToast("Complete the previous step first.", "warn");
             return;
           }
+          if (i === 2 && !APP.ui.training.isTraining && !isModelReady()) {
+            APP.ui.training.completedUnits = 0;
+            APP.ui.training.totalUnits = 0;
+            APP.ui.training.stopRequested = false;
+            APP.ui.training.autoStartOnResults = true;
+          }
           gotoStep(i);
         });
       });
@@ -1823,8 +1859,10 @@
       }
 
       if (APP.step === 2 && APP.ui.training.autoStartOnResults && !APP.ui.training.isTraining) {
+        const retrain = Boolean(APP.ui.training.retrainOnResults);
         APP.ui.training.autoStartOnResults = false;
-        if (isModelReady()) {
+        APP.ui.training.retrainOnResults = false;
+        if (isModelReady() && !retrain) {
           renderResults();
           return;
         }
@@ -1845,11 +1883,13 @@
       let nonEmpty = 0, numeric = 0, integerish = 0, dateish = 0;
       const uniq = new Set();
       const examples = [];
+      let sampleLenSum = 0;
 
       for (let i = 0; i < maxN; i++) {
         const s = normStr(rows[i][col]);
         if (!s) continue;
         nonEmpty++;
+        sampleLenSum += s.length;
 
         if (examples.length < 4 && !examples.includes(s)) examples.push(s);
         uniq.add(s);
@@ -1886,6 +1926,12 @@
       const uniqueRatio = nonEmpty ? (uniqueSample / nonEmpty) : 0;
 
       const idLike = idByName || (inferred !== "date" && fracInt >= 0.95 && uniqueRatio >= 0.95 && uniqueSample >= 50);
+      const avgLen = nonEmpty ? (sampleLenSum / nonEmpty) : 0;
+      const highCardinality =
+        inferred === "categorical" &&
+        uniqueSample >= AUTO_EXCLUDE_HIGH_CARD_MIN_UNIQUE &&
+        uniqueRatio >= AUTO_EXCLUDE_HIGH_CARD_UNIQUE_RATIO &&
+        avgLen >= 4;
 
       const forced = forceType || null;
       if (forced === "date" || forced === "categorical" || forced === "continuous") inferred = forced;
@@ -1897,7 +1943,8 @@
         examples,
         flags: {
           idLike,
-          idByName
+          idByName,
+          highCardinality,
         },
         include: true
       };
@@ -2091,6 +2138,7 @@
         const colReasons = [];
 
         if (m.flags?.idLike) colReasons.push("ID-like");
+        if (m.flags?.highCardinality) colReasons.push("High-cardinality");
         if ((m.missingFrac ?? 0) * 100 > AUTO_EXCLUDE_MISSING_PCT) {
           colReasons.push(`>${AUTO_EXCLUDE_MISSING_PCT}% missing`);
         }
@@ -2146,7 +2194,7 @@
           case "type": return labelOfType(m.inferredType);
           case "missing": return m.missingFrac ?? 0;
           case "unique": return m.uniqueSample ?? 0;
-          case "flags": return (m.flags?.idLike ? 1 : 0);
+          case "flags": return (m.flags?.idLike ? 2 : 0) + (m.flags?.highCardinality ? 1 : 0);
           case "examples": return (m.examples?.[0] ?? "").toLowerCase();
           default: return col.toLowerCase();
         }
@@ -2212,8 +2260,12 @@
           if (target && col === target) flags.push(`<span class="pill good">target</span>`);
           const autoReasons = (!m.include && APP.setup.autoExcludedReasons?.[col]) || [];
           const hasAutoIdLike = autoReasons.includes("ID-like");
+          const hasAutoHighCard = autoReasons.includes("High-cardinality");
           if (m.flags?.idLike && !hasAutoIdLike) {
             flags.push(`<span class="pill warn" title="Often acts like an ID">ID-like</span>`);
+          }
+          if (m.flags?.highCardinality && !hasAutoHighCard) {
+            flags.push(`<span class="pill warn" title="Many unique categories; raw label encoding is often brittle. Consider excluding or feature-engineering.">High-cardinality</span>`);
           }
           if (forced) flags.push(`<span class="pill" title="Manually overridden">Forced</span>`);
           if (locked) flags.push(`<span class="pill warn" title="${escapeHtml(lockedReason)}">Locked</span>`);
@@ -2248,6 +2300,7 @@
 
       $("colConfigBody").querySelectorAll("input[type=checkbox][data-include]").forEach(cb => {
         cb.addEventListener("change", () => {
+          markSetupDirty();
           const col = cb.getAttribute("data-include");
           const targetCol = APP.raw.targetCol;
           if (targetCol && col === targetCol) return;
@@ -2264,6 +2317,7 @@
 
       $("colConfigBody").querySelectorAll("select[data-coltype]").forEach(sel => {
         sel.addEventListener("change", () => {
+          markSetupDirty();
           const col = sel.getAttribute("data-coltype");
           const picked = sel.value;
           APP.setup.forcedTypes.date.delete(col);
@@ -2385,6 +2439,7 @@
 	      $("testFrac").disabled = !showAdv || !(splitMode === "random" || (splitMode === "time" && splitMethod === "fraction") || (splitMode === "time" && splitMethod === "cutoff" && !cutoff));
 
 	      if ($("targetTransformField")) $("targetTransformField").classList.toggle("hidden", !showAdv);
+	      if ($("targetPreviewField")) $("targetPreviewField").classList.toggle("hidden", !showAdv);
 	      if ($("taskModeField")) $("taskModeField").classList.toggle("hidden", !showAdv);
 	      if ($("targetSelectField")) $("targetSelectField").classList.toggle("span2", !showAdv);
 	      if ($("maxCardFieldWrap")) $("maxCardFieldWrap").classList.toggle("hidden", !showAdv);
@@ -2411,6 +2466,7 @@
         renderTrainingPresetButtons();
 	      syncAdvancedTargetUI();
 	      updateSplitPreview();
+        renderTargetPreview();
 	    }
 
     // ----------------------------
@@ -3373,6 +3429,7 @@
 
         APP.ui.trainingPreset = key;
         renderTrainingPresetButtons();
+        markSetupDirty();
         syncSetupUI();
         renderStateChips();
       };
@@ -4011,6 +4068,259 @@
         <div class="muted2">Based on ${formatPreviewCount(previewRows)} sampled rows${maxRowsNote}${droppedTargets ? ` (${formatPreviewCount(droppedTargets)} dropped)` : ""}.</div>
         ${detailHtml}
         ${warnNote}`;
+    }
+
+    function renderTargetPreview() {
+      const field = $("targetPreviewField");
+      const canvas = $("targetPreviewChart");
+      const pill = $("targetPreviewPill");
+      const placeholder = $("targetPreviewPlaceholder");
+      const hintRow = $("targetPreviewHintRow");
+      const hintText = $("targetPreviewHintText");
+      const hintBtn = $("targetPreviewLog1pBtn");
+
+      if (!field || !canvas || !pill || !placeholder || !hintRow || !hintText || !hintBtn) return;
+
+      if (!APP.ui.showAdvancedSettings) {
+        field.classList.add("hidden");
+        return;
+      }
+
+      field.classList.remove("hidden");
+      hintRow.classList.add("hidden");
+      hintBtn.classList.add("hidden");
+
+      const rows = APP.raw.rows || [];
+      const targetCol = APP.raw.targetCol;
+      if (!rows.length || !targetCol) {
+        pill.className = "pill";
+        pill.textContent = "—";
+        APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+        placeholder.classList.remove("hidden");
+        hintText.textContent = "Select a target to preview its distribution.";
+        return;
+      }
+
+      const splitMode = effectiveSplitMode();
+      const splitDateCol = (splitMode === "time") ? ($("splitDateCol")?.value || APP.setup.splitDateCol) : "";
+      const seed = parseNum($("seed")?.value) || 42;
+      const maxRowsSetting = Math.max(0, Math.floor(parseNum($("maxRows")?.value) || 0));
+      const taskMode = $("taskMode")?.value || APP.setup.taskMode;
+      const transformMode = $("targetTransform")?.value || APP.setup.targetTransform || "none";
+      const task = decideTaskFromTarget(rows, targetCol, taskMode, APP.raw.colMeta);
+
+      const key = [
+        APP.ui.parseSeq || 0,
+        APP.ui.showAdvancedSettings ? "adv" : "basic",
+        targetCol,
+        task,
+        transformMode,
+        splitMode,
+        splitDateCol,
+        maxRowsSetting,
+        seed,
+        rows.length,
+      ].join("|");
+      if (APP.ui.targetPreviewKey === key) return;
+      APP.ui.targetPreviewKey = key;
+
+      const maxSample = 5000;
+      const baseIdx = sampleRowIndices(rows.length, maxRowsSetting, seed, splitMode);
+      let sampleIdx = baseIdx;
+      if (baseIdx.length > maxSample) {
+        if (splitMode === "time") {
+          sampleIdx = baseIdx.slice(Math.max(0, baseIdx.length - maxSample));
+        } else {
+          const pick = sampleIndicesNoAlloc(baseIdx.length, maxSample, (seed ^ 0x7f4a7c15) >>> 0);
+          sampleIdx = pick.map(j => baseIdx[j]);
+        }
+      }
+
+      const values = [];
+      let dropped = 0;
+      for (const i of sampleIdx) {
+        const tv = getRowTargetValue(rows[i], targetCol, task, (task === "regression") ? transformMode : "none", APP.raw.colMeta);
+        if (!tv) { dropped++; continue; }
+        values.push(tv.y);
+      }
+
+      if (!values.length) {
+        pill.className = "pill warn";
+        pill.textContent = "No usable values";
+        APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+        placeholder.classList.remove("hidden");
+        hintText.textContent = "No usable target values found in the preview sample.";
+        return;
+      }
+
+      const ctx = canvas.getContext("2d");
+      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+      placeholder.classList.add("hidden");
+
+      const baseColor = "rgba(139,92,246,0.70)";
+      const borderColor = "rgba(139,92,246,1)";
+
+      if (task === "regression") {
+        const nums = values.map(v => Number(v)).filter(v => Number.isFinite(v));
+        if (!nums.length) {
+          pill.className = "pill warn";
+          pill.textContent = "No numeric values";
+          placeholder.classList.remove("hidden");
+          hintText.textContent = "Target values are not numeric.";
+          return;
+        }
+
+        const n = nums.length;
+        const min = Math.min(...nums);
+        const max = Math.max(...nums);
+        const nBins = 30;
+        const counts = new Array(nBins).fill(0);
+
+        if (min === max) {
+          counts[0] = n;
+        } else {
+          const w = (max - min) / nBins;
+          for (const v of nums) {
+            const idx = Math.min(nBins - 1, Math.max(0, Math.floor((v - min) / w)));
+            counts[idx]++;
+          }
+        }
+
+        const fmt = (x) => {
+          const ax = Math.abs(x);
+          if (ax >= 1000) return String(Math.round(x));
+          if (ax >= 10) return x.toFixed(1);
+          return x.toFixed(2);
+        };
+
+        const labels = (min === max)
+          ? [fmt(min)]
+          : Array.from({ length: nBins }, (_, k) => {
+              const a = min + (k * (max - min) / nBins);
+              const b = min + ((k + 1) * (max - min) / nBins);
+              return `${fmt(a)}–${fmt(b)}`;
+            });
+
+        pill.className = "pill";
+        const tfTag = (transformMode === "log1p") ? " · log1p" : "";
+        pill.textContent = `n=${nums.length.toLocaleString()}${dropped ? ` (${dropped.toLocaleString()} dropped)` : ""}${tfTag}`;
+
+        APP.ui.charts.targetPreview = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Count",
+                data: (min === max) ? [nums.length] : counts,
+                backgroundColor: baseColor,
+                borderColor,
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (item) => `Count: ${Number(item.raw || 0).toLocaleString()}`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: { color: "rgba(234,240,255,0.75)", maxRotation: 0, autoSkip: true },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: "rgba(234,240,255,0.75)" },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+            },
+          },
+        });
+
+        const zeros = nums.reduce((a, v) => a + ((v === 0) ? 1 : 0), 0);
+        const zerosFrac = zeros / Math.max(1, n);
+        const nonNeg = min >= 0;
+        const mean = nums.reduce((a, v) => a + v, 0) / Math.max(1, n);
+        const m2 = nums.reduce((a, v) => { const d = v - mean; return a + d * d; }, 0) / Math.max(1, n);
+        const sd = Math.sqrt(m2);
+        const m3 = nums.reduce((a, v) => { const d = v - mean; return a + d * d * d; }, 0) / Math.max(1, n);
+        const skew = (sd > 0) ? (m3 / Math.pow(sd, 3)) : 0;
+        const shouldSuggest = (transformMode !== "log1p") && nonNeg && (zerosFrac >= 0.25 || Math.abs(skew) >= 1.5);
+        const transformEl = $("targetTransform");
+        const canApply = Boolean(transformEl && transformEl.value !== "log1p");
+
+        if (shouldSuggest) {
+          hintRow.classList.remove("hidden");
+          hintText.textContent = "Consider log1p transform (skewed / many zeros).";
+          hintBtn.classList.toggle("hidden", !canApply);
+        }
+        if (!shouldSuggest && transformMode === "log1p") {
+          hintRow.classList.remove("hidden");
+          hintText.textContent = "Preview shows log1p-transformed target (training uses the transformed scale).";
+          hintBtn.classList.add("hidden");
+        }
+
+      } else {
+        const counts = new Map();
+        for (const v of values) {
+          const s = normStr(v) || "#na#";
+          counts.set(s, (counts.get(s) || 0) + 1);
+        }
+
+        const entries = Array.from(counts.entries())
+          .map(([label, c]) => ({ label, c }))
+          .sort((a, b) => (b.c - a.c) || a.label.localeCompare(b.label));
+
+        const top = entries.slice(0, 10);
+        const topSum = top.reduce((a, x) => a + x.c, 0);
+        const other = entries.reduce((a, x) => a + x.c, 0) - topSum;
+        const labels = top.map(x => x.label).concat(other > 0 ? ["Other"] : []);
+        const data = top.map(x => x.c).concat(other > 0 ? [other] : []);
+
+        pill.className = "pill";
+        pill.textContent = `n=${values.length.toLocaleString()}${dropped ? ` (${dropped.toLocaleString()} dropped)` : ""}`;
+
+        APP.ui.charts.targetPreview = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Count",
+                data,
+                backgroundColor: baseColor,
+                borderColor,
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+            },
+            scales: {
+              x: {
+                ticks: { color: "rgba(234,240,255,0.75)", maxRotation: 0, autoSkip: true },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: "rgba(234,240,255,0.75)" },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+            },
+          },
+        });
+      }
     }
 
     // ----------------------------
@@ -6023,6 +6333,7 @@
 
       $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Model trained locally.</span>`;
       showToast("Training complete", "good");
+      APP.ui.setupDirty = false;
       APP.ui.training.abortController = null;
       APP.ui.training.stopRequested = false;
       setTrainingUi(false);
@@ -6794,6 +7105,7 @@ raise NotImplementedError(
       APP.ui.previewFilter = "";
       APP.ui.showAdvancedSettings = false;
       APP.ui.resultsTab = "overview";
+      APP.ui.setupDirty = false;
       APP.ui.prevRunSummary = null;
       APP.ui.runHistory = [];
       APP.ui.pruneUndoExcluded = null;
@@ -6805,6 +7117,7 @@ raise NotImplementedError(
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
       APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
       APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
 
       $("trainStatus").innerHTML = "";
       setTrainingUi(false);
@@ -7100,13 +7413,16 @@ raise NotImplementedError(
       if (APP.step === 1) {
         APP.ui.maxUnlockedStep = Math.max(APP.ui.maxUnlockedStep || 0, 2);
         renderStepper();
-        if (!isModelReady()) {
+        const shouldRetrain = Boolean(APP.ui.setupDirty && isModelReady());
+        if (!isModelReady() || shouldRetrain) {
           APP.ui.training.completedUnits = 0;
           APP.ui.training.totalUnits = 0;
           APP.ui.training.stopRequested = false;
           APP.ui.training.autoStartOnResults = true;
+          APP.ui.training.retrainOnResults = shouldRetrain;
         } else {
           APP.ui.training.autoStartOnResults = false;
+          APP.ui.training.retrainOnResults = false;
         }
         gotoStep(2);
         return;
@@ -7153,6 +7469,14 @@ raise NotImplementedError(
       APP.ui.showAdvancedSettings = !APP.ui.showAdvancedSettings;
       syncSetupUI();
       syncButtons();
+    });
+
+    $("targetPreviewLog1pBtn")?.addEventListener("click", () => {
+      const sel = $("targetTransform");
+      if (!sel) return;
+      sel.value = "log1p";
+      sel.dispatchEvent(new Event("change"));
+      showToast("Applied log1p target transform", "good");
     });
 
     function setResultsTab(name) {
@@ -7205,6 +7529,7 @@ raise NotImplementedError(
     $("exportLangPyBtn")?.addEventListener("click", () => setExportLang("py"));
 
     $("targetSelect").addEventListener("change", () => {
+      markSetupDirty();
       APP.raw.targetCol = $("targetSelect").value;
       if (APP.raw.targetCol) APP.setup.excluded.delete(APP.raw.targetCol);
       recomputeColumnMeta();
@@ -7231,26 +7556,33 @@ raise NotImplementedError(
     });
 
     $("taskMode").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.taskMode = $("taskMode").value;
       syncSetupUI();
       renderStateChips();
       applyAutoTrainDefaults();
+      renderTargetPreview();
     });
 
     $("targetTransform").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.targetTransform = $("targetTransform").value;
       syncSetupUI();
+      renderTargetPreview();
     });
 
     $("maxRows").addEventListener("change", () => {
       APP.setup.maxRows = Math.floor(parseNum($("maxRows").value) || 0);
+      markSetupDirty();
       clearTrainingPreset();
       syncSetupUI();
       applyAutoTrainDefaults();
     });
     $("maxRows").addEventListener("input", clearTrainingPreset);
+    $("maxRows").addEventListener("input", markSetupDirty);
 
     $("splitStrategy").addEventListener("change", () => {
+      markSetupDirty();
       $("splitStrategy").dataset.userSet = "true";
       APP.setup.splitStrategy = $("splitStrategy").value || "random";
       syncSetupUI();
@@ -7258,36 +7590,42 @@ raise NotImplementedError(
     });
 
     $("splitDateCol").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.splitDateCol = $("splitDateCol").value;
       syncSetupUI();
       renderStateChips();
     });
 
     $("splitMethod").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.splitMethod = $("splitMethod").value;
       syncSetupUI();
       renderStateChips();
     });
 
     $("cutoffDate").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.cutoffDate = $("cutoffDate").value || "";
       syncSetupUI();
       renderStateChips();
     });
 
     $("testFrac").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.testFrac = Math.min(0.5, Math.max(0.05, parseNum($("testFrac").value) || 0.1));
       syncSetupUI();
       renderStateChips();
     });
 
     $("topNEnable").addEventListener("change", () => {
+      markSetupDirty();
       APP.setup.multiClass.topN.enabled = Boolean($("topNEnable").checked);
       syncAdvancedTargetUI();
       renderStateChips();
     });
 
     $("topNKeep").addEventListener("change", () => {
+      markSetupDirty();
       const v = Math.max(1, Math.floor(parseNum($("topNKeep").value) || 1));
       APP.setup.multiClass.topN.keep = v;
       $("topNKeep").value = String(v);
@@ -7306,6 +7644,7 @@ raise NotImplementedError(
     });
 
     $("applyDerivedTargetBtn").addEventListener("click", () => {
+      markSetupDirty();
       const dt = APP.setup.multiClass?.derivedTarget || null;
       if (dt) { dt.lastError = ""; dt.lastStatus = ""; }
       try {
@@ -7317,6 +7656,7 @@ raise NotImplementedError(
     });
 
     $("undoDerivedTargetBtn").addEventListener("click", () => {
+      markSetupDirty();
       undoDerivedTarget();
       syncAdvancedTargetUI();
       renderStateChips();
@@ -7345,12 +7685,19 @@ raise NotImplementedError(
     }
     $("maxFeaturesMode").addEventListener("change", () => {
       clearTrainingPreset();
+      markSetupDirty();
       syncMaxFeaturesUi();
     });
     $("maxFeaturesValue").addEventListener("input", clearTrainingPreset);
     $("nEstimators").addEventListener("input", clearTrainingPreset);
     $("maxDepth").addEventListener("input", clearTrainingPreset);
     $("minNumSamples").addEventListener("input", clearTrainingPreset);
+    $("maxFeaturesValue").addEventListener("input", markSetupDirty);
+    $("nEstimators").addEventListener("input", markSetupDirty);
+    $("maxDepth").addEventListener("input", markSetupDirty);
+    $("minNumSamples").addEventListener("input", markSetupDirty);
+    $("seed").addEventListener("input", markSetupDirty);
+    $("replacement").addEventListener("change", markSetupDirty);
     markTrainSettingAsUserSet("maxFeaturesMode");
     markTrainSettingAsUserSet("maxFeaturesValue");
     markTrainSettingAsUserSet("maxDepth");
@@ -7370,6 +7717,7 @@ raise NotImplementedError(
     });
 
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
+    $("maxCard").addEventListener("input", markSetupDirty);
     $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {
       th.addEventListener("click", () => {
         const key = th.getAttribute("data-sort");

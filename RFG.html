@@ -741,6 +741,13 @@
 
         <div class="row" id="trainChips" style="margin-bottom:10px;"></div>
 
+        <div class="row" id="trainPresets" style="gap:8px;flex-wrap:wrap;align-items:center;">
+          <span class="muted2">Presets</span>
+          <button class="btn" data-train-preset="fast">Fast</button>
+          <button class="btn" data-train-preset="balanced">Balanced <span class="muted2">(recommended)</span></button>
+          <button class="btn" data-train-preset="thorough">Thorough</button>
+        </div>
+
         <details id="advancedTrainDetails" style="margin-top:12px;" open>
           <summary>Settings</summary>
           <div class="hr"></div>
@@ -793,7 +800,10 @@
           <div class="row">
             <div id="trainStatus" class="muted2"></div>
             <button class="btn danger" id="stopBtn" disabled>Stop</button>
-            <button class="btn primary" id="trainBtn" disabled>Train model</button>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+              <button class="btn primary" id="trainBtn" disabled>Train Random Forest</button>
+              <div class="muted2" style="font-size:12px;">Runs fully in your browser.</div>
+            </div>
           </div>
         </div>
       </section>
@@ -2831,6 +2841,60 @@
       if (!mfEl.dataset.userSet) mfEl.value = suggestedMf;
       if (!mdEl.dataset.userSet) mdEl.value = String(suggestedTree.maxDepth);
       if (!msEl.dataset.userSet) msEl.value = String(suggestedTree.minNumSamples);
+    }
+
+    const TRAIN_PRESETS = {
+      fast: {
+        label: "Fast",
+        values: {
+          nEstimators: 50,
+          maxDepth: 14,
+          minNumSamples: 20,
+          maxFeatures: "sqrt",
+        },
+      },
+      balanced: {
+        label: "Balanced",
+        values: {
+          nEstimators: 150,
+          maxDepth: 20,
+          minNumSamples: 10,
+          maxFeatures: "1.0",
+        },
+      },
+      thorough: {
+        label: "Thorough",
+        values: {
+          nEstimators: 400,
+          maxDepth: 24,
+          minNumSamples: 5,
+          maxFeatures: "1.0",
+        },
+      },
+    };
+
+    function applyTrainPreset(presetKey) {
+      const preset = TRAIN_PRESETS[presetKey];
+      if (!preset) return;
+
+      const setValue = (id, value) => {
+        const el = $(id);
+        if (!el) return;
+        el.value = String(value);
+      };
+      const clearUserSet = (id) => {
+        const el = $(id);
+        if (el && el.dataset.userSet) delete el.dataset.userSet;
+      };
+
+      setValue("nEstimators", preset.values.nEstimators);
+      setValue("maxDepth", preset.values.maxDepth);
+      setValue("minNumSamples", preset.values.minNumSamples);
+      setValue("maxFeatures", preset.values.maxFeatures);
+
+      ["nEstimators", "maxDepth", "minNumSamples", "maxFeatures"].forEach(clearUserSet);
+
+      showToast(`Applied preset: ${preset.label}`, "good");
     }
 
     function buildInverseMapping(mappingObj) {
@@ -5786,6 +5850,13 @@ function invertTargetIfNeeded(yPred, artifact){
     markTrainSettingAsUserSet("minNumSamples");
     markTrainSettingAsUserSet("derivedTargetColName");
     markTrainSettingAsUserSet("derivedTargetExpr");
+
+    document.querySelectorAll("[data-train-preset]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const presetKey = btn.dataset.trainPreset;
+        applyTrainPreset(presetKey);
+      });
+    });
 
     $("maxCard").addEventListener("input", scheduleTypingRefresh);
     $("reviewColumnsTable").querySelectorAll("th.sortable[data-sort]").forEach(th => {

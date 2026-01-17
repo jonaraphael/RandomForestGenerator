@@ -231,6 +231,18 @@
     .pill.bad {border-color:rgba(249,112,102,0.35);background:rgba(249,112,102,0.08);color:rgba(249,112,102,0.95)}
     .hr{height:1px;background:var(--border2);margin:12px 0}
 
+    .dataHealthList{display:grid;gap:8px}
+    .dataHealthItem{
+      display:flex;align-items:center;justify-content:space-between;
+      gap:12px;flex-wrap:wrap;
+      border:1px solid var(--border2);
+      background:rgba(255,255,255,0.02);
+      border-radius:12px;
+      padding:8px 10px;
+    }
+    .dataHealthItem .dataHealthText{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .dataHealthItem .dataHealthDesc{color:var(--muted2);font-size:12px;line-height:1.35}
+
     .drop{
       border:1px dashed rgba(234,240,255,0.22);
       background:rgba(255,255,255,0.03);
@@ -891,6 +903,17 @@
         <div class="hr"></div>
 
         <div id="resultsCallouts" class="grid" style="gap:10px;"></div>
+
+        <div class="hr"></div>
+
+        <div class="card" id="dataHealthCard">
+          <div class="row space" style="margin-bottom:6px;">
+            <div class="muted">Data health</div>
+            <span class="pill" id="dataHealthPill">—</span>
+          </div>
+          <div class="muted2" style="margin-bottom:8px;">Concise checks on dropped rows and risky columns.</div>
+          <div id="dataHealthList" class="dataHealthList"></div>
+        </div>
 
         <div class="hr"></div>
 
@@ -5380,6 +5403,173 @@
     // ----------------------------
     // Results rendering
     // ----------------------------
+    function renderDataHealth({ placeholder = false } = {}) {
+      const list = $("dataHealthList");
+      const pill = $("dataHealthPill");
+      if (!list || !pill) return;
+
+      if (placeholder || !APP.raw.columns.length) {
+        pill.className = "pill";
+        pill.textContent = "Pending";
+        list.innerHTML = `
+          <div class="dataHealthItem">
+            <div class="dataHealthText">
+              <span class="pill">Waiting for training</span>
+              <div class="dataHealthDesc">Run a training job to populate data health warnings.</div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const meta = APP.raw.colMeta || {};
+      const targetCol = APP.raw.targetCol;
+      const includedCols = APP.raw.columns.filter(c => c !== targetCol && meta[c]?.include);
+      const idLikeIncluded = includedCols.filter(c => meta[c]?.flags?.idLike).length;
+      const missingHigh = includedCols.filter(c => (meta[c]?.missingFrac ?? 0) > 0.4).length;
+      const droppedTarget = Number(APP.train.dropped?.unusableTargetRows || 0);
+      const droppedUnseen = Number(APP.train.dropped?.unseenTestLabels || 0);
+
+      const fmt = (v) => Number(v).toLocaleString();
+      const warnings = [];
+
+      if (droppedTarget > 0) {
+        warnings.push({
+          key: "droppedTarget",
+          pill: `Dropped target rows: ${fmt(droppedTarget)}`,
+          desc: "Rows missing/invalid target values were excluded before training.",
+          action: "increaseMaxRows",
+        });
+      }
+
+      if (droppedUnseen > 0) {
+        warnings.push({
+          key: "droppedUnseen",
+          pill: `Dropped unseen labels: ${fmt(droppedUnseen)}`,
+          desc: "Test rows with unseen labels were removed; stratified splits keep labels in train.",
+          action: "useStratified",
+        });
+      }
+
+      if (idLikeIncluded > 0) {
+        warnings.push({
+          key: "idLike",
+          pill: `ID-like columns included: ${fmt(idLikeIncluded)}`,
+          desc: "ID-like columns often leak or add noise to the model.",
+          action: "excludeIdLike",
+        });
+      }
+
+      if (missingHigh > 0) {
+        warnings.push({
+          key: "missingHigh",
+          pill: `High-missing columns (>40%): ${fmt(missingHigh)}`,
+          desc: "Heavy missingness can weaken signal; consider more rows or exclusions.",
+          action: "increaseMaxRows",
+        });
+      }
+
+      if (!warnings.length) {
+        pill.className = "pill good";
+        pill.textContent = "All clear";
+        list.innerHTML = `
+          <div class="dataHealthItem">
+            <div class="dataHealthText">
+              <span class="pill good">No warnings</span>
+              <div class="dataHealthDesc">No data health warnings detected for the current split.</div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      pill.className = "pill warn";
+      pill.textContent = `Warnings: ${warnings.length}`;
+
+      const stratifiedAvailable = Boolean($("splitStrategy")?.querySelector("option[value='stratified']"));
+      const maxRowsIsAll = APP.setup.maxRows === 0;
+
+      const actionConfig = {
+        excludeIdLike: {
+          label: "Exclude ID-like columns",
+          disabled: false,
+          title: "",
+        },
+        increaseMaxRows: {
+          label: "Increase maxRows",
+          disabled: maxRowsIsAll,
+          title: maxRowsIsAll ? "maxRows already includes all rows." : "",
+        },
+        useStratified: {
+          label: "Use stratified split",
+          disabled: !stratifiedAvailable,
+          title: stratifiedAvailable ? "" : "Stratified split is only available for classification.",
+        },
+      };
+
+      list.innerHTML = warnings.map(item => {
+        const action = actionConfig[item.action];
+        const actionAttrs = action?.disabled ? `disabled title="${escapeHtml(action.title)}"` : "";
+        const actionHtml = action
+          ? `<button class="btn ghost" data-health-action="${item.action}" ${actionAttrs}>${escapeHtml(action.label)}</button>`
+          : "";
+        return `
+          <div class="dataHealthItem" data-health-item="${escapeHtml(item.key)}">
+            <div class="dataHealthText">
+              <span class="pill warn">${escapeHtml(item.pill)}</span>
+              <div class="dataHealthDesc">${escapeHtml(item.desc)}</div>
+            </div>
+            ${actionHtml}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function handleDataHealthAction(action) {
+      if (!action) return;
+
+      if (action === "excludeIdLike") {
+        const meta = APP.raw.colMeta || {};
+        const targetCol = APP.raw.targetCol;
+        const cols = APP.raw.columns.filter(c => c !== targetCol && meta[c]?.include && meta[c]?.flags?.idLike);
+        if (!cols.length) {
+          showToast("No ID-like columns to exclude.", "warn");
+          return;
+        }
+        applyExclusionsAndRetrain({ dropCols: cols, reason: "Excluded ID-like columns" });
+        return;
+      }
+
+      if (action === "increaseMaxRows") {
+        if (APP.setup.maxRows === 0) {
+          showToast("maxRows already includes all rows.", "good");
+          return;
+        }
+        APP.setup.maxRows = 0;
+        $("maxRows").value = "0";
+        syncSetupUI();
+        applyAutoTrainDefaults();
+        renderStateChips();
+        gotoStep(1);
+        return;
+      }
+
+      if (action === "useStratified") {
+        const splitSel = $("splitStrategy");
+        const hasStratified = Boolean(splitSel?.querySelector("option[value='stratified']"));
+        if (!splitSel || !hasStratified) {
+          showToast("Stratified split is only available for classification.", "warn");
+          return;
+        }
+        splitSel.value = "stratified";
+        splitSel.dataset.userSet = "true";
+        APP.setup.splitStrategy = "stratified";
+        syncSetupUI();
+        renderStateChips();
+        gotoStep(1);
+      }
+    }
+
     function renderShiftSection() {
       const shift = APP.train.shift;
       const isRunning = Boolean(shift && shift.status === "running");
@@ -5467,6 +5657,7 @@
       APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
       $("secondaryPlaceholder").classList.remove("hidden");
       $("fiChartPlaceholder").classList.remove("hidden");
+      renderDataHealth({ placeholder: true });
     }
 
     function renderResultsLivePartial() {
@@ -5513,6 +5704,8 @@
           `Dropped <span class="mono">${APP.train.dropped.unseenTestLabels}</span> test rows because their label never appeared in the training split (train-only label encoding).`
         );
       }
+
+      renderDataHealth();
 
       const hasPred = Array.isArray(APP.train.yPred) && APP.train.yPred.length;
       const hasFi = (Array.isArray(APP.train.fiBase) && APP.train.fiBase.length) || (Array.isArray(APP.train.fiDerived) && APP.train.fiDerived.length);
@@ -5627,6 +5820,8 @@
       if (cur?.pruneReason) {
         addCallout("", "Prune applied", escapeHtml(cur.pruneReason));
       }
+
+      renderDataHealth();
 
       if (task === "regression") {
         const yTrue = APP.train.yTest;
@@ -6732,6 +6927,15 @@ raise NotImplementedError(
     $("pruneUndoBtn").addEventListener("click", () => {
       undoLastPrune();
     });
+
+    if ($("dataHealthList")) {
+      $("dataHealthList").addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-health-action]");
+        if (!btn || btn.disabled) return;
+        const action = btn.getAttribute("data-health-action");
+        handleDataHealthAction(action);
+      });
+    }
 
     $("prevPage").addEventListener("click", () => { APP.ui.predPage = Math.max(0, APP.ui.predPage - 1); renderPredTable(); });
     $("nextPage").addEventListener("click", () => { APP.ui.predPage = APP.ui.predPage + 1; renderPredTable(); });

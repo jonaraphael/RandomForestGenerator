@@ -362,6 +362,17 @@
     .kpi .big{font-size:22px;font-weight:650;letter-spacing:0.2px;margin-top:6px}
     .kpi .lbl{color:var(--muted);font-size:12px}
     .kpi .small{color:var(--muted);font-size:12px;margin-top:8px}
+    .kpiRow{
+      display:grid;
+      grid-template-columns: 1fr 320px;
+      gap:12px;
+      align-items:start;
+    }
+    .kpiRow > *{min-width:0}
+    .kpiTrendChart{height:44px}
+    @media(max-width:720px){
+      .kpiRow{grid-template-columns:1fr}
+    }
 
     .groupBox{
       border:1px solid var(--border2);
@@ -525,6 +536,7 @@
       width: 100%;
       height: 320px;
     }
+    .chartBox.kpiTrendChart{height:100px}
     .chartPlaceholder{
       position:absolute;
       inset:0;
@@ -900,6 +912,19 @@
                     </div>
                   </div>
 
+                  <div class="two" style="margin-top:10px;">
+                    <div class="field">
+                      <label for="earlyStopPatience" title="Optional: stop training when the test metric (RMSE/Accuracy) has not improved for this many consecutive trees. Use 0 to disable.">Early stop patience (trees)</label>
+                      <input id="earlyStopPatience" type="number" min="0" step="1" value="0" />
+                      <div class="muted2">0 disables; e.g. 10 stops after 10 trees without improvement.</div>
+                    </div>
+                    <div class="field">
+                      <div class="muted2" style="margin-top:22px;">
+                        Tip: if the curve flattens, more trees may have diminishing returns.
+                      </div>
+                    </div>
+                  </div>
+
                   <div class="muted2" style="margin-top:10px;">
                     Defaults follow common best practice for tabular baselines: enough trees, feature subsampling, row bagging, and mild tree limits for speed.
                   </div>
@@ -973,9 +998,20 @@
         <div id="resultsOverview" class="resultsTabPanel">
           <div class="resultsTopGrid">
             <div class="kpi">
-              <div class="lbl" id="primaryMetricLabel">—</div>
-              <div class="big mono" id="primaryMetricValue">—</div>
-              <div class="small" id="primaryMetricSub">—</div>
+              <div class="kpiRow">
+                <div>
+                  <div class="lbl" id="primaryMetricLabel">—</div>
+                  <div class="big mono" id="primaryMetricValue">—</div>
+                  <div class="small" id="primaryMetricSub">—</div>
+                </div>
+                <div>
+                  <div class="chartBox kpiTrendChart">
+                    <canvas id="metricTrendChart"></canvas>
+                    <div id="metricTrendPlaceholder" class="chartPlaceholder hidden"><span class="spinner"></span> Waiting for training…</div>
+                  </div>
+                </div>
+              </div>
+              <div class="muted2 hidden" id="earlyStopSuggest" style="margin-top:8px;">—</div>
             </div>
             <div class="callout hidden" id="resultsSidePanel">
               <div style="font-weight:650;margin-bottom:6px;" id="resultsSideTitle">—</div>
@@ -1296,6 +1332,7 @@
         yTest: [],
         yPred: [],
         yPredLabel: [],
+        metricTrend: { points: [], betterIsLower: false, label: "", best: null, bestTree: 0, noImprove: 0 },
         err: [],
         absErr: [],
         uncertainty: null,
@@ -1316,6 +1353,7 @@
             secondary: null,
             shift: null,
             errUnc: null,
+            metricTrend: null,
             targetPreview: null,
             timeCutoff: null,
           },
@@ -1731,6 +1769,7 @@
       APP.train.yTest = [];
       APP.train.yPred = [];
       APP.train.yPredLabel = [];
+      APP.train.metricTrend = { points: [], betterIsLower: false, label: "", best: null, bestTree: 0, noImprove: 0 };
       APP.train.err = [];
       APP.train.absErr = [];
       APP.train.uncertainty = null;
@@ -1744,14 +1783,14 @@
       APP.train.fiBase = [];
       APP.train.shift = null;
 
-        APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
-        APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
-        APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
-        APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
-        APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
-        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
-        APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
-      }
+      APP.ui.charts.fi = destroyChart(APP.ui.charts.fi);
+      APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
+      APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
+      APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+      APP.ui.charts.metricTrend = destroyChart(APP.ui.charts.metricTrend);
+      APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
+      APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
+    }
 
     function downloadBlob(blob, filename) {
       const url = URL.createObjectURL(blob);
@@ -4660,6 +4699,197 @@
       return null;
     }
 
+    function metricTrendBetterIsLower(task) {
+      return task === "regression";
+    }
+
+    function metricTrendLabel(task) {
+      return (task === "regression") ? "RMSE" : "Accuracy";
+    }
+
+    function resetMetricTrend(task) {
+      APP.train.metricTrend = {
+        points: [],
+        betterIsLower: metricTrendBetterIsLower(task),
+        label: metricTrendLabel(task),
+        best: null,
+        bestTree: 0,
+        noImprove: 0,
+      };
+    }
+
+    function appendMetricTrendPoint(tree, metric) {
+      const t = Math.max(0, Math.floor(Number(tree) || 0));
+      const m = Number(metric);
+      if (!Number.isFinite(t) || t <= 0) return;
+      if (!Number.isFinite(m)) return;
+
+      const mt = APP.train.metricTrend || null;
+      if (!mt || !Array.isArray(mt.points)) return;
+
+      const last = mt.points.length ? mt.points[mt.points.length - 1] : null;
+      if (last && last.x === t) return;
+
+      mt.points.push({ x: t, y: m });
+
+      const EPS = 1e-12;
+      if (mt.best === null || mt.best === undefined || !Number.isFinite(Number(mt.best))) {
+        mt.best = m;
+        mt.bestTree = t;
+        mt.noImprove = 0;
+        return;
+      }
+
+      const best = Number(mt.best);
+      const improved = mt.betterIsLower ? (m < (best - EPS)) : (m > (best + EPS));
+      if (improved) {
+        mt.best = m;
+        mt.bestTree = t;
+        mt.noImprove = 0;
+      } else {
+        mt.noImprove = Math.max(0, Math.floor(Number(mt.noImprove) || 0)) + 1;
+      }
+    }
+
+    function metricTrendYDomain(values, task) {
+      const ys = (values || []).filter(v => Number.isFinite(Number(v))).map(v => Number(v));
+      if (!ys.length) return { min: 0, max: 1 };
+      let min = Math.min(...ys);
+      let max = Math.max(...ys);
+      const span = Math.max(0, max - min);
+      let pad = span * 0.10;
+      if (!Number.isFinite(pad) || pad <= 0) pad = Math.max(1e-6, Math.abs(min) * 0.05, 1e-3);
+      min -= pad;
+      max += pad;
+      if (task === "classification") {
+        min = Math.max(-0.05, min);
+        max = Math.min(1.05, max);
+      }
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return { min: 0, max: 1 };
+      return { min, max };
+    }
+
+    function metricTrendXDomain(lastX) {
+      const x = Math.max(0, Math.floor(Number(lastX) || 0));
+      if (x <= 1) return { min: 0, max: 2 };
+      const pad = Math.max(1, Math.ceil(x * 0.05));
+      return { min: 0, max: x + pad };
+    }
+
+    function renderMetricTrendChart() {
+      const canvas = $("metricTrendChart");
+      const placeholder = $("metricTrendPlaceholder");
+      if (!canvas || !placeholder || !window.Chart) return;
+
+      const task = APP.train.pipeline?.task || null;
+      const mt = APP.train.metricTrend || null;
+      const pts = Array.isArray(mt?.points) ? mt.points : [];
+
+      if (!task || !pts.length) {
+        placeholder.classList.remove("hidden");
+        APP.ui.charts.metricTrend = destroyChart(APP.ui.charts.metricTrend);
+        return;
+      }
+
+      placeholder.classList.add("hidden");
+
+      const yValues = pts.map(p => p.y);
+      const yDom = metricTrendYDomain(yValues, task);
+      const xDom = metricTrendXDomain(pts[pts.length - 1]?.x);
+
+      const data = pts.map(p => ({ x: p.x, y: p.y }));
+      const label = mt?.label || metricTrendLabel(task);
+
+      if (!APP.ui.charts.metricTrend) {
+        const ctx = canvas.getContext("2d");
+        APP.ui.charts.metricTrend = new Chart(ctx, {
+          type: "line",
+          data: {
+            datasets: [{
+              label,
+              data,
+              parsing: false,
+              borderColor: "rgba(139,92,246,0.95)",
+              backgroundColor: "rgba(139,92,246,0.18)",
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.15,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${label}: ${formatNum(ctx.parsed.y, 6)}`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                type: "linear",
+                min: xDom.min,
+                max: xDom.max,
+                title: { display: true, text: "trees", color: "rgba(234,240,255,0.75)" },
+                ticks: { color: "rgba(234,240,255,0.75)" },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+              y: {
+                min: yDom.min,
+                max: yDom.max,
+                title: { display: true, text: label, color: "rgba(234,240,255,0.75)" },
+                ticks: { color: "rgba(234,240,255,0.75)" },
+                grid: { color: "rgba(234,240,255,0.08)" },
+              },
+            },
+          },
+        });
+        return;
+      }
+
+      const ch = APP.ui.charts.metricTrend;
+      ch.data.datasets[0].data = data;
+      ch.options.scales.x.min = xDom.min;
+      ch.options.scales.x.max = xDom.max;
+      ch.options.scales.y.min = yDom.min;
+      ch.options.scales.y.max = yDom.max;
+      ch.update("none");
+    }
+
+    function renderEarlyStopSuggest() {
+      const el = $("earlyStopSuggest");
+      if (!el) return;
+      const task = APP.train.pipeline?.task || null;
+      const mt = APP.train.metricTrend || null;
+      if (!task || !mt || !Array.isArray(mt.points) || !mt.points.length) {
+        el.classList.add("hidden");
+        el.textContent = "—";
+        return;
+      }
+
+      const noImprove = Math.max(0, Math.floor(mt.noImprove || 0));
+      const best = mt.best;
+      const bestTree = Math.max(0, Math.floor(mt.bestTree || 0));
+      if (noImprove < 10 || best === null || best === undefined) {
+        el.classList.add("hidden");
+        el.textContent = "—";
+        return;
+      }
+
+      const patience = Math.max(0, Math.floor(parseNum($("earlyStopPatience")?.value) || 0));
+      const label = mt.label || metricTrendLabel(task);
+      const bestTxt = Number.isFinite(Number(best)) ? formatNum(Number(best), 6) : String(best);
+      const patTxt = patience ? ` (auto-stop at ${patience})` : "";
+
+      el.classList.remove("hidden");
+      el.innerHTML =
+        `<span class="pill warn">Suggestion</span> ` +
+        `<span class="muted2">No improvement in the last <span class="mono">${noImprove}</span> trees. Best ${escapeHtml(label)}=<span class="mono">${escapeHtml(bestTxt)}</span> at tree <span class="mono">${bestTree}</span>. Consider early stopping${patTxt}.</span>`;
+    }
+
     function clearSecondaryViz() {
       APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
       const m = $("secondaryMatrix");
@@ -5795,6 +6025,7 @@
           maxFeaturesValue: $("maxFeaturesValue")?.value ?? "",
           maxDepth: $("maxDepth")?.value ?? "",
           minNumSamples: $("minNumSamples")?.value ?? "",
+          earlyStopPatience: $("earlyStopPatience")?.value ?? "",
         },
         trainingPreset: APP.ui.trainingPreset || "",
       };
@@ -6398,6 +6629,10 @@
         $("minNumSamples").value = String(t.minNumSamples);
         $("minNumSamples").dataset.userSet = "1";
       }
+      if ($("earlyStopPatience") && t.earlyStopPatience !== undefined) {
+        $("earlyStopPatience").value = String(Math.max(0, Math.floor(Number(t.earlyStopPatience) || 0)));
+        $("earlyStopPatience").dataset.userSet = "1";
+      }
       syncMaxFeaturesUi();
 
       APP.ui.trainingPreset = snap.trainingPreset || "";
@@ -6516,10 +6751,40 @@
         const ytestRaw = (pipeline.task === "regression" && transform === "log1p")
           ? ytest.map(v => Math.expm1(v))
           : ytest.slice();
+        const ytestMetric = (task === "classification")
+          ? ytestRaw.map(v => Number(v))
+          : ytestRaw;
+
+        const XtestMatrix = Matrix.checkMatrix(Xtest);
+        let regSumPred = null;
+        let clsCountsDense = null;
+        let clsCountsSparse = null;
+        let clsMode = null;
+        let clsModeCount = null;
+        let clsCorrect = 0;
+        let clsNumClasses = 0;
+        if (task === "regression") {
+          regSumPred = new Float64Array(ytestRaw.length);
+        } else {
+          clsNumClasses = Math.max(2, Math.floor(pipeline.target.numClasses || 2));
+          const useDense = (clsNumClasses <= 512) && ((ytestRaw.length * clsNumClasses) <= 2_000_000);
+          clsMode = new Int32Array(ytestRaw.length);
+          clsModeCount = new Uint16Array(ytestRaw.length);
+          clsMode.fill(-1);
+          if (useDense) {
+            clsCountsDense = new Uint16Array(ytestRaw.length * clsNumClasses);
+          } else {
+            clsCountsSparse = Array.from({ length: ytestRaw.length }, () => new Map());
+          }
+          clsCorrect = 0;
+        }
         APP.train.yTest = ytestRaw;
         APP.train.yPred = [];
         APP.train.fiDerived = [];
         APP.train.fiBase = [];
+        resetMetricTrend(task);
+        renderMetricTrendChart();
+        renderEarlyStopSuggest();
 
         const LIVE_MIN_MS = 2000;
         let liveLastMs = performance.now();
@@ -6544,14 +6809,6 @@
             liveRefreshing = true;
             try {
               const trainedNow = Math.max(1, Math.floor(APP.ui.training.completedUnits || 1));
-              const ypredNow = withTemporaryTrainedEstimators(model, trainedNow, () => model.predict(Xtest));
-              const ypredRaw = (pipeline.task === "regression" && transform === "log1p")
-                ? ypredNow.map(v => Math.expm1(v))
-                : (pipeline.task === "regression")
-                  ? ypredNow.slice()
-                  : ypredNow.map(v => Number(v));
-
-              APP.train.yPred = ypredRaw;
 
               let fi = null;
               try { fi = withTemporaryTrainedEstimators(model, trainedNow, () => model.featureImportance()); } catch { fi = null; }
@@ -6584,6 +6841,94 @@
             $("trainStatus").innerHTML = trainingStatusHtml(task, completedUnits, totalUnits, APP.ui.training.startMs);
             updateTrainingCallout(task, completedUnits, totalUnits);
             queueLiveUpdate(false);
+
+            // Metric trend: record one point per trained tree (test metric).
+            try {
+              const trainedNow = Math.max(1, Math.floor(completedUnits || 1));
+              const treeIdx = trainedNow - 1;
+              const tree = model.estimators?.[treeIdx] || null;
+              const featIdx = model.indexes?.[treeIdx] || null;
+              if (!tree || !featIdx) return;
+
+              const Xsub = new MatrixColumnSelectionView(XtestMatrix, featIdx);
+              const predTree = tree.predict(Xsub);
+
+              let metric = null;
+              if (task === "regression") {
+                if (!regSumPred) regSumPred = new Float64Array(ytestRaw.length);
+                if (!APP.train.yPred.length) APP.train.yPred = new Array(ytestRaw.length);
+                let sse = 0;
+                for (let i = 0; i < ytestRaw.length; i++) {
+                  const p = Number(predTree[i]);
+                  regSumPred[i] += Number.isFinite(p) ? p : 0;
+                  const mean = regSumPred[i] / trainedNow;
+                  const ypredRaw = (pipeline.task === "regression" && transform === "log1p") ? Math.expm1(mean) : mean;
+                  APP.train.yPred[i] = ypredRaw;
+                  const e = Number(ypredRaw) - Number(ytestRaw[i]);
+                  sse += e * e;
+                }
+                metric = Math.sqrt(sse / Math.max(1, ytestRaw.length));
+              } else {
+                if (!clsMode || !clsModeCount) return;
+                if (!APP.train.yPred.length) APP.train.yPred = new Array(ytestRaw.length);
+
+                for (let i = 0; i < ytestRaw.length; i++) {
+                  const yt = ytestMetric[i];
+                  const p = Number(predTree[i]);
+                  if (!Number.isFinite(p)) continue;
+                  const cls = Math.floor(p);
+                  if (cls < 0 || cls >= clsNumClasses) continue;
+
+                  const prevMode = clsMode[i];
+                  const prevCorrect = (prevMode === yt);
+
+                  let newCount = 0;
+                  if (clsCountsDense) {
+                    const off = (i * clsNumClasses) + cls;
+                    newCount = ++clsCountsDense[off];
+                  } else if (clsCountsSparse) {
+                    const m = clsCountsSparse[i];
+                    const next = (m.get(cls) || 0) + 1;
+                    m.set(cls, next);
+                    newCount = next;
+                  } else {
+                    continue;
+                  }
+
+                  if (newCount > clsModeCount[i] || prevMode === -1) {
+                    clsModeCount[i] = newCount;
+                    clsMode[i] = cls;
+                    APP.train.yPred[i] = cls;
+                    const nowCorrect = (cls === yt);
+                    if (prevCorrect && !nowCorrect) clsCorrect--;
+                    else if (!prevCorrect && nowCorrect) clsCorrect++;
+                  }
+                }
+
+                metric = clsCorrect / Math.max(1, ytestRaw.length);
+              }
+
+              if (metric !== null && metric !== undefined) {
+                appendMetricTrendPoint(trainedNow, metric);
+              }
+
+              if (APP.step === 2) {
+                if (metric !== null && metric !== undefined) {
+                  $("primaryMetricLabel").textContent = (task === "regression") ? "Test RMSE" : "Test Accuracy";
+                  $("primaryMetricValue").textContent = Number.isFinite(Number(metric)) ? formatNum(Number(metric), 6) : "—";
+                }
+                renderMetricTrendChart();
+                renderEarlyStopSuggest();
+              }
+
+              const patience = Math.max(0, Math.floor(parseNum($("earlyStopPatience")?.value) || 0));
+              const mt = APP.train.metricTrend || null;
+              const noImprove = Math.max(0, Math.floor(mt?.noImprove || 0));
+              if (patience > 0 && noImprove >= patience && !APP.ui.training.stopRequested) {
+                showToast(`Early stopping: no improvement for ${patience} trees.`, "warn");
+                requestStopTraining();
+              }
+            } catch {}
           },
           signal: abortController.signal,
         });
@@ -6891,6 +7236,9 @@
       $("primaryMetricLabel").textContent = "Test metric";
       $("primaryMetricValue").textContent = "—";
       $("primaryMetricSub").textContent = "Training will start and update automatically.";
+      if ($("earlyStopSuggest")) $("earlyStopSuggest").classList.add("hidden");
+      APP.ui.charts.metricTrend = destroyChart(APP.ui.charts.metricTrend);
+      if ($("metricTrendPlaceholder")) $("metricTrendPlaceholder").classList.remove("hidden");
 
       const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
       const totalTxt = total ? `/${total}` : "";
@@ -6936,6 +7284,8 @@
       const total = Math.max(0, Math.floor(APP.ui.training.totalUnits || 0));
 
       renderResultsSidePanel(task);
+      renderMetricTrendChart();
+      renderEarlyStopSuggest();
 
       $("resultsCallouts").innerHTML = "";
       const addCallout = (cls, title, body) => {
@@ -6972,6 +7322,8 @@
         $("primaryMetricLabel").textContent = (task === "regression") ? "Test RMSE" : "Test Accuracy";
         $("primaryMetricValue").textContent = "—";
         $("primaryMetricSub").textContent = "Waiting for first live prediction…";
+        renderMetricTrendChart();
+        renderEarlyStopSuggest();
         $("secondaryChartTitle").textContent = (task === "regression") ? "Predicted vs true (scatter)" : "Confusion matrix (top classes)";
         $("secondaryChartPill").textContent = `trees=${trained}${total ? `/${total}` : ""}`;
         $("secondaryChartHint").textContent = "Updates periodically during training.";
@@ -7013,6 +7365,9 @@
         $("secondaryChartHint").textContent = "Updates periodically during training.";
         renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 15);
       }
+
+      renderMetricTrendChart();
+      renderEarlyStopSuggest();
 
       const mode = $("importanceMode").value;
       if (hasFi) {
@@ -7105,6 +7460,9 @@
         $("secondaryChartHint").textContent = "Rows are true labels, columns are predicted. Cell shading is row-normalized; diagonal highlighted. For many classes, we show only the most frequent.";
         renderConfusionMatrix(yTrue, yPred, pl.targetInvMapping, 15);
       }
+
+      renderMetricTrendChart();
+      renderEarlyStopSuggest();
 
       renderShiftSection();
 
@@ -7516,6 +7874,7 @@ raise NotImplementedError(
         yTest: [],
         yPred: [],
         yPredLabel: [],
+        metricTrend: { points: [], betterIsLower: false, label: "", best: null, bestTree: 0, noImprove: 0 },
         err: [],
         absErr: [],
         uncertainty: null,
@@ -7549,6 +7908,7 @@ raise NotImplementedError(
         APP.ui.charts.secondary = destroyChart(APP.ui.charts.secondary);
         APP.ui.charts.shift = destroyChart(APP.ui.charts.shift);
         APP.ui.charts.errUnc = destroyChart(APP.ui.charts.errUnc);
+        APP.ui.charts.metricTrend = destroyChart(APP.ui.charts.metricTrend);
         APP.ui.charts.targetPreview = destroyChart(APP.ui.charts.targetPreview);
         APP.ui.charts.timeCutoff = destroyChart(APP.ui.charts.timeCutoff);
 
@@ -7595,6 +7955,7 @@ raise NotImplementedError(
       $("maxDepth").value = "20";
       $("minNumSamples").value = "10";
       $("replacement").value = "false";
+      $("earlyStopPatience").value = "0";
         $("taskMode").value = "regression";
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";
@@ -7611,6 +7972,7 @@ raise NotImplementedError(
       if ($("maxFeaturesValue")) delete $("maxFeaturesValue").dataset.userSet;
       if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
       if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
+      if ($("earlyStopPatience")) delete $("earlyStopPatience").dataset.userSet;
       if ($("colFilterField")) $("colFilterField").classList.add("hidden");
       if ($("colFilter")) $("colFilter").value = "";
 
@@ -7651,6 +8013,7 @@ raise NotImplementedError(
         maxDepth: $("maxDepth")?.value || "",
         minNumSamples: $("minNumSamples")?.value || "",
         replacement: $("replacement").value || "false",
+        earlyStopPatience: Math.max(0, Math.floor(parseNum($("earlyStopPatience")?.value) || 0)),
         seed: $("seed").value,
       };
 
@@ -7686,6 +8049,7 @@ raise NotImplementedError(
       if ($("maxDepth")) $("maxDepth").value = String(prefs.maxDepth);
       if ($("minNumSamples")) $("minNumSamples").value = String(prefs.minNumSamples);
       $("replacement").value = String(prefs.replacement);
+      if ($("earlyStopPatience")) $("earlyStopPatience").value = String(prefs.earlyStopPatience);
       $("seed").value = prefs.seed;
     }
 
@@ -7855,6 +8219,20 @@ raise NotImplementedError(
           btn.setAttribute("aria-selected", isActive ? "true" : "false");
         }
         if (panel) panel.classList.toggle("hidden", !isActive);
+      });
+
+      requestAnimationFrame(() => {
+        try {
+          if (next === "overview") {
+            APP.ui.charts.metricTrend?.resize?.();
+            APP.ui.charts.fi?.resize?.();
+            APP.ui.charts.secondary?.resize?.();
+          } else if (next === "diagnostics") {
+            APP.ui.charts.shift?.resize?.();
+          } else if (next === "predictions") {
+            APP.ui.charts.errUnc?.resize?.();
+          }
+        } catch {}
       });
     }
 
@@ -8140,16 +8518,19 @@ raise NotImplementedError(
       $("nEstimators")?.addEventListener("input", clearTrainingPreset);
       $("maxDepth")?.addEventListener("input", clearTrainingPreset);
       $("minNumSamples")?.addEventListener("input", clearTrainingPreset);
+      $("earlyStopPatience")?.addEventListener("input", clearTrainingPreset);
       $("maxFeaturesValue")?.addEventListener("input", markSetupDirty);
       $("nEstimators")?.addEventListener("input", markSetupDirty);
       $("maxDepth")?.addEventListener("input", markSetupDirty);
       $("minNumSamples")?.addEventListener("input", markSetupDirty);
+      $("earlyStopPatience")?.addEventListener("input", markSetupDirty);
       $("seed")?.addEventListener("input", markSetupDirty);
       $("replacement")?.addEventListener("change", markSetupDirty);
       markTrainSettingAsUserSet("maxFeaturesMode");
       markTrainSettingAsUserSet("maxFeaturesValue");
       markTrainSettingAsUserSet("maxDepth");
       markTrainSettingAsUserSet("minNumSamples");
+      markTrainSettingAsUserSet("earlyStopPatience");
       markTrainSettingAsUserSet("derivedTargetColName");
       markTrainSettingAsUserSet("derivedTargetExpr");
 

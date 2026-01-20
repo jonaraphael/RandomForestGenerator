@@ -913,6 +913,28 @@
                     </div>
                   </div>
 
+                  <div class="two" style="margin-top:10px;">
+                    <div class="field">
+                      <label for="bestMetricSelect" title="Which validation metric defines the high-water-mark checkpoint (best epoch) and drives early stopping.">Best-model metric (high-water mark)</label>
+                      <select id="bestMetricSelect">
+                        <option value="auto" selected>Auto (RMSE for regression, Accuracy for classification)</option>
+                        <option value="rmse">RMSE (↓)</option>
+                        <option value="mae">MAE (↓)</option>
+                        <option value="r2">R² (↑)</option>
+                        <option value="accuracy">Accuracy (↑)</option>
+                        <option value="f1_macro">Macro-F1 (↑)</option>
+                        <option value="f1_micro">Micro-F1 (↑)</option>
+                        <option value="f1_class">Micro-F1 for one class (one-vs-rest) (↑)</option>
+                      </select>
+                      <div class="muted2">This controls best-epoch checkpointing and early stopping.</div>
+                    </div>
+                    <div class="field hidden" id="bestMetricClassWrap">
+                      <label for="bestMetricClass" title="Class to treat as positive for one-vs-rest micro-F1.">Class for micro-F1</label>
+                      <select id="bestMetricClass"></select>
+                      <div class="muted2">Only used when metric is “Micro-F1 for one class”.</div>
+                    </div>
+                  </div>
+
                   <div class="muted2" style="margin-top:10px;">
                     Defaults follow fastai-style tabular best practices: embeddings for categoricals, Normalize + batchnorm for continuous, dropout, and (optionally) 1cycle learning rate scheduling.
                   </div>
@@ -1361,6 +1383,7 @@
         yPred: [],
         yPredLabel: [],
         metricTrend: { points: [], betterIsLower: false, label: "", best: null, bestEpoch: 0, noImprove: 0 },
+        hwmCfg: null,
         err: [],
         absErr: [],
         uncertainty: null,
@@ -1715,6 +1738,63 @@
         f1Sum += f1;
       }
       return f1Sum / Math.max(1, numClasses);
+    }
+
+    function f1Micro(yTrue, yPred, numClasses) {
+      const k = Math.max(2, Math.floor(numClasses || 2));
+      const tp = new Array(k).fill(0);
+      const fp = new Array(k).fill(0);
+      const fn = new Array(k).fill(0);
+
+      for (let i = 0; i < yTrue.length; i++) {
+        const t = yTrue[i];
+        const p = yPred[i];
+        if (t === p) tp[t]++;
+        else { fp[p]++; fn[t]++; }
+      }
+
+      const TP = tp.reduce((a, v) => a + v, 0);
+      const FP = fp.reduce((a, v) => a + v, 0);
+      const FN = fn.reduce((a, v) => a + v, 0);
+      const prec = TP / Math.max(1, TP + FP);
+      const rec = TP / Math.max(1, TP + FN);
+      return (prec + rec) ? (2 * prec * rec) / (prec + rec) : 0;
+    }
+
+    function classificationMetrics(yTrue, yPred, numClasses) {
+      const k = Math.max(2, Math.floor(numClasses || 2));
+      const tp = new Array(k).fill(0);
+      const fp = new Array(k).fill(0);
+      const fn = new Array(k).fill(0);
+
+      for (let i = 0; i < yTrue.length; i++) {
+        const t = yTrue[i];
+        const p = yPred[i];
+        if (t === p) tp[t]++;
+        else { fp[p]++; fn[t]++; }
+      }
+
+      const TP = tp.reduce((a, v) => a + v, 0);
+      const FP = fp.reduce((a, v) => a + v, 0);
+      const FN = fn.reduce((a, v) => a + v, 0);
+
+      const acc = TP / Math.max(1, yTrue.length);
+      const microPrec = TP / Math.max(1, TP + FP);
+      const microRec = TP / Math.max(1, TP + FN);
+      const microF1 = (microPrec + microRec) ? (2 * microPrec * microRec) / (microPrec + microRec) : 0;
+
+      let macroF1 = 0;
+      const perClassF1 = new Array(k).fill(0);
+      for (let c = 0; c < k; c++) {
+        const prec = tp[c] / Math.max(1, tp[c] + fp[c]);
+        const rec = tp[c] / Math.max(1, tp[c] + fn[c]);
+        const f1 = (prec + rec) ? (2 * prec * rec) / (prec + rec) : 0;
+        perClassF1[c] = f1;
+        macroF1 += f1;
+      }
+      macroF1 = macroF1 / Math.max(1, k);
+
+      return { accuracy: acc, macroF1, microF1, perClassF1 };
     }
 
     function formatNum(x, digits = 6) {
@@ -2535,6 +2615,7 @@
           $("testFrac").disabled = !showAdv || !(splitModeAfter === "random" || (splitModeAfter === "time" && splitMethodAfter === "fraction") || (splitModeAfter === "time" && splitMethodAfter === "cutoff" && !cutoffAfter));
           updateSplitPreview();
           renderTargetPreview();
+          updateBestMetricUI();
         }
 
     // ----------------------------
@@ -4737,20 +4818,126 @@
       if (ch) { try { ch.destroy(); } catch {} }
       return null;
     }
+    function updateBestMetricUI() {
+      const metricSel = $("bestMetricSelect");
+      const wrap = $("bestMetricClassWrap");
+      const clsSel = $("bestMetricClass");
+      if (!metricSel || !wrap || !clsSel) return;
 
-    function metricTrendBetterIsLower(task) {
-      return task === "regression";
+      const targetCol = APP.raw.targetCol;
+      const hasTarget = Boolean(targetCol);
+      const task = hasTarget ? decideTaskFromTarget(APP.raw.rows, targetCol, APP.setup.taskMode, APP.raw.colMeta) : null;
+      const key = String(metricSel.value || "auto");
+
+      const wantsClass = (task === "classification") && (key === "f1_class");
+      wrap.classList.toggle("hidden", !wantsClass);
+      if (!wantsClass) return;
+
+      const info = computeCategoricalCounts(APP.raw.rows || [], targetCol, { maxSample: 8000, seed: 1337 });
+      const entries = sortedCountEntries(info.counts).slice(0, 50);
+      const cur = normStr(clsSel.value);
+
+      clsSel.innerHTML = entries.length
+        ? entries.map(([k, v]) => `<option value="${escapeHtml(String(k))}">${escapeHtml(String(k))} (${v})</option>`).join("")
+        : `<option value="">(no classes)</option>`;
+
+      if (cur && Array.from(clsSel.options).some(o => o.value === cur)) clsSel.value = cur;
     }
 
-    function metricTrendLabel(task) {
+    function resolveHighWaterMetricConfig(pipeline) {
+      const task = pipeline?.task || "regression";
+      const rawSel = String($("bestMetricSelect")?.value || "auto");
+      let key = (rawSel === "auto") ? ((task === "regression") ? "rmse" : "accuracy") : rawSel;
+
+      const regAllowed = new Set(["rmse", "mae", "r2"]);
+      const clsAllowed = new Set(["accuracy", "f1_macro", "f1_micro", "f1_class"]);
+      if (task === "regression" && !regAllowed.has(key)) key = "rmse";
+      if (task !== "regression" && !clsAllowed.has(key)) key = "accuracy";
+
+      const betterIsLower = (key === "rmse" || key === "mae");
+      let label = "";
+      let classLabel = null;
+      let classId = null;
+
+      if (key === "rmse") label = "RMSE";
+      else if (key === "mae") label = "MAE";
+      else if (key === "r2") label = "R²";
+      else if (key === "accuracy") label = "Accuracy";
+      else if (key === "f1_macro") label = "Macro-F1";
+      else if (key === "f1_micro") label = "Micro-F1";
+      else if (key === "f1_class") {
+        classLabel = normStr($("bestMetricClass")?.value);
+        if (!classLabel) {
+          const first = $("bestMetricClass")?.querySelector("option");
+          classLabel = first ? normStr(first.value) : "";
+        }
+        const mapping = pipeline?.target?.mapping || {};
+        const wanted = normStr(classLabel) || "#na#";
+        if (mapping[wanted] !== undefined) {
+          classId = mapping[wanted];
+          classLabel = wanted;
+        } else {
+          const rare = normStr(APP.setup.multiClass?.topN?.rareLabel) || "RARE";
+          classId = (mapping[rare] !== undefined) ? mapping[rare] : 0;
+          classLabel = (mapping[rare] !== undefined) ? rare : wanted;
+        }
+        label = `F1(${classLabel})`;
+      } else {
+        label = (task === "regression") ? "RMSE" : "Accuracy";
+      }
+
+      return { metricKey: key, label, betterIsLower, classLabel, classId };
+    }
+
+    function metricValueFromReport(report, cfg) {
+      if (!report || !cfg) return null;
+      const key = cfg.metricKey;
+      const num = (v) => {
+        const x = Number(v);
+        return Number.isFinite(x) ? x : null;
+      };
+
+      if (key === "rmse") return num(report.rmse);
+      if (key === "mae") return num(report.mae);
+      if (key === "r2") return num(report.r2);
+      if (key === "accuracy") return num(report.accuracy);
+      if (key === "f1_macro") return num(report.macroF1);
+      if (key === "f1_micro") return num(report.microF1);
+      if (key === "f1_class") {
+        const arr = report.perClassF1;
+        const id = cfg.classId;
+        if (!Array.isArray(arr)) return null;
+        const ix = Number(id);
+        if (!Number.isFinite(ix) || ix < 0 || ix >= arr.length) return null;
+        return num(arr[ix]);
+      }
+      return null;
+    }
+
+    function metricTrendBetterIsLower(task, metricKey) {
+      const k = metricKey || ((task === "regression") ? "rmse" : "accuracy");
+      return (k === "rmse" || k === "mae");
+    }
+
+    function metricTrendLabel(task, metricKey, classLabel) {
+      const k = metricKey || ((task === "regression") ? "rmse" : "accuracy");
+      if (k === "rmse") return "RMSE";
+      if (k === "mae") return "MAE";
+      if (k === "r2") return "R²";
+      if (k === "accuracy") return "Accuracy";
+      if (k === "f1_macro") return "Macro-F1";
+      if (k === "f1_micro") return "Micro-F1";
+      if (k === "f1_class") return classLabel ? `F1(${classLabel})` : "F1(class)";
       return (task === "regression") ? "RMSE" : "Accuracy";
     }
 
-    function resetMetricTrend(task) {
+    function resetMetricTrend(task, cfg) {
+      const key = cfg?.metricKey || ((task === "regression") ? "rmse" : "accuracy");
+      const label = cfg?.label || metricTrendLabel(task, key, cfg?.classLabel);
       APP.train.metricTrend = {
         points: [],
-        betterIsLower: metricTrendBetterIsLower(task),
-        label: metricTrendLabel(task),
+        betterIsLower: (cfg?.betterIsLower !== undefined) ? Boolean(cfg.betterIsLower) : metricTrendBetterIsLower(task, key),
+        label,
         best: null,
         bestEpoch: 0,
         noImprove: 0,
@@ -4758,6 +4945,7 @@
     }
 
     function appendMetricTrendPoint(epoch, metric) {
+
       const t = Math.max(0, Math.floor(Number(epoch) || 0));
       const m = Number(metric);
       if (!Number.isFinite(t) || t <= 0) return;
@@ -4837,7 +5025,7 @@
       const xDom = metricTrendXDomain(pts[pts.length - 1]?.x);
 
       const data = pts.map(p => ({ x: p.x, y: p.y }));
-      const label = mt?.label || metricTrendLabel(task);
+      const label = mt?.label || metricTrendLabel(task, APP.train.hwmCfg?.metricKey, APP.train.hwmCfg?.classLabel);
 
       if (!APP.ui.charts.metricTrend) {
         const ctx = canvas.getContext("2d");
@@ -4919,7 +5107,7 @@
       }
 
       const patience = Math.max(0, Math.floor(parseNum($("earlyStopPatience")?.value) || 0));
-      const label = mt.label || metricTrendLabel(task);
+      const label = mt.label || metricTrendLabel(task, APP.train.hwmCfg?.metricKey, APP.train.hwmCfg?.classLabel);
       const bestTxt = Number.isFinite(Number(best)) ? formatNum(Number(best), 6) : String(best);
       const patTxt = patience ? ` (auto-stop at ${patience})` : "";
 
@@ -6065,6 +6253,8 @@
           maxDepth: $("maxDepth")?.value ?? "",
           minNumSamples: $("minNumSamples")?.value ?? "",
           earlyStopPatience: $("earlyStopPatience")?.value ?? "",
+          bestMetricSelect: $("bestMetricSelect")?.value ?? "auto",
+          bestMetricClass: $("bestMetricClass")?.value ?? "",
         },
         trainingPreset: APP.ui.trainingPreset || "",
       };
@@ -6672,6 +6862,19 @@
         $("earlyStopPatience").value = String(Math.max(0, Math.floor(Number(t.earlyStopPatience) || 0)));
         $("earlyStopPatience").dataset.userSet = "1";
       }
+      if ($("bestMetricSelect") && t.bestMetricSelect !== undefined) {
+        $("bestMetricSelect").value = String(t.bestMetricSelect || "auto");
+        $("bestMetricSelect").dataset.userSet = "1";
+      }
+      updateBestMetricUI();
+      if ($("bestMetricClass") && t.bestMetricClass !== undefined) {
+        // bestMetricClass options depend on task/target; updateBestMetricUI() fills them.
+        const v = String(t.bestMetricClass || "");
+        if (v && Array.from($("bestMetricClass").options).some(o => o.value === v)) {
+          $("bestMetricClass").value = v;
+          $("bestMetricClass").dataset.userSet = "1";
+        }
+      }
       syncMaxFeaturesUi();
 
       APP.ui.trainingPreset = snap.trainingPreset || "";
@@ -6712,6 +6915,12 @@
 
       // Dispose prior TF.js model (GPU memory)
       try { APP.train.model?.dispose?.(); } catch {}
+
+      // Dispose any saved high-water-mark weights from a prior run (if any)
+      try { (APP.train.bestWeights || []).forEach(t => t.dispose()); } catch {}
+      APP.train.bestWeights = null;
+      APP.train.bestEpoch = 0;
+      APP.train.bestMetric = null;
 
       APP.ui.training.startMs = performance.now();
       APP.ui.training.completedUnits = 0;
@@ -6855,6 +7064,7 @@
         APP.train.splitMode = splitMode;
         APP.train.seed = seed;
 
+        const hwmCfg = resolveHighWaterMetricConfig(pipeline);
         APP.train.nnOptions = {
           epochs,
           batchSize,
@@ -6865,6 +7075,8 @@
           layers: nnLayers,
           oneCycle: useOneCycle,
           patience,
+          bestMetric: hwmCfg.metricKey,
+          bestMetricClass: hwmCfg.classLabel || null,
           mcDropoutSamples: 25,
         };
 
@@ -6885,7 +7097,12 @@
         APP.train.fiBase = [];
         APP.train.runSummary = null;
 
-        resetMetricTrend(pipeline.task);
+        APP.train.bestWeights = null;
+        APP.train.bestEpoch = 0;
+        APP.train.bestMetric = null;
+        APP.train.hwmCfg = hwmCfg;
+
+        resetMetricTrend(pipeline.task, APP.train.hwmCfg);
         renderMetricTrendChart();
         renderEarlyStopSuggest();
 
@@ -6922,7 +7139,7 @@
           }
 
           const out = [];
-          out.push(tf.tensor2d(contBuf, [nRows, nCont], "float32"));
+          if (nCont > 0) out.push(tf.tensor2d(contBuf, [nRows, nCont], "float32"));
           for (let i = 0; i < nCat; i++) {
             out.push(tf.tensor2d(catBufs[i], [nRows, 1], "int32"));
           }
@@ -6952,13 +7169,13 @@
         // --- Build model (fastai-style)
         function buildModel() {
           const inputs = [];
+          let cont = null;
 
-          // Continuous input
-          const contIn = tf.input({ shape: [nCont], dtype: "float32", name: "x_cont" });
-          inputs.push(contIn);
-          let cont = contIn;
+          // Continuous input only if present
           if (nCont > 0) {
-            cont = tf.layers.batchNormalization({ axis: -1, momentum: 0.1, epsilon: 1e-5, name: "bn_cont" }).apply(cont);
+            const contIn = tf.input({ shape: [nCont], dtype: "float32", name: "x_cont" });
+            inputs.push(contIn);
+            cont = tf.layers.batchNormalization({ axis: -1, momentum: 0.1, epsilon: 1e-5, name: "bn_cont" }).apply(contIn);
           }
 
           // Categorical embeddings
@@ -6976,7 +7193,7 @@
               const v = mapping[k];
               if (Number.isFinite(v)) card = Math.max(card, (v | 0) + 1);
             }
-            card = Math.max(card, 2); // at least {na, something}
+            card = Math.max(card, 2);
 
             const dim = Math.max(1, embSzRule(card));
             let e = tf.layers.embedding({ inputDim: card, outputDim: dim, embeddingsInitializer: "glorotUniform", name: `emb_${nmShort}` }).apply(inp);
@@ -6985,13 +7202,15 @@
           }
 
           // Concatenate
-          let x;
-          if (embOuts.length && nCont > 0) {
+          let x = null;
+          if (embOuts.length && cont) {
             x = tf.layers.concatenate({ axis: -1, name: "concat" }).apply([...embOuts, cont]);
           } else if (embOuts.length) {
             x = (embOuts.length === 1) ? embOuts[0] : tf.layers.concatenate({ axis: -1, name: "concat" }).apply(embOuts);
-          } else {
+          } else if (cont) {
             x = cont;
+          } else {
+            throw new Error("No input features selected (nCont==0 and nCat==0). Select at least one feature column.");
           }
 
           if (embedDropout > 0) {
@@ -7021,6 +7240,7 @@
 
           return tf.model({ inputs, outputs: out, name: "tabular_model" });
         }
+
 
         const model = buildModel();
 
@@ -7070,6 +7290,7 @@
         }
 
         // --- Live prediction helper
+        // --- Live prediction helper
         async function predictOnTest() {
           const predT = model.predict(xTest);
           const arr = await predT.array();
@@ -7090,7 +7311,12 @@
               APP.train.absErr[i] = Math.abs(e);
             }
 
-            return rmse(ytestRaw, ypredRaw);
+            return {
+              rmse: rmse(ytestRaw, ypredRaw),
+              mae: mae(ytestRaw, ypredRaw),
+              r2: r2(ytestRaw, ypredRaw),
+              rmsle: rmsle(ytestRaw, ypredRaw),
+            };
           } else {
             const ypred = arr.map(p => {
               let best = 0;
@@ -7108,7 +7334,8 @@
 
             const yT = ytestRaw.map(v => Number(v));
             const yP = ypred.map(v => Number(v));
-            return accuracy(yT, yP);
+            const k = pipeline.target.numClasses || 2;
+            return classificationMetrics(yT, yP, k);
           }
         }
 
@@ -7116,6 +7343,7 @@
         const stepsPerEpoch = Math.max(1, Math.ceil(Xtrain.length / batchSize));
         const totalSteps = stepsPerEpoch * epochs;
         let globalStep = 0;
+        if (useOneCycle) setOptLR(optimizer, oneCycleLR(0, totalSteps, maxLR));
 
         $("trainStatus").innerHTML = `<span class="spinner"></span> Training neural net…`;
         renderResultsLiveStart(pipeline.task);
@@ -7141,13 +7369,30 @@
             const epoch = epochIdx + 1;
             APP.ui.training.completedUnits = epoch;
 
-            let metricVal = null;
+            let report = null;
             try {
-              metricVal = await predictOnTest();
+              report = await predictOnTest();
             } catch {}
 
+            const metricVal = metricValueFromReport(report, APP.train.hwmCfg) ?? null;
             if (metricVal !== null) {
+              const mt = APP.train.metricTrend;
+              const prevBestEpoch = mt?.bestEpoch || 0;
+
               appendMetricTrendPoint(epoch, metricVal);
+
+              const newBestEpoch = mt?.bestEpoch || 0;
+              if (newBestEpoch === epoch && newBestEpoch !== prevBestEpoch) {
+                // High-water-mark checkpoint: capture weights at the best validation metric
+                try { (APP.train.bestWeights || []).forEach(t => t.dispose()); } catch {}
+                // NOTE: Do NOT dispose tensors returned by model.getWeights() directly.
+                // In tfjs-layers, those tensors may alias underlying LayerVariables (disposing them can break training).
+                // Use tidy + clone to safely snapshot weight values.
+                APP.train.bestWeights = tf.tidy(() => model.getWeights().map(w => w.clone()));
+                APP.train.bestEpoch = epoch;
+                APP.train.bestMetric = metricVal;
+              }
+
               renderMetricTrendChart();
               renderEarlyStopSuggest();
             }
@@ -7176,8 +7421,19 @@
           callbacks,
         });
 
-        // Final prediction (ensures APP.train.yPred is populated)
-        const finalMetric = await predictOnTest();
+        // Restore high-water-mark weights (best validation metric) for final outputs + export
+        if (Array.isArray(APP.train.bestWeights) && APP.train.bestWeights.length) {
+          let restored = false;
+          try { model.setWeights(APP.train.bestWeights); restored = true; } catch {}
+          // Best weights are a snapshot of raw tensors; once copied into model variables we can free them.
+          if (restored) {
+            try { APP.train.bestWeights.forEach(t => t.dispose()); } catch {}
+            APP.train.bestWeights = null;
+          }
+        }
+
+        // Final prediction (from high-water-mark model; ensures APP.train.yPred is populated)
+        await predictOnTest();
 
         // --- Feature importance (permutation, aggregated by base column)
         try {
@@ -7195,9 +7451,14 @@
           const yTs = sampleIdx.map(i => ytestRaw[i]);
 
           // Baseline on sample
-          const baseMetric = (pipeline.task === "regression")
-            ? rmse(yTs, sampleIdx.map(i => APP.train.yPred[i]))
-            : accuracy(yTs.map(v => Number(v)), sampleIdx.map(i => Number(APP.train.yPred[i])));
+          const hwmCfg = APP.train.hwmCfg || resolveHighWaterMetricConfig(pipeline);
+          const basePreds = sampleIdx.map(i => APP.train.yPred[i]);
+          const baseReport = (pipeline.task === "regression")
+            ? ({ rmse: rmse(yTs, basePreds), mae: mae(yTs, basePreds), r2: r2(yTs, basePreds), rmsle: rmsle(yTs, basePreds) })
+            : classificationMetrics(yTs.map(v => Number(v)), basePreds.map(v => Number(v)), pipeline.target.numClasses || 2);
+
+          const baseMetric = metricValueFromReport(baseReport, hwmCfg)
+            ?? ((pipeline.task === "regression") ? baseReport.rmse : baseReport.accuracy);
 
           const baseCols = (pipeline.includedColumns || []).slice();
           const fiBase = [];
@@ -7219,11 +7480,11 @@
             if (!dIdxs.length) { fiBase.push(0); continue; }
 
             // Permute as a *block* with a shared permutation for all derived features of this base column
-            const perm = sampleIdx.slice();
+            const perm = Array.from({ length: nRows }, (_, i) => i);
             shuffleInPlace(perm, rng);
             const Xp = Xs.map(row => row.slice());
             for (let r = 0; r < nRows; r++) {
-              const src = Xs[perm[r] % nRows];
+              const src = Xs[perm[r]];
               for (const j of dIdxs) {
                 Xp[r][j] = src[j];
               }
@@ -7235,22 +7496,26 @@
             const arr = await predT.array();
             predT.dispose();
             for (const t of xP) { try { t.dispose(); } catch {} }
-
-            let m = null;
+            let permMetric = null;
             if (pipeline.task === "regression") {
               const yp = arr.map(v => Number(Array.isArray(v) ? v[0] : v));
               const ypRaw = (pipeline.targetTransform === "log1p") ? yp.map(v => Math.expm1(v)) : yp;
-              m = rmse(yTs, ypRaw);
-              fiBase.push(Math.max(0, m - baseMetric));
+              const rep = { rmse: rmse(yTs, ypRaw), mae: mae(yTs, ypRaw), r2: r2(yTs, ypRaw), rmsle: rmsle(yTs, ypRaw) };
+              permMetric = metricValueFromReport(rep, hwmCfg);
+              if (permMetric === null || permMetric === undefined || !Number.isFinite(Number(permMetric))) permMetric = rep.rmse;
             } else {
               const yp = arr.map(p => {
                 let best = 0; let bestV = -Infinity;
                 for (let i = 0; i < p.length; i++) { const v = p[i]; if (v > bestV) { bestV=v; best=i; } }
                 return best;
               });
-              const accP = accuracy(yTs.map(v => Number(v)), yp.map(v => Number(v)));
-              fiBase.push(Math.max(0, baseMetric - accP));
+              const rep = classificationMetrics(yTs.map(v => Number(v)), yp.map(v => Number(v)), pipeline.target.numClasses || 2);
+              permMetric = metricValueFromReport(rep, hwmCfg);
+              if (permMetric === null || permMetric === undefined || !Number.isFinite(Number(permMetric))) permMetric = rep.accuracy;
             }
+
+            const drop = hwmCfg.betterIsLower ? (permMetric - baseMetric) : (baseMetric - permMetric);
+            fiBase.push(Math.max(0, drop));
 
             // Distribute base importance across derived features (simple attribution)
             const imp = fiBase[fiBase.length - 1] || 0;
@@ -7260,8 +7525,17 @@
             await yieldToBrowserPaint();
           }
 
-          APP.train.fiBase = fiBase;
-          APP.train.fiDerived = fiDerived;
+          // Convert to {name, imp} pairs (UI expects this shape)
+          const fiBasePairs = baseCols
+            .map((name, i) => ({ name, imp: Number.isFinite(fiBase[i]) ? fiBase[i] : 0 }))
+            .sort((a, b) => b.imp - a.imp);
+
+          const fiDerivedPairs = featureNames
+            .map((name, j) => ({ name, imp: Number.isFinite(fiDerived[j]) ? fiDerived[j] : 0 }))
+            .sort((a, b) => b.imp - a.imp);
+
+          APP.train.fiBase = fiBasePairs;
+          APP.train.fiDerived = fiDerivedPairs;
         } catch {}
 
         // Run summary (test only)
@@ -7289,6 +7563,9 @@
           includedCols: currentIncludedFeatureCols().length,
           excludedCols: APP.setup.excluded?.size || 0,
           pruneReason: APP.ui.pruneJustApplied ? (APP.ui.pruneUndoReason || "") : "",
+          bestEpoch: Math.max(0, Math.floor(Number(APP.train.bestEpoch || APP.train.metricTrend?.bestEpoch || 0))),
+          bestMetric: (APP.train.bestMetric !== null && APP.train.bestMetric !== undefined) ? Number(APP.train.bestMetric) : (Number.isFinite(Number(APP.train.metricTrend?.best)) ? Number(APP.train.metricTrend.best) : null),
+          bestMetricLabel: APP.train.metricTrend?.label || null,
         };
         APP.ui.pruneJustApplied = false;
         pushRunHistoryEntry();
@@ -7298,7 +7575,15 @@
         renderResults();
         gotoStep(2);
 
-        $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Neural net trained locally.</span>`;
+        const bestEp = Math.max(0, Math.floor(Number(APP.train.bestEpoch || APP.train.metricTrend?.bestEpoch || 0)));
+        const bestValRaw = (APP.train.bestMetric !== null && APP.train.bestMetric !== undefined) ? Number(APP.train.bestMetric) : Number(APP.train.metricTrend?.best);
+        const bestVal = Number.isFinite(bestValRaw) ? bestValRaw : null;
+        const bestLbl = APP.train.metricTrend?.label ? `best ${APP.train.metricTrend.label}` : ((pipeline.task === "regression") ? "best RMSE" : "best Acc");
+        const bestTxt = (bestEp > 0 && bestVal !== null)
+          ? ` <span class="muted2">(${bestLbl} <span class="mono">${formatNum(bestVal, 6)}</span> @ epoch <span class="mono">${bestEp}</span>)</span>`
+          : "";
+
+        $("trainStatus").innerHTML = `<span class="pill good">Done</span> <span class="muted2">Neural net trained locally.</span>${bestTxt}`;
         showToast("Training complete", "good");
         APP.ui.setupDirty = false;
         APP.ui.training.abortController = null;
@@ -7451,6 +7736,10 @@
         // Handle errors
         try { APP.train.model?.dispose?.(); } catch {}
         APP.train.model = null;
+        try { (APP.train.bestWeights || []).forEach(t => t.dispose()); } catch {}
+        APP.train.bestWeights = null;
+        APP.train.bestEpoch = 0;
+        APP.train.bestMetric = null;
         $("trainStatus").innerHTML = `<span class="pill bad">Error</span> <span class="muted2">${escapeHtml(err?.message || String(err))}</span>`;
         showToast(`Training error: ${err?.message || String(err)}`, "bad");
         APP.ui.training.abortController = null;
@@ -7892,7 +8181,7 @@ function dateParts(d){
   const is_quarter_end=(d.getMonth()===qEndMonth && d.getDate()===qEndDay)?1:0;
   const is_year_start=(d.getMonth()===0 && d.getDate()===1)?1:0;
   const is_year_end=(d.getMonth()===11 && d.getDate()===31)?1:0;
-  const elapsed=Math.floor(d.getTime()/1000);
+  const elapsed=d.getTime();
   return {year,month,week:isoWeekNumber(d),day,dayofweek,dayofyear,is_month_end,is_month_start,is_quarter_end,is_quarter_start,is_year_end,is_year_start,elapsed};
 }
 
@@ -7928,7 +8217,7 @@ function transformRow(row, artifact){
     const med = ((pre.date||{}).medianElapsed || {})[c];
     const d = parseDate(row[c]);
     const miss = !d;
-    const dd = miss ? new Date((Number.isFinite(med)?med:0) * 1000) : d;
+    const dd = miss ? new Date(Number.isFinite(med)?med:0) : d;
     const p = dateParts(dd);
     feats.push(p.year); feats.push(p.month); feats.push(p.week); feats.push(p.day);
     feats.push(p.dayofweek); feats.push(p.dayofyear);
@@ -7977,7 +8266,7 @@ async function predictOne(row, artifact, model){
 	  const catCols = (pre.categorical||{}).cols || [];
 	
 	  const xs = [];
-	  xs.push(tf.tensor2d([cont], [1, cont.length], "float32"));
+	  if(cont.length) xs.push(tf.tensor2d([cont], [1, cont.length], "float32"));
 	  for(let i=0;i<catCols.length;i++){
 	    xs.push(tf.tensor2d([[cats[i]]], [1,1], "int32"));
 	  }
@@ -8231,6 +8520,7 @@ raise NotImplementedError(
         yPred: [],
         yPredLabel: [],
         metricTrend: { points: [], betterIsLower: false, label: "", best: null, bestEpoch: 0, noImprove: 0 },
+        hwmCfg: null,
         err: [],
         absErr: [],
         uncertainty: null,
@@ -8312,6 +8602,8 @@ raise NotImplementedError(
       $("minNumSamples").value = "10";
       $("replacement").value = "false";
       $("earlyStopPatience").value = "0";
+      if ($("bestMetricSelect")) $("bestMetricSelect").value = "auto";
+      if ($("bestMetricClass")) $("bestMetricClass").innerHTML = "";
         $("taskMode").value = "regression";
       $("targetTransform").value = "none";
       $("splitMethod").value = "cutoff";
@@ -8329,6 +8621,8 @@ raise NotImplementedError(
       if ($("maxDepth")) delete $("maxDepth").dataset.userSet;
       if ($("minNumSamples")) delete $("minNumSamples").dataset.userSet;
       if ($("earlyStopPatience")) delete $("earlyStopPatience").dataset.userSet;
+      if ($("bestMetricSelect")) delete $("bestMetricSelect").dataset.userSet;
+      if ($("bestMetricClass")) delete $("bestMetricClass").dataset.userSet;
       if ($("colFilterField")) $("colFilterField").classList.add("hidden");
       if ($("colFilter")) $("colFilter").value = "";
 
@@ -8370,6 +8664,8 @@ raise NotImplementedError(
         minNumSamples: $("minNumSamples")?.value || "",
         replacement: $("replacement").value || "false",
         earlyStopPatience: Math.max(0, Math.floor(parseNum($("earlyStopPatience")?.value) || 0)),
+        bestMetricSelect: $("bestMetricSelect")?.value || "auto",
+        bestMetricClass: $("bestMetricClass")?.value || "",
         seed: $("seed").value,
       };
 
@@ -8406,6 +8702,12 @@ raise NotImplementedError(
       if ($("minNumSamples")) $("minNumSamples").value = String(prefs.minNumSamples);
       $("replacement").value = String(prefs.replacement);
       if ($("earlyStopPatience")) $("earlyStopPatience").value = String(prefs.earlyStopPatience);
+      if ($("bestMetricSelect")) $("bestMetricSelect").value = String(prefs.bestMetricSelect || "auto");
+      updateBestMetricUI();
+      if ($("bestMetricClass")) {
+        const v = String(prefs.bestMetricClass || "");
+        if (v && Array.from($("bestMetricClass").options).some(o => o.value === v)) $("bestMetricClass").value = v;
+      }
       $("seed").value = prefs.seed;
     }
 
@@ -8878,6 +9180,15 @@ raise NotImplementedError(
       $("maxDepth")?.addEventListener("input", clearTrainingPreset);
       $("minNumSamples")?.addEventListener("input", clearTrainingPreset);
       $("earlyStopPatience")?.addEventListener("input", clearTrainingPreset);
+      $("bestMetricSelect")?.addEventListener("change", () => {
+        clearTrainingPreset();
+        markSetupDirty();
+        updateBestMetricUI();
+      });
+      $("bestMetricClass")?.addEventListener("change", () => {
+        clearTrainingPreset();
+        markSetupDirty();
+      });
       $("maxFeaturesValue")?.addEventListener("input", markSetupDirty);
       $("nEstimators")?.addEventListener("input", markSetupDirty);
       $("maxDepth")?.addEventListener("input", markSetupDirty);
@@ -8890,6 +9201,8 @@ raise NotImplementedError(
       markTrainSettingAsUserSet("maxDepth");
       markTrainSettingAsUserSet("minNumSamples");
       markTrainSettingAsUserSet("earlyStopPatience");
+      markTrainSettingAsUserSet("bestMetricSelect");
+      markTrainSettingAsUserSet("bestMetricClass");
       markTrainSettingAsUserSet("derivedTargetColName");
       markTrainSettingAsUserSet("derivedTargetExpr");
 

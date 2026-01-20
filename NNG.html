@@ -938,8 +938,6 @@
                   <div class="muted2" style="margin-top:10px;">
                     Defaults follow fastai-style tabular best practices: embeddings for categoricals, Normalize + batchnorm for continuous, dropout, and (optionally) 1cycle learning rate scheduling.
                   </div>
-                </div>
-              </div>
 
                   <div class="hr" style="margin:12px 0;"></div>
                   <div class="muted2">Neural net (fastai-style): categorical embeddings + BN + dropout</div>
@@ -984,6 +982,8 @@
                       <option value="false">Constant LR</option>
                     </select>
                   </div>
+                </div>
+              </div>
 
               <div class="muted2" style="margin-top:10px;">
                 Hover over a setting name to see what it does.
@@ -6255,6 +6255,13 @@
           earlyStopPatience: $("earlyStopPatience")?.value ?? "",
           bestMetricSelect: $("bestMetricSelect")?.value ?? "auto",
           bestMetricClass: $("bestMetricClass")?.value ?? "",
+          nnLayers: $("nnLayers")?.value ?? "",
+          nnBatchSize: $("nnBatchSize")?.value ?? "",
+          nnLearningRate: $("nnLearningRate")?.value ?? "",
+          nnWeightDecay: $("nnWeightDecay")?.value ?? "",
+          nnDropout: $("nnDropout")?.value ?? "",
+          nnEmbedDropout: $("nnEmbedDropout")?.value ?? "",
+          nnOneCycle: $("nnOneCycle")?.value ?? "true",
         },
         trainingPreset: APP.ui.trainingPreset || "",
       };
@@ -6338,11 +6345,29 @@
         const oDelta = (Number.isFinite(oA) && Number.isFinite(oB)) ? (oB - oA) : null;
         const oDeltaTxt = (oDelta === null) ? "n/a" : `${oDelta >= 0 ? "+" : ""}${formatNum(oDelta, 6)}`;
 
+        const bestA = Number(prev.bestMetric);
+        const bestB = Number(cur.bestMetric);
+        const bestLblA = normStr(prev.bestMetricLabel);
+        const bestLblB = normStr(cur.bestMetricLabel);
+        const bestEpA = Math.max(0, Math.floor(Number(prev.bestEpoch || 0)));
+        const bestEpB = Math.max(0, Math.floor(Number(cur.bestEpoch || 0)));
+        let bestLine = "";
+        if (bestLblA && bestLblB && Number.isFinite(bestA) && Number.isFinite(bestB)) {
+          if (bestLblA === bestLblB) {
+            const bestDelta = bestB - bestA;
+            const bestDeltaTxt = `${bestDelta >= 0 ? "+" : ""}${formatNum(bestDelta, 6)}`;
+            bestLine = `<div style="margin-top:6px;">Best ${escapeHtml(bestLblB)}: <span class="mono">${escapeHtml(formatNum(bestB, 6))}</span>${bestEpB ? ` @ epoch <span class="mono">${escapeHtml(String(bestEpB))}</span>` : ""} (prev <span class="mono">${escapeHtml(formatNum(bestA, 6))}</span>${bestEpA ? ` @ epoch <span class="mono">${escapeHtml(String(bestEpA))}</span>` : ""}, Δ <span class="mono">${escapeHtml(bestDeltaTxt)}</span>)</div>`;
+          } else {
+            bestLine = `<div style="margin-top:6px;">Best metric: <span class="mono">${escapeHtml(bestLblB)}</span> <span class="mono">${escapeHtml(formatNum(bestB, 6))}</span>${bestEpB ? ` @ epoch <span class="mono">${escapeHtml(String(bestEpB))}</span>` : ""} (prev <span class="mono">${escapeHtml(bestLblA)}</span> <span class="mono">${escapeHtml(formatNum(bestA, 6))}</span>${bestEpA ? ` @ epoch <span class="mono">${escapeHtml(String(bestEpA))}</span>` : ""})</div>`;
+          }
+        }
+
         const body =
           `${escapeHtml(cur.test?.primaryLabel || "Test metric")}: <span class="mono">${escapeHtml(curTxt)}</span> (prev <span class="mono">${escapeHtml(prevTxt)}</span>, Δ <span class="mono">${escapeHtml(deltaTxt)}</span>)` +
           (prev.oob?.label && cur.oob?.label
             ? `<div style="margin-top:6px;">${escapeHtml(cur.oob.label)}: <span class="mono">${escapeHtml(Number.isFinite(oB) ? formatNum(oB, 6) : "n/a")}</span> (prev <span class="mono">${escapeHtml(Number.isFinite(oA) ? formatNum(oA, 6) : "n/a")}</span>, Δ <span class="mono">${escapeHtml(oDeltaTxt)}</span>)</div>`
             : "") +
+          bestLine +
           `<div style="margin-top:6px;">Columns: included <span class="mono">${cur.includedCols}</span> (prev <span class="mono">${prev.includedCols}</span>) · excluded <span class="mono">${cur.excludedCols}</span> (prev <span class="mono">${prev.excludedCols}</span>)</div>`;
 
         setResultsSidePanel({ visible: true, title: "Compare to previous run", bodyHtml: body, cls });
@@ -6632,6 +6657,14 @@
           ? `<span class="muted2">${escapeHtml(oob.label || "OOB")}: <span class="mono">${escapeHtml(formatNum(oob.value, 6))}</span> · ${escapeHtml(oob.sub || "")}</span>`
           : `<span class="muted2">OOB: —</span>`;
 
+        const best = h.runSummary || {};
+        const bestLbl = normStr(best.bestMetricLabel);
+        const bestValNum = Number(best.bestMetric);
+        const bestEpoch = Math.max(0, Math.floor(Number(best.bestEpoch || 0)));
+        const bestLine = (bestLbl && Number.isFinite(bestValNum))
+          ? `<span class="muted2">Best ${escapeHtml(bestLbl)}: <span class="mono">${escapeHtml(formatNum(bestValNum, 6))}</span>${bestEpoch ? ` @ epoch <span class="mono">${escapeHtml(String(bestEpoch))}</span>` : ""}</span>`
+          : "";
+
         const included = Array.isArray(h.includedCols) ? h.includedCols : [];
         const excluded = Array.isArray(h.excludedCols) ? h.excludedCols : [];
         const colTitleParts = [];
@@ -6652,6 +6685,7 @@
           <td>
             <div>${metricLine}</div>
             <div>${oobLine}</div>
+            ${bestLine ? `<div>${bestLine}</div>` : ""}
           </td>
           <td title="${colsTitle}">
             <div><span class="mono">${included.length}</span> included</div>
@@ -6876,6 +6910,37 @@
         }
       }
       syncMaxFeaturesUi();
+      if ($("nnLayers") && t.nnLayers !== undefined) {
+        $("nnLayers").value = String(t.nnLayers || "");
+        $("nnLayers").dataset.userSet = "1";
+      }
+      if ($("nnBatchSize") && t.nnBatchSize !== undefined) {
+        $("nnBatchSize").value = String(t.nnBatchSize || "");
+        $("nnBatchSize").dataset.userSet = "1";
+      }
+      if ($("nnLearningRate") && t.nnLearningRate !== undefined) {
+        $("nnLearningRate").value = String(t.nnLearningRate || "");
+        $("nnLearningRate").dataset.userSet = "1";
+      }
+      if ($("nnWeightDecay") && t.nnWeightDecay !== undefined) {
+        $("nnWeightDecay").value = String(t.nnWeightDecay || "");
+        $("nnWeightDecay").dataset.userSet = "1";
+      }
+      if ($("nnDropout") && t.nnDropout !== undefined) {
+        $("nnDropout").value = String(t.nnDropout || "");
+        $("nnDropout").dataset.userSet = "1";
+      }
+      if ($("nnEmbedDropout") && t.nnEmbedDropout !== undefined) {
+        $("nnEmbedDropout").value = String(t.nnEmbedDropout || "");
+        $("nnEmbedDropout").dataset.userSet = "1";
+      }
+      if ($("nnOneCycle") && t.nnOneCycle !== undefined) {
+        const v = String(t.nnOneCycle || "true");
+        if (v && Array.from($("nnOneCycle").options).some(o => o.value === v)) {
+          $("nnOneCycle").value = v;
+          $("nnOneCycle").dataset.userSet = "1";
+        }
+      }
 
       APP.ui.trainingPreset = snap.trainingPreset || "";
       renderTrainingPresetButtons();
@@ -7334,6 +7399,13 @@
 
             const yT = ytestRaw.map(v => Number(v));
             const yP = ypred.map(v => Number(v));
+            APP.train.err = [];
+            APP.train.absErr = [];
+            for (let i = 0; i < yT.length; i++) {
+              const e = (yT[i] === yP[i]) ? 0 : 1;
+              APP.train.err[i] = e;
+              APP.train.absErr[i] = e;
+            }
             const k = pipeline.target.numClasses || 2;
             return classificationMetrics(yT, yP, k);
           }
@@ -7566,6 +7638,9 @@
           bestEpoch: Math.max(0, Math.floor(Number(APP.train.bestEpoch || APP.train.metricTrend?.bestEpoch || 0))),
           bestMetric: (APP.train.bestMetric !== null && APP.train.bestMetric !== undefined) ? Number(APP.train.bestMetric) : (Number.isFinite(Number(APP.train.metricTrend?.best)) ? Number(APP.train.metricTrend.best) : null),
           bestMetricLabel: APP.train.metricTrend?.label || null,
+          bestMetricKey: APP.train.hwmCfg?.metricKey || null,
+          bestMetricBetterIsLower: Boolean(APP.train.hwmCfg?.betterIsLower),
+          bestMetricClassLabel: APP.train.hwmCfg?.classLabel || null,
         };
         APP.ui.pruneJustApplied = false;
         pushRunHistoryEntry();
@@ -8796,18 +8871,6 @@ raise NotImplementedError(
         showToast("Loaded sample: titanic.csv", "good");
       });
 
-      const dz = $("dropZone");
-      if (dz) {
-        dz.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add("dragover"); });
-        dz.addEventListener("dragleave", (e) => { e.stopPropagation(); dz.classList.remove("dragover"); });
-        dz.addEventListener("drop", (e) => {
-          e.preventDefault(); e.stopPropagation(); dz.classList.remove("dragover");
-          const f = e.dataTransfer.files && e.dataTransfer.files[0];
-          resetForNewFile();
-          handleFile(f);
-        });
-      }
-
       function isFileDragEvent(e) {
         const dt = e.dataTransfer;
         if (!dt) return false;
@@ -8822,6 +8885,20 @@ raise NotImplementedError(
         if (!el) return;
         if (visible) el.classList.remove("hidden");
         else el.classList.add("hidden");
+      }
+
+      const dz = $("dropZone");
+      if (dz) {
+        dz.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add("dragover"); });
+        dz.addEventListener("dragleave", (e) => { e.stopPropagation(); dz.classList.remove("dragover"); });
+        dz.addEventListener("drop", (e) => {
+          e.preventDefault(); e.stopPropagation(); dz.classList.remove("dragover");
+          globalDragDepth = 0;
+          setGlobalDropOverlayVisible(false);
+          const f = e.dataTransfer.files && e.dataTransfer.files[0];
+          resetForNewFile();
+          handleFile(f);
+        });
       }
 
       window.addEventListener("dragenter", (e) => {
@@ -9180,6 +9257,13 @@ raise NotImplementedError(
       $("maxDepth")?.addEventListener("input", clearTrainingPreset);
       $("minNumSamples")?.addEventListener("input", clearTrainingPreset);
       $("earlyStopPatience")?.addEventListener("input", clearTrainingPreset);
+      $("nnLayers")?.addEventListener("input", clearTrainingPreset);
+      $("nnBatchSize")?.addEventListener("input", clearTrainingPreset);
+      $("nnLearningRate")?.addEventListener("input", clearTrainingPreset);
+      $("nnWeightDecay")?.addEventListener("input", clearTrainingPreset);
+      $("nnDropout")?.addEventListener("input", clearTrainingPreset);
+      $("nnEmbedDropout")?.addEventListener("input", clearTrainingPreset);
+      $("nnOneCycle")?.addEventListener("change", clearTrainingPreset);
       $("bestMetricSelect")?.addEventListener("change", () => {
         clearTrainingPreset();
         markSetupDirty();
@@ -9194,6 +9278,13 @@ raise NotImplementedError(
       $("maxDepth")?.addEventListener("input", markSetupDirty);
       $("minNumSamples")?.addEventListener("input", markSetupDirty);
       $("earlyStopPatience")?.addEventListener("input", markSetupDirty);
+      $("nnLayers")?.addEventListener("input", markSetupDirty);
+      $("nnBatchSize")?.addEventListener("input", markSetupDirty);
+      $("nnLearningRate")?.addEventListener("input", markSetupDirty);
+      $("nnWeightDecay")?.addEventListener("input", markSetupDirty);
+      $("nnDropout")?.addEventListener("input", markSetupDirty);
+      $("nnEmbedDropout")?.addEventListener("input", markSetupDirty);
+      $("nnOneCycle")?.addEventListener("change", markSetupDirty);
       $("seed")?.addEventListener("input", markSetupDirty);
       $("replacement")?.addEventListener("change", markSetupDirty);
       markTrainSettingAsUserSet("maxFeaturesMode");
@@ -9203,6 +9294,13 @@ raise NotImplementedError(
       markTrainSettingAsUserSet("earlyStopPatience");
       markTrainSettingAsUserSet("bestMetricSelect");
       markTrainSettingAsUserSet("bestMetricClass");
+      markTrainSettingAsUserSet("nnLayers");
+      markTrainSettingAsUserSet("nnBatchSize");
+      markTrainSettingAsUserSet("nnLearningRate");
+      markTrainSettingAsUserSet("nnWeightDecay");
+      markTrainSettingAsUserSet("nnDropout");
+      markTrainSettingAsUserSet("nnEmbedDropout");
+      markTrainSettingAsUserSet("nnOneCycle");
       markTrainSettingAsUserSet("derivedTargetColName");
       markTrainSettingAsUserSet("derivedTargetExpr");
 

@@ -8138,18 +8138,6 @@ raise NotImplementedError(
         showToast("Loaded sample: titanic.csv", "good");
       });
 
-      const dz = $("dropZone");
-      if (dz) {
-        dz.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add("dragover"); });
-        dz.addEventListener("dragleave", (e) => { e.stopPropagation(); dz.classList.remove("dragover"); });
-        dz.addEventListener("drop", (e) => {
-          e.preventDefault(); e.stopPropagation(); dz.classList.remove("dragover");
-          const f = e.dataTransfer.files && e.dataTransfer.files[0];
-          resetForNewFile();
-          handleFile(f);
-        });
-      }
-
       function isFileDragEvent(e) {
         const dt = e.dataTransfer;
         if (!dt) return false;
@@ -8164,6 +8152,20 @@ raise NotImplementedError(
         if (!el) return;
         if (visible) el.classList.remove("hidden");
         else el.classList.add("hidden");
+      }
+
+      const dz = $("dropZone");
+      if (dz) {
+        dz.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add("dragover"); });
+        dz.addEventListener("dragleave", (e) => { e.stopPropagation(); dz.classList.remove("dragover"); });
+        dz.addEventListener("drop", (e) => {
+          e.preventDefault(); e.stopPropagation(); dz.classList.remove("dragover");
+          globalDragDepth = 0;
+          setGlobalDropOverlayVisible(false);
+          const f = e.dataTransfer.files && e.dataTransfer.files[0];
+          resetForNewFile();
+          handleFile(f);
+        });
       }
 
       window.addEventListener("dragenter", (e) => {

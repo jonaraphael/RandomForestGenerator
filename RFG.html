@@ -3432,7 +3432,7 @@
 
     function renderTrainingPresetButtons() {
       const preset = APP.ui.trainingPreset || "";
-      $("presetFastBtn")?.classList.toggle("active", preset === "fast");
+      $("presetFastBtn")?.classList.toggle("active",     preset === "fast");
       $("presetBalancedBtn")?.classList.toggle("active", preset === "balanced");
       $("presetThoroughBtn")?.classList.toggle("active", preset === "thorough");
     }
@@ -3500,41 +3500,14 @@
 
       if (key === "fast") {
         const mf = chooseFastMaxFeaturesSetting();
-        setTrainInputs({
-          maxRows: 100,
-          nEstimators: 50,
-          maxDepth: 14,
-          minNumSamples: 20,
-          maxFeaturesMode: mf.mode,
-          maxFeaturesValue: mf.value,
-        });
-        if (!silent) showToast("Preset applied: Fast", "good");
-        return;
-      }
-      if (key === "balanced") {
-        setTrainInputs({
-          maxRows: 1000,
-          nEstimators: 100,
-          maxDepth: 20,
-          minNumSamples: 10,
-          maxFeaturesMode: "all",
-          maxFeaturesValue: "",
-        });
-        if (!silent) showToast("Preset applied: Balanced", "good");
-        return;
-      }
-      if (key === "thorough") {
-        setTrainInputs({
-          maxRows: 0,
-          nEstimators: 400,
-          maxDepth: 24,
-          minNumSamples: 5,
-          maxFeaturesMode: "all",
-          maxFeaturesValue: "",
-        });
-        if (!silent) showToast("Preset applied: Thorough", "good");
-        return;
-      }
+        setTrainInputs({ maxRows: 100, nEstimators: 50, maxDepth: 14, minNumSamples: 20, maxFeaturesMode: mf.mode, maxFeaturesValue: mf.value });
+      } else if (key === "balanced") {
+        setTrainInputs({ maxRows: 1000, nEstimators: 100, maxDepth: 20, minNumSamples: 10, maxFeaturesMode: "all", maxFeaturesValue: "" });
+      } else if (key === "thorough") {
+        setTrainInputs({ maxRows: 0, nEstimators: 400, maxDepth: 24, minNumSamples: 5, maxFeaturesMode: "all", maxFeaturesValue: "" });
+      } else return;
+
+      if (!silent) showToast(`Preset applied: ${key[0].toUpperCase()}${key.slice(1)}`, "good");
     }
 
     function buildInverseMapping(mappingObj) {
@@ -7190,15 +7163,32 @@
         return;
       }
 
-      if (trainInfo?.stoppedEarly) {
-        $("trainStatus").innerHTML =
-          `<span class="spinner"></span> Training stopped early ` +
-          `<span class="muted2">(trees <span class="mono">${trainInfo.trainedEstimators}</span>/<span class="mono">${nEstimators}</span>). Scoring…</span>`;
-        await new Promise(r => setTimeout(r, 0));
-      }
+	      if (trainInfo?.stoppedEarly) {
+	        $("trainStatus").innerHTML =
+	          `<span class="spinner"></span> Training stopped early ` +
+	          `<span class="muted2">(trees <span class="mono">${trainInfo.trainedEstimators}</span>/<span class="mono">${nEstimators}</span>). Scoring…</span>`;
+	        await new Promise(r => setTimeout(r, 0));
+	      }
 
-      $("trainStatus").innerHTML = `<span class="spinner"></span> Scoring test split…`;
-      await new Promise(r => setTimeout(r, 0));
+	      const mt = APP.train.metricTrend || null;
+	      const bestTree = Math.max(0, Math.floor(Number(mt?.bestTree || 0)));
+	      const trainedTrees = Math.max(0, Math.floor(Number(trainInfo.trainedEstimators || 0)));
+	      const useTrees =
+	        (trainInfo?.stoppedEarly && bestTree > 0 && bestTree <= trainedTrees)
+	          ? bestTree
+	          : trainedTrees;
+
+	      if (useTrees > 0 && model && Number.isFinite(model.nEstimators) && model.nEstimators > useTrees) {
+	        model.estimators = Array.isArray(model.estimators) ? model.estimators.slice(0, useTrees) : model.estimators;
+	        model.indexes = Array.isArray(model.indexes) ? model.indexes.slice(0, useTrees) : model.indexes;
+	        model.nEstimators = useTrees;
+	      }
+	      if (model && Number.isFinite(model.nEstimators)) rfOptions.nEstimators = Math.max(1, Math.floor(model.nEstimators));
+
+	      $("trainStatus").innerHTML = (trainInfo?.stoppedEarly && useTrees > 0 && useTrees !== trainedTrees)
+	        ? `<span class="spinner"></span> Scoring best checkpoint… <span class="muted2">(best tree <span class="mono">${useTrees}</span>, trained <span class="mono">${trainedTrees}</span>)</span>`
+	        : `<span class="spinner"></span> Scoring test split…`;
+	      await new Promise(r => setTimeout(r, 0));
 
       let ypred;
       try {

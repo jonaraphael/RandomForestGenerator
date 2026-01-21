@@ -901,16 +901,16 @@
                     </div>
                   </div>
 
-	                  <div class="two" style="margin-top:10px;">
-	                    <div class="field">
-	                      <label for="earlyStopPatience" title="Optional: stop training when the test metric (RMSE/Accuracy) has not improved for this many consecutive epochs. Use 0 to disable.">Early stop patience (epochs)</label>
-	                      <input id="earlyStopPatience" type="number" min="0" step="1" value="0" />
-	                      <div class="muted2">0 disables. Suggested (preset): <span class="mono" id="earlyStopSuggested">—</span></div>
-	                    </div>
-	                    <div class="field">
-	                      <div class="muted2" style="margin-top:22px;">
-	                        Tip: if the curve flattens, more epochs may have diminishing returns.
-	                      </div>
+                  <div class="two" style="margin-top:10px;">
+                    <div class="field">
+                      <label for="earlyStopPatience" title="Optional: stop training when the test metric (RMSE/Accuracy) has not improved for this many consecutive epochs. Use 0 to disable.">Early stop patience (epochs)</label>
+                      <input id="earlyStopPatience" type="number" min="0" step="1" value="0" />
+                      <div class="muted2">0 disables. Suggested (preset): <span class="mono" id="earlyStopSuggested">—</span></div>
+                    </div>
+                    <div class="field">
+                      <div class="muted2" style="margin-top:22px;">
+                        Tip: if the curve flattens, more epochs may have diminishing returns.
+                      </div>
                     </div>
                   </div>
 
@@ -1409,42 +1409,42 @@
             targetPreview: null,
             timeCutoff: null,
           },
-	          chips: {
-	            order: [
-	              "file",
-	              "data",
-	              "maxRows",
-	              "target",
-	              "targetWarn",
-	              "task",
-	              "extrapolation",
-	              "split",
-	              "test",
-	              "typing",
-	              "maxCard",
-	            "topN",
-	            "derived",
-	            "excluded",
-	            "forced",
-	          ],
-	            items: {
-	              file: { label: "File", value: "", visible: false, kind: "", title: "", setByStep: null },
-	              data: { label: "Data", value: "", visible: false, kind: "", title: "", setByStep: null },
-	              maxRows: { label: "Max rows", value: "", visible: false, kind: "", title: "", setByStep: null },
-	              target: { label: "Target", value: "", visible: false, kind: "", title: "", setByStep: null },
-	              targetWarn: { label: "Target warn", value: "", visible: false, kind: "warn", title: "", setByStep: null },
-	              task: { label: "Task", value: "", visible: false, kind: "", title: "", setByStep: null },
-	              extrapolation: { label: "Extrapolation", value: "", visible: false, kind: "warn", title: "", setByStep: null },
-	              split: { label: "Split", value: "", visible: false, kind: "", title: "", setByStep: null },
-	              test: { label: "Test", value: "", visible: false, kind: "", title: "", setByStep: null },
-	              typing: { label: "Typing", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            maxCard: { label: "Categorical threshold", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            topN: { label: "Top N", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            derived: { label: "Derived", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            excluded: { label: "Excluded", value: "", visible: false, kind: "", title: "", setByStep: null },
-	            forced: { label: "Forced", value: "", visible: false, kind: "", title: "", setByStep: null },
-	          },
-	        },
+          chips: {
+            order: [
+              "file",
+              "data",
+              "maxRows",
+              "target",
+              "targetWarn",
+              "task",
+              "extrapolation",
+              "split",
+              "test",
+              "typing",
+              "maxCard",
+              "topN",
+              "derived",
+              "excluded",
+              "forced",
+            ],
+            items: {
+              file: { label: "File", value: "", visible: false, kind: "", title: "", setByStep: null },
+              data: { label: "Data", value: "", visible: false, kind: "", title: "", setByStep: null },
+              maxRows: { label: "Max rows", value: "", visible: false, kind: "", title: "", setByStep: null },
+              target: { label: "Target", value: "", visible: false, kind: "", title: "", setByStep: null },
+              targetWarn: { label: "Target warn", value: "", visible: false, kind: "warn", title: "", setByStep: null },
+              task: { label: "Task", value: "", visible: false, kind: "", title: "", setByStep: null },
+              extrapolation: { label: "Extrapolation", value: "", visible: false, kind: "warn", title: "", setByStep: null },
+              split: { label: "Split", value: "", visible: false, kind: "", title: "", setByStep: null },
+              test: { label: "Test", value: "", visible: false, kind: "", title: "", setByStep: null },
+              typing: { label: "Typing", value: "", visible: false, kind: "", title: "", setByStep: null },
+              maxCard: { label: "Categorical threshold", value: "", visible: false, kind: "", title: "", setByStep: null },
+              topN: { label: "Top N", value: "", visible: false, kind: "", title: "", setByStep: null },
+              derived: { label: "Derived", value: "", visible: false, kind: "", title: "", setByStep: null },
+              excluded: { label: "Excluded", value: "", visible: false, kind: "", title: "", setByStep: null },
+              forced: { label: "Forced", value: "", visible: false, kind: "", title: "", setByStep: null },
+            },
+          },
         training: {
           startMs: 0,
           totalUnits: 0,
@@ -3519,22 +3519,21 @@
       if (!msEl.dataset.userSet) msEl.value = String(suggestedTree.minNumSamples);
     }
 
-	    function renderTrainingPresetButtons() {
-	      const preset = APP.ui.trainingPreset || "";
-	      $("presetFastBtn")?.classList.toggle("active", preset === "fast");
-	      $("presetBalancedBtn")?.classList.toggle("active", preset === "balanced");
-	      $("presetThoroughBtn")?.classList.toggle("active", preset === "thorough");
-	      renderEarlyStopSuggestion();
-	      renderNNCriticalPills();
-	    }
+    function renderTrainingPresetButtons() {
+      const preset = APP.ui.trainingPreset || "";
+      $("presetFastBtn")?.classList.toggle("active",     preset === "fast");
+      $("presetBalancedBtn")?.classList.toggle("active", preset === "balanced");
+      $("presetThoroughBtn")?.classList.toggle("active", preset === "thorough");
+      renderEarlyStopSuggestion();
+      renderNNCriticalPills();
+    }
 
-	    function clearTrainingPreset() {
-	      if (!APP.ui.trainingPreset) return;
-	      APP.ui.trainingPreset = "";
-	      renderTrainingPresetButtons();
-	      renderEarlyStopSuggestion();
-	      renderStateChips();
-	    }
+    function clearTrainingPreset() {
+      if (!APP.ui.trainingPreset) return;
+      APP.ui.trainingPreset = "";
+      renderTrainingPresetButtons();
+      renderStateChips();
+    }
 
     function countIncludedFeatureTypes() {
       const meta = APP.raw.colMeta || {};
@@ -3756,66 +3755,65 @@
       return Math.max(1e-8, lr);
     }
 
-	    function recommendWeightDecay({ _nRowsUsed, _inputDimApprox, _presetKey }) {
-	      return 0;
-	    }
+    function recommendWeightDecay({ _nRowsUsed, _inputDimApprox, _presetKey }) {
+      return 0;
+    }
 
-	    function recommendEarlyStopPatience({ epochs, presetKey }) {
-	      void epochs;
-	      const key = String(presetKey || "").toLowerCase();
-	      if (key === "fast") return 5;
-	      if (key === "thorough") return 15;
-	      return 10;
-	    }
+    function recommendEarlyStopPatience({ epochs, presetKey }) {
+      void epochs;
+      const key = String(presetKey || "").toLowerCase();
+      if (key === "fast") return 5;
+      if (key === "thorough") return 15;
+      return 10;
+    }
 
-	    function renderNNCriticalPills() {
-	      const el = $("nnCriticalPills");
-	      if (!el) return;
-	      const hasData = Boolean(APP.raw.rows?.length && APP.raw.columns?.length);
-	      const hasTarget = Boolean(APP.raw.targetCol);
-	      if (!hasData || !hasTarget) {
-	        el.innerHTML = "";
-	        el.classList.add("hidden");
-	        return;
-	      }
+    function renderNNCriticalPills() {
+      const el = $("nnCriticalPills");
+      if (!el) return;
+      const hasData = Boolean(APP.raw.rows?.length && APP.raw.columns?.length);
+      const hasTarget = Boolean(APP.raw.targetCol);
+      if (!hasData || !hasTarget) {
+        el.innerHTML = "";
+        el.classList.add("hidden");
+        return;
+      }
 
-	      const preset = APP.ui.trainingPreset ? String(APP.ui.trainingPreset) : "manual";
+      const preset = APP.ui.trainingPreset ? String(APP.ui.trainingPreset) : "manual";
+      const epochs = Math.max(1, Math.floor(parseNum($("nEstimators")?.value) || 1));
+      const batch = Math.max(8, Math.floor(parseNum($("nnBatchSize")?.value) || 8));
+      const layers = normStr($("nnLayers")?.value || "") || "—";
+      const lr = Math.max(0, Number(parseNum($("nnLearningRate")?.value) || 0));
+      const dropout = Math.min(0.95, Math.max(0, Number(parseNum($("nnDropout")?.value) || 0)));
+      const embDropout = Math.min(0.95, Math.max(0, Number(parseNum($("nnEmbedDropout")?.value) || 0)));
+      const oneCycle = (($("nnOneCycle")?.value || "true") === "true");
 
-	      const epochs = Math.max(1, Math.floor(parseNum($("nEstimators")?.value) || 1));
-	      const batch = Math.max(8, Math.floor(parseNum($("nnBatchSize")?.value) || 8));
-	      const layers = normStr($("nnLayers")?.value || "") || "—";
-	      const lr = Math.max(0, Number(parseNum($("nnLearningRate")?.value) || 0));
-	      const dropout = Math.min(0.95, Math.max(0, Number(parseNum($("nnDropout")?.value) || 0)));
-	      const embDropout = Math.min(0.95, Math.max(0, Number(parseNum($("nnEmbedDropout")?.value) || 0)));
-	      const oneCycle = (($("nnOneCycle")?.value || "true") === "true");
+      const pills = [
+        { label: "Preset", value: preset },
+        { label: "Epochs", value: String(epochs) },
+        { label: "Batch", value: String(batch) },
+        { label: "Layers", value: layers },
+        { label: "LR", value: lr ? formatNum(lr, 6) : "—" },
+        { label: "Dropout", value: `d=${formatNum(dropout, 3)} · emb=${formatNum(embDropout, 3)}` },
+        { label: "Schedule", value: oneCycle ? "1cycle" : "constant" },
+      ];
 
-	      const pills = [
-	        { label: "Preset", value: preset },
-	        { label: "Epochs", value: String(epochs) },
-	        { label: "Batch", value: String(batch) },
-	        { label: "Layers", value: layers },
-	        { label: "LR", value: lr ? formatNum(lr, 6) : "—" },
-	        { label: "Dropout", value: `d=${formatNum(dropout, 3)} · emb=${formatNum(embDropout, 3)}` },
-	        { label: "Schedule", value: oneCycle ? "1cycle" : "constant" },
-	      ];
+      el.classList.remove("hidden");
+      el.innerHTML = pills.map(p =>
+        `<span class="pill">${escapeHtml(p.label)}: <span class="mono">${escapeHtml(p.value)}</span></span>`
+      ).join(" ");
+    }
 
-	      el.classList.remove("hidden");
-	      el.innerHTML = pills
-	        .map(p => `<span class="pill">${escapeHtml(p.label)}: <span class="mono">${escapeHtml(p.value)}</span></span>`)
-	        .join(" ");
-	    }
-
-	    function renderEarlyStopSuggestion({ suggested } = {}) {
-	      const el = $("earlyStopSuggested");
-	      if (!el) return;
-	      const presetKey = String(APP.ui.trainingPreset || "").toLowerCase();
-	      const hasPreset = (presetKey === "fast" || presetKey === "balanced" || presetKey === "thorough");
-	      if (!hasPreset) { el.textContent = "—"; return; }
-	      const v = (suggested !== undefined)
-	        ? Math.max(0, Math.floor(Number(suggested) || 0))
-	        : recommendEarlyStopPatience({ epochs: 0, presetKey });
-	      el.textContent = String(v);
-	    }
+    function renderEarlyStopSuggestion({ suggested } = {}) {
+      const el = $("earlyStopSuggested");
+      if (!el) return;
+      const presetKey = String(APP.ui.trainingPreset || "").toLowerCase();
+      const hasPreset = (presetKey === "fast" || presetKey === "balanced" || presetKey === "thorough");
+      if (!hasPreset) { el.textContent = "—"; return; }
+      const v = (suggested !== undefined)
+        ? Math.max(0, Math.floor(Number(suggested) || 0))
+        : recommendEarlyStopPatience({ epochs: 0, presetKey });
+      el.textContent = String(v);
+    }
 
     function recommendDropouts({ nRowsUsed, presetKey }) {
       const key = String(presetKey || "").toLowerCase();
@@ -3829,9 +3827,9 @@
       return { dropout, embedDropout };
     }
 
-	    function dynamicHyperparamsForPreset(presetKey) {
-	      const key = String(presetKey || "").toLowerCase();
-	      const testFrac = clamp(parseNum($("testFrac")?.value) || APP.setup.testFrac || 0.1, 0.05, 0.9);
+    function dynamicHyperparamsForPreset(presetKey) {
+      const key = String(presetKey || "").toLowerCase();
+      const testFrac = clamp(parseNum($("testFrac")?.value) || APP.setup.testFrac || 0.1, 0.05, 0.9);
 
       const initial = estimateTabularHpStats();
       const maxRowsRec = recommendMaxRows({ rowsN: initial.rowsN, presetKey: key });
@@ -3841,20 +3839,20 @@
       const nnBatchSize = recommendBatchSize({ nTrain, inputDimApprox: stats.inputDimApprox, presetKey: key });
       const epochs = recommendEpochs({ nTrain, batchSize: nnBatchSize, presetKey: key });
       const nnLayers = recommendHiddenLayers({ inputDimApprox: stats.inputDimApprox, nRowsUsed: stats.nRowsUsed, presetKey: key });
-	      const nnLearningRate = recommendLearningRate({ batchSize: nnBatchSize, inputDimApprox: stats.inputDimApprox, presetKey: key });
-	      const nnWeightDecay = recommendWeightDecay({ nRowsUsed: stats.nRowsUsed, inputDimApprox: stats.inputDimApprox, presetKey: key });
-	      const { dropout: nnDropout, embedDropout: nnEmbedDropout } = recommendDropouts({ nRowsUsed: stats.nRowsUsed, presetKey: key });
-	      const earlyStopSuggested = recommendEarlyStopPatience({ epochs, presetKey: key });
+      const nnLearningRate = recommendLearningRate({ batchSize: nnBatchSize, inputDimApprox: stats.inputDimApprox, presetKey: key });
+      const nnWeightDecay = recommendWeightDecay({ nRowsUsed: stats.nRowsUsed, inputDimApprox: stats.inputDimApprox, presetKey: key });
+      const { dropout: nnDropout, embedDropout: nnEmbedDropout } = recommendDropouts({ nRowsUsed: stats.nRowsUsed, presetKey: key });
+      const earlyStopSuggested = recommendEarlyStopPatience({ epochs, presetKey: key });
 
-	      return {
-	        maxRows: maxRowsRec,
-	        nEstimators: epochs,
-	        earlyStopPatience: 0,
-	        earlyStopSuggested,
-	        nnBatchSize,
-	        nnLayers: nnLayers.join(","),
-	        nnLearningRate,
-	        nnWeightDecay,
+      return {
+        maxRows: maxRowsRec,
+        nEstimators: epochs,
+        earlyStopPatience: 0,
+        earlyStopSuggested,
+        nnBatchSize,
+        nnLayers: nnLayers.join(","),
+        nnLearningRate,
+        nnWeightDecay,
         nnDropout,
         nnEmbedDropout,
         nnOneCycle: true,
@@ -3862,11 +3860,11 @@
       };
     }
 
-	    function maybeApplyDynamicPresetHyperparams() {
-	      const presetKey = String(APP.ui.trainingPreset || "").toLowerCase();
-	      if (presetKey !== "fast" && presetKey !== "balanced" && presetKey !== "thorough") return;
-	      if (!APP.raw.targetCol || !(APP.raw.rows || []).length) return;
-	      if (APP.ui.training?.isTraining) return;
+    function maybeApplyDynamicPresetHyperparams() {
+      const presetKey = String(APP.ui.trainingPreset || "").toLowerCase();
+      if (presetKey !== "fast" && presetKey !== "balanced" && presetKey !== "thorough") return;
+      if (!APP.raw.targetCol || !(APP.raw.rows || []).length) return;
+      if (APP.ui.training?.isTraining) return;
 
       const rec = dynamicHyperparamsForPreset(presetKey);
 
@@ -3876,39 +3874,34 @@
         APP.setup.maxRows = Math.floor(parseNum(maxRowsEl.value) || 0);
       }
 
-	      const epochsEl = $("nEstimators");
-	      if (epochsEl) epochsEl.value = String(Math.max(1, Math.floor(Number(rec.nEstimators) || 1)));
+      const epochsEl = $("nEstimators");
+      if (epochsEl) epochsEl.value = String(Math.max(1, Math.floor(Number(rec.nEstimators) || 1)));
 
-	      const patEl = $("earlyStopPatience");
-	      if (patEl) patEl.value = "0";
+      const patEl = $("earlyStopPatience");
+      if (patEl) patEl.value = "0";
 
-	      const bsEl = $("nnBatchSize");
-	      if (bsEl) bsEl.value = String(Math.max(8, Math.floor(Number(rec.nnBatchSize) || 8)));
+      const bsEl = $("nnBatchSize");
+      if (bsEl) bsEl.value = String(Math.max(8, Math.floor(Number(rec.nnBatchSize) || 8)));
 
       const layersEl = $("nnLayers");
       if (layersEl) layersEl.value = String(rec.nnLayers || "");
 
       const floatStr = (x) => String(Number(Number(x).toFixed(8)));
-
       const lrEl = $("nnLearningRate");
       if (lrEl) lrEl.value = floatStr(rec.nnLearningRate);
-
       const wdEl = $("nnWeightDecay");
       if (wdEl) wdEl.value = floatStr(rec.nnWeightDecay);
-
       const doEl = $("nnDropout");
       if (doEl) doEl.value = floatStr(rec.nnDropout);
+      const edoEl = $("nnEmbedDropout");
+      if (edoEl) edoEl.value = floatStr(rec.nnEmbedDropout);
+      const ocEl = $("nnOneCycle");
+      if (ocEl) ocEl.value = rec.nnOneCycle ? "true" : "false";
 
-	      const edoEl = $("nnEmbedDropout");
-	      if (edoEl) edoEl.value = floatStr(rec.nnEmbedDropout);
-
-	      const ocEl = $("nnOneCycle");
-	      if (ocEl) ocEl.value = rec.nnOneCycle ? "true" : "false";
-
-	      renderEarlyStopSuggestion({ suggested: rec.earlyStopSuggested });
-	      renderStateChips();
-	      renderNNCriticalPills();
-	    }
+      renderEarlyStopSuggestion({ suggested: rec.earlyStopSuggested });
+      renderStateChips();
+      renderNNCriticalPills();
+    }
 
     function buildInverseMapping(mappingObj) {
       if (!mappingObj) return null;

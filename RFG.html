@@ -7171,11 +7171,11 @@
 	      }
 
 	      const mt = APP.train.metricTrend || null;
-	      const bestTree = Math.max(0, Math.floor(Number(mt?.bestTree || 0)));
+	      const bestTreeHwm = Math.max(0, Math.floor(Number(mt?.bestTree || 0)));
 	      const trainedTrees = Math.max(0, Math.floor(Number(trainInfo.trainedEstimators || 0)));
 	      const useTrees =
-	        (trainInfo?.stoppedEarly && bestTree > 0 && bestTree <= trainedTrees)
-	          ? bestTree
+	        (trainInfo?.stoppedEarly && bestTreeHwm > 0 && bestTreeHwm <= trainedTrees)
+	          ? bestTreeHwm
 	          : trainedTrees;
 
 	      if (useTrees > 0 && model && Number.isFinite(model.nEstimators) && model.nEstimators > useTrees) {
